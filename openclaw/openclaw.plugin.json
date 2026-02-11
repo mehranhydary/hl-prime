@@ -5,9 +5,16 @@
   "version": "0.1.0",
   "author": "mehranhydary",
   "source": "https://github.com/mehranhydary/hl-prime",
+  "type": "instruction-only",
+  "implementation": {
+    "note": "This skill bundle contains instructions (SKILL.md) only. The SDK implementation must be installed separately via npm. Source code is available for audit at the GitHub repository.",
+    "source_repo": "https://github.com/mehranhydary/hl-prime",
+    "npm_package": "hyperliquid-prime"
+  },
   "install": {
     "method": "npm",
-    "package": "hyperliquid-prime"
+    "package": "hyperliquid-prime",
+    "note": "Installs external code from the public npm registry. Audit the source at https://github.com/mehranhydary/hl-prime before use."
   },
   "env": {
     "HP_PRIVATE_KEY": {
@@ -18,10 +25,13 @@
   "permissions": {
     "network": true,
     "credentials": ["HP_PRIVATE_KEY"],
+    "signingRequired": true,
     "onChainActions": [
       "Builder fee approval (1 bps, one-time per wallet, opt-out via builder: null)",
-      "Collateral swaps (USDC to target token, only during split order execution)"
-    ]
+      "Collateral swaps (USDC to target token, only during split order execution)",
+      "DEX abstraction enable (account-level setting, only during split order execution)"
+    ],
+    "confirmationFlow": "The SDK uses a quote-then-execute pattern: quote() is read-only and returns a plan for review. execute() requires explicit invocation to perform on-chain actions. One-step methods (long/short) combine both steps."
   },
   "fees": {
     "builderFee": {

@@ -118,7 +118,15 @@ These actions only occur during split order execution and only when the best liq
 
 **Read-Only Operations**: Quotes, orderbooks, funding comparisons, and market discovery require no wallet, no fees, and perform no on-chain actions.
 
-**Credentials**: Trading operations require a private key via `HP_PRIVATE_KEY` environment variable or the `privateKey` config option. The key is used to sign transactions and is never logged or transmitted outside of Hyperliquid API calls.
+**Credentials**: Trading operations require a private key via `HP_PRIVATE_KEY` environment variable or the `privateKey` config option. The key is used to sign transactions sent to the Hyperliquid API. Source code is available for audit at <https://github.com/mehranhydary/hl-prime>.
+
+**User Confirmation Flow**: The SDK uses a quote-then-execute pattern as the confirmation mechanism:
+1. `quote()` / `quoteSplit()` are **read-only** — they return an execution plan with estimated prices, markets, and costs. No on-chain actions are taken.
+2. The caller reviews the plan (programmatically or via CLI output).
+3. `execute()` / `executeSplit()` must be **explicitly called** to perform on-chain actions (place orders, approve fees, swap collateral).
+4. One-step convenience methods (`long()`, `short()`, `longSplit()`, `shortSplit()`) combine both steps — use quote-then-execute for explicit control.
+
+**Implementation Note**: This skill bundle contains instructions only (SKILL.md). The SDK implementation must be installed separately via `npm install hyperliquid-prime`. The source code is open-source and available for audit at the GitHub repository before installation.
 
 ## How Routing Works
 
