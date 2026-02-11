@@ -192,7 +192,38 @@ interface HyperliquidPrimeConfig {
 	defaultSlippage?: number // Default: 0.01 (1%)
 	logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
 	prettyLogs?: boolean // Default: false
+	builder?: BuilderConfig | null // Builder fee config (see below)
 }
+```
+
+### Builder Fee
+
+Hyperliquid Prime includes a small builder fee (1 basis point = 0.01%) on all orders placed through the SDK's execution methods. This uses Hyperliquid's native [builder fee](https://hyperliquid.gitbook.io/hyperliquid-docs) mechanism.
+
+The fee is automatically approved on the trader's first order (one-time on-chain action per wallet).
+
+```typescript
+// Default: 1 bps fee (no config needed)
+const hp = new HyperliquidPrime({ privateKey: '0x...' })
+
+// Custom builder address and fee
+const hp = new HyperliquidPrime({
+	privateKey: '0x...',
+	builder: { address: '0xYourAddress', feeBps: 2 }, // 2 bps
+})
+
+// Disable builder fee entirely
+const hp = new HyperliquidPrime({
+	privateKey: '0x...',
+	builder: null,
+})
+```
+
+The builder fee only applies to orders placed through `execute()`, `executeSplit()`, and their convenience wrappers (`long`, `short`, `longSplit`, `shortSplit`). Raw provider calls via `hp.api` are never affected.
+
+CLI flag to disable:
+```bash
+hp long TSLA 50 --key 0x... --no-builder-fee
 ```
 
 ## API Reference

@@ -1,5 +1,6 @@
 import { privateKeyToAccount } from "viem/accounts";
-import type { HyperliquidPrimeConfig } from "./config.js";
+import type { HyperliquidPrimeConfig, BuilderConfig } from "./config.js";
+import { DEFAULT_BUILDER } from "./config.js";
 import type { HLProvider } from "./provider/provider.js";
 import { NktkasProvider } from "./provider/nktkas.js";
 import { MarketRegistry } from "./market/registry.js";
@@ -9,7 +10,7 @@ import { Executor } from "./execution/executor.js";
 import { CollateralManager } from "./collateral/manager.js";
 import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
-import { NoWalletError, NotConnectedError } from "./utils/errors.js";
+import { HyperliquidPrimeError, NoWalletError, NotConnectedError } from "./utils/errors.js";
 import type { PerpMarket, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 import type { Quote, ExecutionPlan, SplitQuote, SplitExecutionPlan } from "./router/types.js";
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
@@ -64,7 +65,20 @@ export class HyperliquidPrime {
       this.aggregator,
       this.collateralManager,
     );
-    this.executor = new Executor(this.provider, this.logger);
+
+    // Resolve builder config: undefined → default, null → disabled, object → custom
+    const resolvedBuilder: BuilderConfig | null =
+      config.builder === undefined ? DEFAULT_BUILDER
+        : config.builder === null ? null
+        : config.builder;
+
+    if (resolvedBuilder && (resolvedBuilder.feeBps < 0 || resolvedBuilder.feeBps > 10)) {
+      throw new HyperliquidPrimeError(
+        `Builder fee ${resolvedBuilder.feeBps} bps out of range (0-10 bps)`,
+      );
+    }
+
+    this.executor = new Executor(this.provider, this.logger, resolvedBuilder);
     this.positions = new PositionManager(
       this.provider,
       this._registry,
@@ -182,8 +196,8 @@ export class HyperliquidPrime {
   /** Execute a previously generated quote. */
   async execute(plan: ExecutionPlan): Promise<ExecutionReceipt> {
     this.ensureConnected();
-    this.ensureWallet();
-    const receipt = await this.executor.execute(plan);
+    const user = this.ensureWallet();
+    const receipt = await this.executor.execute(plan, user);
     if (receipt.success && receipt.orderId !== undefined) {
       this.positions.trackOrder(receipt.orderId.toString());
     }
@@ -353,7 +367,7 @@ export class HyperliquidPrime {
 }
 
 // Re-export types for consumers
-export type { HyperliquidPrimeConfig } from "./config.js";
+export type { HyperliquidPrimeConfig, BuilderConfig } from "./config.js";
 export type { HLProvider } from "./provider/provider.js";
 export type { PerpMarket, HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, SplitExecutionPlan, SplitAllocation, SplitResult } from "./router/types.js";

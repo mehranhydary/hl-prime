@@ -128,8 +128,13 @@ interface HyperliquidPrimeConfig {
   defaultSlippage?: number     // Default: 0.01 (1%)
   logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
   prettyLogs?: boolean         // Default: false
+  builder?: BuilderConfig | null // Builder fee (default: 1 bps, null to disable)
 }
 ```
+
+### Builder Fee
+
+A 1 basis point (0.01%) builder fee is included by default on all SDK-executed orders via Hyperliquid's native builder fee mechanism. The fee is auto-approved on the trader's first order. Set `builder: null` to disable, or provide a custom `{ address, feeBps }` to override.
 
 ## Key Methods
 

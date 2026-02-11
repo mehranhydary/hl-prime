@@ -41,9 +41,13 @@ export interface HLProvider {
   subscribeUserEvents(user: string, cb: (data: UserEvent) => void): Promise<() => Promise<void>>;
 
   // Exchange (requires wallet)
-  placeOrder(params: OrderParams): Promise<OrderResult>;
+  placeOrder(params: OrderParams, builder?: { b: `0x${string}`; f: number }): Promise<OrderResult>;
   cancelOrder(params: CancelParams): Promise<CancelResult>;
-  batchOrders(params: OrderParams[]): Promise<OrderResult>;
+  batchOrders(params: OrderParams[], builder?: { b: `0x${string}`; f: number }): Promise<OrderResult>;
+
+  // Builder fee management
+  approveBuilderFee(params: { maxFeeRate: string; builder: string }): Promise<void>;
+  maxBuilderFee(params: { user: string; builder: string }): Promise<number>;
   setLeverage(coin: string, leverage: number, isCross: boolean): Promise<void>;
 
   // Collateral management (requires wallet)

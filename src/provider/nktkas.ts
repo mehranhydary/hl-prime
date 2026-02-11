@@ -166,7 +166,7 @@ export class NktkasProvider implements HLProvider {
 
   // --- Exchange methods ---
 
-  async placeOrder(params: OrderParams): Promise<OrderResult> {
+  async placeOrder(params: OrderParams, builder?: { b: `0x${string}`; f: number }): Promise<OrderResult> {
     if (!this.exchange) throw new Error("No wallet configured");
 
     const orderType = this.mapOrderType(params.orderType);
@@ -182,6 +182,7 @@ export class NktkasProvider implements HLProvider {
         c: params.cloid as `0x${string}` | undefined,
       }],
       grouping: "na",
+      ...(builder ? { builder } : {}),
     });
 
     return {
@@ -201,7 +202,7 @@ export class NktkasProvider implements HLProvider {
     };
   }
 
-  async batchOrders(params: OrderParams[]): Promise<OrderResult> {
+  async batchOrders(params: OrderParams[], builder?: { b: `0x${string}`; f: number }): Promise<OrderResult> {
     if (!this.exchange) throw new Error("No wallet configured");
 
     const orders = params.map((p) => ({
@@ -217,6 +218,7 @@ export class NktkasProvider implements HLProvider {
     const result = await this.exchange.order({
       orders,
       grouping: "na",
+      ...(builder ? { builder } : {}),
     });
 
     return {
@@ -244,6 +246,24 @@ export class NktkasProvider implements HLProvider {
   async setDexAbstraction(enabled: boolean): Promise<void> {
     if (!this.exchange) throw new Error("No wallet configured");
     await (this.exchange as any).userDexAbstraction({ enabled });
+  }
+
+  // --- Builder fee methods ---
+
+  async approveBuilderFee(params: { maxFeeRate: string; builder: string }): Promise<void> {
+    if (!this.exchange) throw new Error("No wallet configured");
+    await this.exchange.approveBuilderFee({
+      maxFeeRate: params.maxFeeRate,
+      builder: params.builder as `0x${string}`,
+    });
+  }
+
+  async maxBuilderFee(params: { user: string; builder: string }): Promise<number> {
+    const result = await this.info.maxBuilderFee({
+      user: params.user as `0x${string}`,
+      builder: params.builder as `0x${string}`,
+    });
+    return result;
   }
 
   // --- Private helpers ---
