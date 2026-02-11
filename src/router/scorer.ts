@@ -1,20 +1,28 @@
 import type { HIP3Market } from "../market/types.js";
 import type { MarketScore, SimulationResult } from "./types.js";
 
+/** Default swap cost estimate (bps) when no spot book data is available */
+const DEFAULT_SWAP_COST_BPS = 50;
+
 export class MarketScorer {
   /**
    * Score a market for a given trade. Lower score = better.
    *
-   * v0 scoring factors:
+   * Scoring factors:
    * 1. Price impact (dominant factor)
    * 2. Funding rate (secondary — prefer favorable funding)
-   * 3. Collateral match (bonus if user already holds the right stable)
+   * 3. Collateral match (if user lacks collateral, penalize by estimated swap cost)
+   *
+   * @param swapCostBps Estimated cost to swap into this market's collateral.
+   *                    Pass 0 or omit when user already holds the collateral.
+   *                    When omitted and collateral is missing, uses a conservative default.
    */
   score(
     simulation: SimulationResult,
     market: HIP3Market,
     side: "buy" | "sell",
     userCollateral: string[],
+    swapCostBps?: number,
   ): MarketScore {
     // Price impact: direct cost, measured in bps
     const priceImpact = simulation.priceImpactBps;
@@ -25,11 +33,11 @@ export class MarketScorer {
     // Normalize to bps equivalent (rough: daily funding * 3 = ~comparable to spread)
     const fundingScore = fundingBenefit * 10000 * 3;
 
-    // Collateral match: avoid needing a swap
+    // Collateral match: penalize by actual estimated swap cost
     const hasCollateral = userCollateral.includes(market.collateral);
-    // In v0: if user doesn't have the collateral, heavily penalize
-    // (since we don't auto-swap in v0)
-    const collateralPenalty = hasCollateral ? 0 : 10000; // 100bps penalty
+    const collateralPenalty = hasCollateral
+      ? 0
+      : (swapCostBps ?? DEFAULT_SWAP_COST_BPS);
 
     const totalScore = priceImpact - fundingScore + collateralPenalty;
 
@@ -39,8 +47,9 @@ export class MarketScorer {
       fundingRate,
       collateralMatch: hasCollateral,
       totalScore,
+      swapCostBps: hasCollateral ? undefined : (swapCostBps ?? DEFAULT_SWAP_COST_BPS),
       reason: !hasCollateral
-        ? `No ${market.collateral} balance`
+        ? `No ${market.collateral} balance (swap ~${collateralPenalty.toFixed(1)} bps)`
         : undefined,
     };
   }

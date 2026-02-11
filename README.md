@@ -11,6 +11,8 @@ HIP-3 allows anyone to deploy perpetual markets on Hyperliquid. This means TSLA 
 - **Discovers** all HIP-3 markets per asset and groups them
 - **Aggregates** orderbooks across collateral types into a unified view
 - **Routes** orders to the single best market based on price impact, funding rate, and collateral match
+- **Splits** large orders across multiple markets for better fills when a single venue lacks depth
+- **Swaps collateral** automatically (e.g., USDC → USDH) when the best liquidity lives on a non-USDC market
 - **Executes** via an explicit quote-then-execute flow
 - **Tracks** positions across all markets in a unified view
 
@@ -78,6 +80,24 @@ console.log(receipt.market.coin) // "xyz:TSLA"
 const receipt2 = await hp.long('TSLA', 50)
 const receipt3 = await hp.short('TSLA', 25)
 
+// --- Split orders across multiple markets for better fills ---
+const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200)
+console.log(splitQuote.allocations)
+// [
+//   { market: xyz:TSLA, size: 120, proportion: 0.6 },
+//   { market: flx:TSLA, size: 50, proportion: 0.25 },
+//   { market: km:TSLA, size: 30, proportion: 0.15 },
+// ]
+console.log(splitQuote.collateralPlan.swapsNeeded) // true (USDH needed)
+
+const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
+console.log(splitReceipt.totalFilledSize) // "200"
+console.log(splitReceipt.aggregateAvgPrice) // "431.42"
+
+// One-step split convenience
+const splitReceipt2 = await hp.longSplit('TSLA', 200)
+const splitReceipt3 = await hp.shortSplit('TSLA', 100)
+
 // Unified position view across all HIP-3 markets
 const positions = await hp.getGroupedPositions()
 const tslaPositions = positions.get('TSLA')
@@ -122,6 +142,8 @@ hp markets TSLA --testnet
 
 ## How Routing Works
 
+### Single-Market Routing
+
 When you call `hp.quote("TSLA", "buy", 50)`, the router:
 
 1. **Fetches** the orderbook for every TSLA market (xyz, flx, km, cash)
@@ -129,10 +151,28 @@ When you call `hp.quote("TSLA", "buy", 50)`, the router:
 3. **Scores** each market using three factors:
     - **Price impact** (dominant) — cost in basis points to fill
     - **Funding rate** (secondary) — prefers favorable funding direction
-    - **Collateral match** (penalty) — heavily penalizes markets where you don't hold the required collateral (no auto-swap in v0)
+    - **Collateral match** (penalty) — penalizes markets by the estimated cost to swap into their collateral (e.g., ~50 bps for USDC → USDH)
 4. **Selects** the lowest-score market and builds an execution plan with IOC limit order + slippage
 
 The result is a `Quote` object containing the selected market, estimated cost, and a ready-to-execute `ExecutionPlan`. You review it, then call `execute(plan)` to place the order.
+
+### Split Routing (Multi-Market)
+
+When you call `hp.quoteSplit("TSLA", "buy", 200)`, the router:
+
+1. **Aggregates** all orderbooks into a single merged book with source tracking
+2. **Walks** the merged book greedily — always consuming the cheapest liquidity first, regardless of venue
+3. **Distributes** fills proportionally across sources at each price level
+4. **Estimates collateral costs** — checks your spot balances and simulates swap costs on the spot market for any non-USDC collateral you'd need
+5. **Builds** a `SplitExecutionPlan` with one leg per market
+
+On execution, the system automatically:
+- Enables **DEX abstraction** (Hyperliquid's unified account mode)
+- **Transfers** USDC from perp to spot if needed
+- **Swaps** USDC → target tokens (e.g., USDH) via spot market
+- **Places all leg orders** in a single atomic `batchOrders` call
+
+If only one market has competitive liquidity, 100% routes there — equivalent to single-market behavior.
 
 ## Configuration
 
@@ -151,22 +191,26 @@ interface HyperliquidPrimeConfig {
 
 ### Read-Only Methods
 
-| Method                        | Description                           |
-| ----------------------------- | ------------------------------------- |
-| `getMarkets(asset)`           | All HIP-3 markets for an asset        |
-| `getAggregatedMarkets()`      | Asset groups with multiple markets    |
-| `getAggregatedBook(asset)`    | Merged orderbook across all markets   |
-| `getFundingComparison(asset)` | Funding rates compared across markets |
-| `quote(asset, side, size)`    | Routing quote (does not execute)      |
+| Method                           | Description                                  |
+| -------------------------------- | -------------------------------------------- |
+| `getMarkets(asset)`              | All HIP-3 markets for an asset               |
+| `getAggregatedMarkets()`         | Asset groups with multiple markets            |
+| `getAggregatedBook(asset)`       | Merged orderbook across all markets           |
+| `getFundingComparison(asset)`    | Funding rates compared across markets         |
+| `quote(asset, side, size)`       | Routing quote for single best market          |
+| `quoteSplit(asset, side, size)`  | Split quote across multiple markets           |
 
 ### Trading Methods (wallet required)
 
-| Method               | Description                          |
-| -------------------- | ------------------------------------ |
-| `execute(plan)`      | Execute a previously generated quote |
-| `long(asset, size)`  | Quote + execute a long in one call   |
-| `short(asset, size)` | Quote + execute a short in one call  |
-| `close(asset)`       | Close all positions for an asset     |
+| Method                    | Description                                       |
+| ------------------------- | ------------------------------------------------- |
+| `execute(plan)`           | Execute a single-market quote                     |
+| `executeSplit(plan)`      | Execute a split quote (handles collateral swaps)  |
+| `long(asset, size)`       | Quote + execute a long on best market             |
+| `short(asset, size)`      | Quote + execute a short on best market            |
+| `longSplit(asset, size)`  | Split quote + execute a long across markets       |
+| `shortSplit(asset, size)` | Split quote + execute a short across markets      |
+| `close(asset)`            | Close all positions for an asset                  |
 
 ### Position & Balance
 
@@ -200,14 +244,18 @@ hyperliquid-prime/
 │   │   ├── aggregator.ts     # Merges books across collateral types
 │   │   └── types.ts          # HIP3Market, MarketGroup, AggregatedBook
 │   ├── router/               # Smart order routing
-│   │   ├── router.ts         # Scores markets, picks best one
+│   │   ├── router.ts         # Scores markets, picks best one (or splits across many)
 │   │   ├── simulator.ts      # Walks books, estimates fill cost
-│   │   ├── scorer.ts         # Ranks by impact + funding + collateral
-│   │   └── types.ts          # Quote, ExecutionPlan, MarketScore
+│   │   ├── scorer.ts         # Ranks by impact + funding + collateral swap cost
+│   │   ├── splitter.ts       # Optimizes order splits across aggregated book
+│   │   └── types.ts          # Quote, SplitQuote, ExecutionPlan, MarketScore
 │   ├── execution/            # Order lifecycle
-│   │   ├── executor.ts       # Places orders via provider
+│   │   ├── executor.ts       # Places orders via provider (single + batch)
 │   │   ├── monitor.ts        # Tracks order status via WebSocket
-│   │   └── types.ts          # ExecutionReceipt
+│   │   └── types.ts          # ExecutionReceipt, SplitExecutionReceipt
+│   ├── collateral/           # Collateral management for cross-market trading
+│   │   ├── manager.ts        # Estimates swap costs, executes USDC→token swaps
+│   │   └── types.ts          # CollateralPlan, CollateralRequirement
 │   ├── position/             # Position tracking
 │   │   ├── manager.ts        # Read-only position tracking
 │   │   ├── risk.ts           # Per-position risk math
@@ -254,6 +302,7 @@ Once the skill is installed, you can trade via conversational commands:
 "Compare funding rates across ETH markets"
 "Get me a quote to short 100 NVDA"
 "Execute that TSLA trade"
+"Split 200 TSLA across all markets for better fills"
 "Show my positions across all markets"
 "Which market has the best price impact for buying 10 BTC?"
 ```
@@ -263,7 +312,9 @@ Once the skill is installed, you can trade via conversational commands:
 The OpenClaw skill provides:
 - **Natural language market discovery** — "Find all markets for AAPL"
 - **Intelligent routing guidance** — AI explains which market is best and why
+- **Split order optimization** — "Split 200 TSLA across venues for lowest cost"
 - **Quote explanations** — "The xyz:TSLA market has lowest price impact (0.8 bps) and favorable funding"
+- **Automatic collateral handling** — Swaps USDC to USDH/USDT0 when needed for best execution
 - **Aggregated data access** — View combined orderbooks and funding comparisons conversationally
 - **Position summaries** — "Show my TSLA exposure across all collateral types"
 
@@ -295,6 +346,24 @@ You: Execute it
 Agent: Executed 100 UNI long on xyz:UNI
 Filled: 100 UNI at avg price $12.34
 Market: xyz:UNI
+Status: success
+
+You: Split 500 TSLA across all markets
+Agent: Analyzing liquidity across 4 TSLA markets...
+
+Split plan:
+- xyz:TSLA → 300 (60%) — USDC, 0.9 bps impact
+- flx:TSLA → 120 (24%) — USDH, 1.4 bps impact
+- km:TSLA → 80 (16%) — USDH, 2.1 bps impact
+
+Collateral: Need 86,240 USDH — will swap from USDC (~12 bps cost)
+Aggregate avg price: $431.42 (vs $432.10 single-market)
+
+You: Execute the split
+Agent: Executed 3-leg split order for 500 TSLA
+Total filled: 500 TSLA at avg $431.42
+Legs: xyz:TSLA (300), flx:TSLA (120), km:TSLA (80)
+Collateral swaps: USDC → USDH completed
 Status: success
 ```
 

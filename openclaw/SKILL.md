@@ -1,19 +1,21 @@
 ---
 name: hyperliquid-prime
-description: Trade on Hyperliquid's HIP-3 markets with intelligent order routing. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Provides unified access to Hyperliquid's prime broker layer for routing trades to optimal markets based on price impact, funding rates, and collateral matching.
+description: Trade on Hyperliquid's HIP-3 markets with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Handles collateral swaps (USDC→USDH/USDT0) automatically when the best liquidity requires it.
 ---
 
 # Hyperliquid Prime
 
-A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. Automatically discovers all markets for an asset, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
+A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. Automatically discovers all markets for an asset, compares liquidity/funding/cost, and routes to the best execution — or splits across multiple venues for optimal fills with automatic collateral swaps.
 
 ## When to Use This Skill
 
 - Trading crypto, stocks (AAPL, NVDA, TSLA), indexes, or commodities (GOLD, SILVER) on Hyperliquid
 - Need best execution across multiple HIP-3 markets for the same asset
+- Splitting large orders across venues for better fills and lower price impact
 - Comparing funding rates across different collateral types
 - Aggregated orderbook view across fragmented markets
 - Managing positions that may be spread across multiple collateral types
+- Automatic collateral swaps (USDC → USDH, USDT0) when non-USDC markets offer better prices
 
 ## Quick Start
 
@@ -63,6 +65,11 @@ const receipt = await hp.execute(quote.plan)
 const receipt2 = await hp.long('TSLA', 50)
 const receipt3 = await hp.short('TSLA', 25)
 
+// Split across multiple markets for better fills
+const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200)
+const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
+// Or one-step: await hp.longSplit('TSLA', 200)
+
 // Unified position view
 const positions = await hp.getGroupedPositions()
 
@@ -105,8 +112,10 @@ When you call `hp.quote("TSLA", "buy", 50)`, the router:
 3. **Scores** each market using:
    - **Price impact** (dominant) — cost in basis points to fill
    - **Funding rate** (secondary) — prefers favorable funding direction
-   - **Collateral match** (penalty) — penalizes markets where you don't hold the required collateral
+   - **Collateral swap cost** (penalty) — estimated cost to swap into the required collateral
 4. **Selects** the lowest-score market and builds an execution plan
+
+For split orders (`quoteSplit`), the router merges all orderbooks, walks the combined book greedily to consume the cheapest liquidity first across all venues, and handles collateral swaps automatically.
 
 ## Configuration
 
@@ -128,12 +137,16 @@ interface HyperliquidPrimeConfig {
 - `getAggregatedMarkets()` — Asset groups with multiple markets
 - `getAggregatedBook(asset)` — Merged orderbook across all markets
 - `getFundingComparison(asset)` — Funding rates compared across markets
-- `quote(asset, side, size)` — Routing quote (does not execute)
+- `quote(asset, side, size)` — Routing quote for single best market
+- `quoteSplit(asset, side, size)` — Split quote across multiple markets
 
 ### Trading (wallet required)
-- `execute(plan)` — Execute a previously generated quote
-- `long(asset, size)` — Quote + execute a long in one call
-- `short(asset, size)` — Quote + execute a short in one call
+- `execute(plan)` — Execute a single-market quote
+- `executeSplit(plan)` — Execute a split quote (handles collateral swaps)
+- `long(asset, size)` — Quote + execute a long on best market
+- `short(asset, size)` — Quote + execute a short on best market
+- `longSplit(asset, size)` — Split quote + execute a long across markets
+- `shortSplit(asset, size)` — Split quote + execute a short across markets
 - `close(asset)` — Close all positions for an asset
 
 ### Position & Balance
