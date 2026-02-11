@@ -12,7 +12,8 @@ export function createProgram(): Command {
     .option("--testnet", "Use Hyperliquid testnet", false)
     .option("--key <hex>", "Private key (hex) for trading")
     .option("--log-level <level>", "Log level", "warn")
-    .option("--json", "Output as JSON", false);
+    .option("--json", "Output as JSON", false)
+    .option("--no-builder-fee", "Disable builder fee");
 
   // hp markets <asset>
   program

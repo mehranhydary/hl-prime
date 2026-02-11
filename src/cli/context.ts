@@ -8,12 +8,14 @@ export async function createContext(opts: {
   testnet?: boolean;
   key?: string;
   logLevel?: string;
+  builderFee?: boolean;
 }): Promise<HyperliquidPrime> {
   const config: HyperliquidPrimeConfig = {
     testnet: opts.testnet ?? false,
     privateKey: opts.key as `0x${string}` | undefined,
     logLevel: (opts.logLevel as HyperliquidPrimeConfig["logLevel"]) ?? "warn",
     prettyLogs: true,
+    builder: opts.builderFee === false ? null : undefined,
   };
 
   const hp = new HyperliquidPrime(config);
