@@ -1,0 +1,24 @@
+{
+  "id": "hyperliquid-prime",
+  "name": "Hyperliquid Prime",
+  "description": "Prime broker SDK for Hyperliquid HIP-3 markets with intelligent order routing",
+  "version": "0.1.0",
+  "author": "mehranhydary",
+  "source": "https://github.com/mehranhydary/hl-prime",
+  "skill": {
+    "path": "./SKILL.md",
+    "name": "hyperliquid-prime",
+    "description": "Trade on Hyperliquid's HIP-3 markets with intelligent order routing. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types."
+  },
+  "entrypoints": {
+    "cli": {
+      "bin": "hp",
+      "description": "CLI for Hyperliquid Prime trading"
+    }
+  },
+  "channels": [],
+  "commands": [],
+  "dependencies": {
+    "node": ">=20.0.0"
+  }
+}
