@@ -1,0 +1,85 @@
+import { describe, it, expect } from "vitest";
+import { FillSimulator } from "../../src/router/simulator.js";
+import {
+  ETH_BOOK_DEEP,
+  ETH_BOOK_THIN,
+  EMPTY_BOOK,
+} from "../fixtures/books.js";
+
+describe("FillSimulator", () => {
+  const sim = new FillSimulator();
+
+  describe("simulate", () => {
+    it("estimates fill for size within top level", () => {
+      const result = sim.simulate(ETH_BOOK_DEEP, "buy", 3);
+      expect(result).not.toBeNull();
+      expect(result!.avgPrice).toBe(3200.5);
+      expect(result!.filledSize).toBe(3);
+      expect(result!.totalCost).toBe(3200.5 * 3);
+    });
+
+    it("walks multiple levels for larger size", () => {
+      // buy 12: 5 @ 3200.50 + 7 @ 3201.00
+      const result = sim.simulate(ETH_BOOK_DEEP, "buy", 12);
+      expect(result).not.toBeNull();
+      expect(result!.avgPrice).toBeGreaterThan(3200.5);
+      expect(result!.avgPrice).toBeLessThan(3201.0);
+      expect(result!.filledSize).toBe(12);
+    });
+
+    it("fills entire book exactly", () => {
+      // Total ask depth: 5 + 10 + 20 + 50 = 85
+      const result = sim.simulate(ETH_BOOK_DEEP, "buy", 85);
+      expect(result).not.toBeNull();
+      expect(result!.filledSize).toBe(85);
+    });
+
+    it("returns null for insufficient depth", () => {
+      // ETH_BOOK_THIN has 0.5 on each side
+      const result = sim.simulate(ETH_BOOK_THIN, "buy", 10);
+      expect(result).toBeNull();
+    });
+
+    it("returns null for empty book", () => {
+      const result = sim.simulate(EMPTY_BOOK, "buy", 1);
+      expect(result).toBeNull();
+    });
+
+    it("handles sell side correctly (walks bids)", () => {
+      const result = sim.simulate(ETH_BOOK_DEEP, "sell", 3);
+      expect(result).not.toBeNull();
+      expect(result!.avgPrice).toBe(3200.0); // top bid
+    });
+
+    it("calculates price impact in bps", () => {
+      const result = sim.simulate(ETH_BOOK_DEEP, "buy", 5);
+      expect(result).not.toBeNull();
+      // mid = (3200.00 + 3200.50) / 2 = 3200.25
+      // avg = 3200.50 (all from first ask level)
+      // impact = |3200.50 - 3200.25| / 3200.25 * 10000
+      const expectedImpact =
+        Math.abs((3200.5 - 3200.25) / 3200.25) * 10000;
+      expect(result!.priceImpactBps).toBeCloseTo(expectedImpact, 2);
+    });
+
+    it("handles sell price impact correctly", () => {
+      const result = sim.simulate(ETH_BOOK_DEEP, "sell", 5);
+      expect(result).not.toBeNull();
+      // avg = 3200.00 (top bid), mid = 3200.25
+      // impact should be positive
+      expect(result!.priceImpactBps).toBeGreaterThan(0);
+    });
+  });
+
+  describe("getMidPrice", () => {
+    it("returns mid between best bid and ask", () => {
+      const mid = sim.getMidPrice(ETH_BOOK_DEEP);
+      expect(mid).toBe((3200.0 + 3200.5) / 2);
+    });
+
+    it("returns 0 for empty book", () => {
+      const mid = sim.getMidPrice(EMPTY_BOOK);
+      expect(mid).toBe(0);
+    });
+  });
+});

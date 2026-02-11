@@ -1,0 +1,55 @@
+{
+  "name": "hyperliquid-prime",
+  "version": "0.1.0",
+  "description": "Prime broker SDK for Hyperliquid HIP-3 markets — unified trading across fragmented markets",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "hp": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "hp": "tsx src/cli/index.ts"
+  },
+  "keywords": [
+    "hyperliquid",
+    "hip-3",
+    "prime-broker",
+    "trading",
+    "defi",
+    "sdk"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@nktkas/hyperliquid": "^0.30.0",
+    "better-sqlite3": "^11.0.0",
+    "commander": "^12.0.0",
+    "pino": "^9.0.0",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
