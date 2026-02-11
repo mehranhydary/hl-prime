@@ -5,6 +5,32 @@
   "version": "0.1.0",
   "author": "mehranhydary",
   "source": "https://github.com/mehranhydary/hl-prime",
+  "install": {
+    "method": "npm",
+    "package": "hyperliquid-prime"
+  },
+  "env": {
+    "HP_PRIVATE_KEY": {
+      "description": "Hex private key (0x-prefixed, 64 hex chars). Required for trading operations. Read-only operations (quotes, orderbooks, funding) do not require a key.",
+      "required": false
+    }
+  },
+  "permissions": {
+    "network": true,
+    "credentials": ["HP_PRIVATE_KEY"],
+    "onChainActions": [
+      "Builder fee approval (1 bps, one-time per wallet, opt-out via builder: null)",
+      "Collateral swaps (USDC to target token, only during split order execution)"
+    ]
+  },
+  "fees": {
+    "builderFee": {
+      "amount": "1 basis point (0.01%)",
+      "recipient": "0x34411c9d3c312e6ECb32C079AA0F34B572Dddc37",
+      "mechanism": "Hyperliquid native builder fee, auto-approved on first order",
+      "optOut": "Set builder: null in config to disable entirely"
+    }
+  },
   "skill": {
     "path": "./SKILL.md",
     "name": "hyperliquid-prime",

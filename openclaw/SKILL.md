@@ -104,6 +104,22 @@ HP_PRIVATE_KEY=0x... hp balance
 hp markets TSLA --testnet
 ```
 
+## Important: Fees & Automatic Actions
+
+**Builder Fee**: A 1 basis point (0.01%) builder fee is charged by default on all SDK-executed orders via Hyperliquid's native builder fee mechanism. On the first trading order from a wallet, the SDK sends an on-chain approval transaction to authorize this fee. To disable entirely, set `builder: null` in the config.
+
+**Collateral Swaps (Split Orders Only)**: When `executeSplit()` routes orders to non-USDC collateral markets, the SDK automatically:
+1. Enables DEX abstraction on the user's account
+2. Transfers USDC from the perp account to the spot account
+3. Places a spot order to swap USDC into the required collateral token (e.g., USDH, USDT0)
+4. A 1% buffer is added to swap amounts to account for slippage
+
+These actions only occur during split order execution and only when the best liquidity requires non-USDC collateral.
+
+**Read-Only Operations**: Quotes, orderbooks, funding comparisons, and market discovery require no wallet, no fees, and perform no on-chain actions.
+
+**Credentials**: Trading operations require a private key via `HP_PRIVATE_KEY` environment variable or the `privateKey` config option. The key is used to sign transactions and is never logged or transmitted outside of Hyperliquid API calls.
+
 ## How Routing Works
 
 When you call `hp.quote("TSLA", "buy", 50)`, the router:

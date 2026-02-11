@@ -60,9 +60,9 @@ export class Executor {
       const bps = this.wireBuilder.f / 10;
       const maxFeeRate = `${(bps * 0.01).toFixed(2)}%`;
 
-      this.logger.info(
+      this.logger.warn(
         { builder: this.wireBuilder.b, maxFeeRate },
-        "Approving builder fee (one-time)",
+        "Auto-approving builder fee (one-time on-chain action). Set builder: null in config to disable.",
       );
 
       await this.provider.approveBuilderFee({
@@ -75,9 +75,9 @@ export class Executor {
     } catch (error) {
       this.logger.warn(
         { error },
-        "Failed to check/approve builder fee — orders may fail if not pre-approved",
+        "Failed to check/approve builder fee — will retry on next order. Orders may fail if not pre-approved.",
       );
-      this.approvalChecked = true;
+      // Do NOT set approvalChecked = true so we retry on the next order attempt
     }
   }
 
