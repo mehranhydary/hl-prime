@@ -4,8 +4,8 @@ import type { HLProvider } from "../../src/provider/provider.js";
 import { MarketRegistry } from "../../src/market/registry.js";
 import { createLogger } from "../../src/logging/logger.js";
 import {
-  ETH_BOOK_DEEP,
-  ETH_HIP3_BOOK,
+  TSLA_BOOK_DEEP,
+  TSLA_HIP3_BOOK,
 } from "../fixtures/books.js";
 import type { L2Book } from "../../src/provider/types.js";
 
@@ -18,33 +18,33 @@ interface MockDex {
 function createMockProvider(books: Record<string, L2Book>, dexes?: MockDex[]): HLProvider {
   const defaultDexes: MockDex[] = dexes ?? [
     {
-      name: null,
-      universe: [{ name: "ETH", szDecimals: 4, maxLeverage: 50 }],
+      name: "xyz",
+      universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
       collateralToken: 0,
     },
     {
-      name: "xyz",
-      universe: [{ name: "xyz:ETH100", szDecimals: 4, maxLeverage: 20 }],
-      collateralToken: 0,
+      name: "flx",
+      universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
+      collateralToken: 1,
     },
   ];
 
   const ctxMap: Record<string, () => object> = {
-    ETH: () => ({
-      funding: "0.0001",
-      openInterest: "50000",
-      prevDayPx: "3100",
-      dayNtlVlm: "1000000",
-      oraclePx: "3200",
-      markPx: "3200.25",
+    "xyz:TSLA": () => ({
+      funding: "0.00000625",
+      openInterest: "37735",
+      prevDayPx: "428.00",
+      dayNtlVlm: "5000000",
+      oraclePx: "431.56",
+      markPx: "431.56",
     }),
-    "xyz:ETH100": () => ({
+    "flx:TSLA": () => ({
       funding: "-0.0002",
-      openInterest: "15000",
-      prevDayPx: "3100",
+      openInterest: "1780",
+      prevDayPx: "428.00",
       dayNtlVlm: "500000",
-      oraclePx: "3200",
-      markPx: "3200.30",
+      oraclePx: "431.71",
+      markPx: "431.86",
     }),
   };
 
@@ -56,7 +56,7 @@ function createMockProvider(books: Record<string, L2Book>, dexes?: MockDex[]): H
         : defaultDexes.find((d) => d.name === dex);
       const universe = target?.universe ?? [];
       const meta = { universe, collateralToken: target?.collateralToken ?? 0 };
-      const ctxs = universe.map((a) => (ctxMap[a.name] ?? ctxMap["ETH"])());
+      const ctxs = universe.map((a) => (ctxMap[a.name] ?? ctxMap["xyz:TSLA"])());
       return [meta, ctxs] as Awaited<ReturnType<HLProvider["metaAndAssetCtxs"]>>;
     },
     perpDexs: async () => defaultDexes.map((d) =>
@@ -69,6 +69,7 @@ function createMockProvider(books: Record<string, L2Book>, dexes?: MockDex[]): H
     spotMeta: async () => ({
       tokens: [
         { name: "USDC", index: 0, szDecimals: 8, weiDecimals: 8, tokenId: "0x0", isCanonical: true },
+        { name: "USDH", index: 1, szDecimals: 8, weiDecimals: 8, tokenId: "0x1", isCanonical: true },
       ],
       universe: [],
     }),
@@ -102,8 +103,8 @@ describe("BookAggregator", () => {
 
   it("aggregates books from multiple markets", async () => {
     const books: Record<string, L2Book> = {
-      ETH: ETH_BOOK_DEEP,
-      "xyz:ETH100": ETH_HIP3_BOOK,
+      "xyz:TSLA": TSLA_BOOK_DEEP,
+      "flx:TSLA": TSLA_HIP3_BOOK,
     };
 
     const provider = createMockProvider(books);
@@ -111,7 +112,7 @@ describe("BookAggregator", () => {
     await registry.discover();
 
     const aggregator = new BookAggregator(provider, registry, logger);
-    const result = await aggregator.aggregate("ETH");
+    const result = await aggregator.aggregate("TSLA");
 
     // Should have levels from both books
     expect(result.bids.length).toBeGreaterThan(0);
@@ -145,8 +146,8 @@ describe("BookAggregator", () => {
 
   it("tracks sources per price level", async () => {
     const books: Record<string, L2Book> = {
-      ETH: ETH_BOOK_DEEP,
-      "xyz:ETH100": ETH_HIP3_BOOK,
+      "xyz:TSLA": TSLA_BOOK_DEEP,
+      "flx:TSLA": TSLA_HIP3_BOOK,
     };
 
     const provider = createMockProvider(books);
@@ -154,7 +155,7 @@ describe("BookAggregator", () => {
     await registry.discover();
 
     const aggregator = new BookAggregator(provider, registry, logger);
-    const result = await aggregator.aggregate("ETH");
+    const result = await aggregator.aggregate("TSLA");
 
     // Check that sources are tracked
     for (const level of [...result.bids, ...result.asks]) {

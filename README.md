@@ -1,10 +1,10 @@
 # Hyperliquid Prime
 
-A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. When multiple deployers list the same asset (e.g. ETH) with different collateral types (USDT, USDC, USDE), Hyperliquid Prime automatically discovers all markets, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
+A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. When multiple deployers list the same asset (e.g. TSLA) with different collateral types (USDC, USDH, USDT0), Hyperliquid Prime automatically discovers all markets, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
 
 ## The Problem
 
-HIP-3 allows anyone to deploy perpetual markets on Hyperliquid. This means ETH can be traded across multiple venues — the native HL perp, plus HIP-3 markets from various deployers, each with different collateral, liquidity depth, and funding rates. Traders are left manually comparing across fragmented markets.
+HIP-3 allows anyone to deploy perpetual markets on Hyperliquid. This means TSLA can be traded across multiple venues — xyz, flx, km, and cash — each with different collateral, liquidity depth, and funding rates. Traders are left manually comparing across fragmented markets.
 
 ## What Hyperliquid Prime Does
 
@@ -31,26 +31,27 @@ import { HyperliquidPrime } from 'hyperliquid-prime'
 const hp = new HyperliquidPrime({ testnet: true })
 await hp.connect()
 
-// What HIP-3 markets exist for ETH?
-const ethMarkets = hp.getMarkets('ETH')
+// What HIP-3 markets exist for TSLA?
+const tslaMarkets = hp.getMarkets('TSLA')
 // [
-//   { coin: "ETH", dexName: "__native__", collateral: "USDC", isNative: true },
-//   { coin: "xyz:ETH100", dexName: "xyz", collateral: "USDT", isNative: false },
-//   ...
+//   { coin: "xyz:TSLA", dexName: "xyz", collateral: "USDC", isNative: false },
+//   { coin: "flx:TSLA", dexName: "flx", collateral: "USDH", isNative: false },
+//   { coin: "km:TSLA", dexName: "km", collateral: "USDH", isNative: false },
+//   { coin: "cash:TSLA", dexName: "cash", collateral: "USDT0", isNative: false },
 // ]
 
-// Where's the best execution for a 10 ETH long?
-const quote = await hp.quote('ETH', 'buy', 10)
-console.log(quote.selectedMarket.coin) // "xyz:ETH100"
-console.log(quote.estimatedAvgPrice) // 3201.45
-console.log(quote.estimatedPriceImpact) // 1.2 (bps)
+// Where's the best execution for a 50 TSLA long?
+const quote = await hp.quote('TSLA', 'buy', 50)
+console.log(quote.selectedMarket.coin) // "xyz:TSLA"
+console.log(quote.estimatedAvgPrice) // 431.56
+console.log(quote.estimatedPriceImpact) // 0.8 (bps)
 console.log(quote.alternativesConsidered) // All markets with scores
 
-// Aggregated orderbook across all ETH markets
-const book = await hp.getAggregatedBook('ETH')
+// Aggregated orderbook across all TSLA markets
+const book = await hp.getAggregatedBook('TSLA')
 
 // Funding rate comparison
-const funding = await hp.getFundingComparison('ETH')
+const funding = await hp.getFundingComparison('TSLA')
 
 await hp.disconnect()
 ```
@@ -65,22 +66,22 @@ const hp = new HyperliquidPrime({
 await hp.connect()
 
 // Two-step: quote then execute (recommended)
-const quote = await hp.quote('ETH', 'buy', 10)
+const quote = await hp.quote('TSLA', 'buy', 50)
 // Review the quote...
 const receipt = await hp.execute(quote.plan)
 console.log(receipt.success) // true
-console.log(receipt.filledSize) // "10"
-console.log(receipt.avgPrice) // "3201.50"
-console.log(receipt.market.coin) // "xyz:ETH100"
+console.log(receipt.filledSize) // "50"
+console.log(receipt.avgPrice) // "431.50"
+console.log(receipt.market.coin) // "xyz:TSLA"
 
 // One-step convenience
-const receipt2 = await hp.long('ETH', 10)
-const receipt3 = await hp.short('BTC', 0.5)
+const receipt2 = await hp.long('TSLA', 50)
+const receipt3 = await hp.short('TSLA', 25)
 
 // Unified position view across all HIP-3 markets
 const positions = await hp.getGroupedPositions()
-const ethPositions = positions.get('ETH')
-// Shows all ETH positions across all HIP-3 markets in one group
+const tslaPositions = positions.get('TSLA')
+// Shows all TSLA positions across all HIP-3 markets in one group
 
 // Account balance
 const balance = await hp.getBalance()
@@ -94,36 +95,36 @@ The `hp` CLI provides the same functionality from the terminal:
 
 ```bash
 # Show all HIP-3 markets for an asset
-hp markets ETH
-hp markets ETH --json
+hp markets TSLA
+hp markets TSLA --json
 
 # Aggregated orderbook
-hp book ETH
-hp book ETH --depth 10
+hp book TSLA
+hp book TSLA --depth 10
 
 # Compare funding rates across markets
-hp funding ETH
+hp funding TSLA
 
 # Get a routing quote (does not execute)
-hp quote ETH buy 10
+hp quote TSLA buy 50
 
 # Execute trades via best market
-hp long ETH 10 --key 0x...
-hp short BTC 0.5 --key 0x...
+hp long TSLA 50 --key 0x...
+hp short TSLA 25 --key 0x...
 
 # View positions and balance
 hp positions --key 0x...
 hp balance --key 0x...
 
 # Use testnet
-hp markets ETH --testnet
+hp markets TSLA --testnet
 ```
 
 ## How Routing Works
 
-When you call `hp.quote("ETH", "buy", 10)`, the router:
+When you call `hp.quote("TSLA", "buy", 50)`, the router:
 
-1. **Fetches** the orderbook for every ETH market (native + all HIP-3 deployers)
+1. **Fetches** the orderbook for every TSLA market (xyz, flx, km, cash)
 2. **Simulates** walking each book to estimate average fill price and price impact at the requested size
 3. **Scores** each market using three factors:
     - **Price impact** (dominant) — cost in basis points to fill
@@ -234,7 +235,7 @@ npm run build          # Compile TypeScript
 npm test               # Run unit tests
 npm run test:watch     # Watch mode
 npm run typecheck      # Type check without emitting
-npm run hp -- markets ETH --testnet   # Run CLI in dev mode
+npm run hp -- markets TSLA --testnet   # Run CLI in dev mode
 ```
 
 ## License

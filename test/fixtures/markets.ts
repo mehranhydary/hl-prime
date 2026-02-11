@@ -1,40 +1,43 @@
 import type { HIP3Market } from "../../src/market/types.js";
 
-export const ETH_NATIVE: HIP3Market = {
-  baseAsset: "ETH",
-  coin: "ETH",
+// Real mainnet TSLA markets — 4 deployers, 3 different collateral types
+export const TSLA_XYZ: HIP3Market = {
+  baseAsset: "TSLA",
+  coin: "xyz:TSLA",
   assetIndex: 1,
-  dexName: "__native__",
+  dexName: "xyz",
   collateral: "USDC",
-  isNative: true,
-  funding: "0.0001",
-  openInterest: "50000",
-  markPrice: "3200.25",
+  isNative: false,
+  funding: "0.00000625",
+  openInterest: "37735.156",
+  markPrice: "431.56",
 };
 
-export const ETH_HIP3_USDT: HIP3Market = {
-  baseAsset: "ETH",
-  coin: "xyz:ETH100",
-  assetIndex: 200,
-  dexName: "xyz",
-  collateral: "USDT",
+export const TSLA_FLX: HIP3Market = {
+  baseAsset: "TSLA",
+  coin: "flx:TSLA",
+  assetIndex: 0,
+  dexName: "flx",
+  collateral: "USDH",
   isNative: false,
   funding: "-0.0002",
-  openInterest: "15000",
-  markPrice: "3200.30",
+  openInterest: "1780.1",
+  markPrice: "431.86",
 };
 
-export const ETH_HIP3_USDE: HIP3Market = {
-  baseAsset: "ETH",
-  coin: "abc:ETH50",
-  assetIndex: 201,
-  dexName: "abc",
-  collateral: "USDE",
+export const TSLA_CASH: HIP3Market = {
+  baseAsset: "TSLA",
+  coin: "cash:TSLA",
+  assetIndex: 1,
+  dexName: "cash",
+  collateral: "USDT0",
   isNative: false,
   funding: "0.0005",
-  openInterest: "8000",
-  markPrice: "3200.15",
+  openInterest: "3839.184",
+  markPrice: "431.48",
 };
+
+export const ALL_TSLA_MARKETS = [TSLA_XYZ, TSLA_FLX, TSLA_CASH];
 
 export const BTC_NATIVE: HIP3Market = {
   baseAsset: "BTC",
@@ -47,5 +50,3 @@ export const BTC_NATIVE: HIP3Market = {
   openInterest: "100000",
   markPrice: "42000.50",
 };
-
-export const ALL_ETH_MARKETS = [ETH_NATIVE, ETH_HIP3_USDT, ETH_HIP3_USDE];

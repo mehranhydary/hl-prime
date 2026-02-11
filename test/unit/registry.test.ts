@@ -237,4 +237,50 @@ describe("MarketRegistry", () => {
     expect(registry.getMarkets("EUR")).toHaveLength(1);
     expect(registry.getMarkets("GOLD")).toHaveLength(1);
   });
+
+  it("discovers TSLA across multiple deployers with different collateral", async () => {
+    const provider = createMockProvider([
+      {
+        name: null,
+        universe: [{ name: "BTC", szDecimals: 4, maxLeverage: 50 }],
+        collateralToken: 0,
+      },
+      {
+        name: "xyz",
+        universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 0,
+      },
+      {
+        name: "flx",
+        universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 1,
+      },
+      {
+        name: "cash",
+        universe: [{ name: "cash:TSLA", szDecimals: 3, maxLeverage: 20 }],
+        collateralToken: 1,
+      },
+    ]);
+
+    const registry = new MarketRegistry(provider, logger);
+    await registry.discover();
+
+    const tsla = registry.getMarkets("TSLA");
+    expect(tsla).toHaveLength(3);
+
+    const group = registry.getGroup("TSLA")!;
+    expect(group.hasAlternatives).toBe(true);
+
+    const xyz = tsla.find((m) => m.coin === "xyz:TSLA")!;
+    expect(xyz.dexName).toBe("xyz");
+    expect(xyz.collateral).toBe("USDC");
+
+    const flx = tsla.find((m) => m.coin === "flx:TSLA")!;
+    expect(flx.dexName).toBe("flx");
+    expect(flx.collateral).toBe("USDT");
+
+    const cash = tsla.find((m) => m.coin === "cash:TSLA")!;
+    expect(cash.dexName).toBe("cash");
+    expect(cash.collateral).toBe("USDT");
+  });
 });
