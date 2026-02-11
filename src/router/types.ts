@@ -11,6 +11,7 @@ export interface Quote {
   estimatedPriceImpact: number;
   estimatedFundingRate: number;
   alternativesConsidered: MarketScore[];
+  warnings?: string[];      // degraded mode notes (timeouts, partial market data, fallbacks)
   plan: ExecutionPlan;
 }
 

@@ -47,3 +47,15 @@ export class ExecutionError extends HyperliquidPrimeError {
     this.name = "ExecutionError";
   }
 }
+
+export class MarketDataUnavailableError extends HyperliquidPrimeError {
+  constructor(
+    public readonly baseAsset: string,
+    public readonly failedMarkets: string[],
+  ) {
+    super(
+      `Market data unavailable for ${baseAsset}. Failed markets: ${failedMarkets.join(", ") || "unknown"}`,
+    );
+    this.name = "MarketDataUnavailableError";
+  }
+}

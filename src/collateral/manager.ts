@@ -63,6 +63,8 @@ export class CollateralManager {
 
     const requirements: CollateralRequirement[] = [];
     let swapsNeeded = false;
+    const swapShortfalls = new Map<string, number>();
+    const tokenBalances = new Map<string, number>();
 
     for (const [token, amountNeeded] of collateralNeeds) {
       if (token === "USDC") {
@@ -81,20 +83,33 @@ export class CollateralManager {
       // Non-USDC: needs to be in spot balance
       const currentBalance = balanceMap.get(token) ?? 0;
       const shortfall = Math.max(0, amountNeeded - currentBalance);
+      tokenBalances.set(token, currentBalance);
 
-      let swapCostBps = 0;
       if (shortfall > 0) {
         swapsNeeded = true;
-        swapCostBps = await this.estimateSwapCost("USDC", token, shortfall);
+        swapShortfalls.set(token, shortfall);
       }
+    }
 
+    const swapCostMap = new Map<string, number>();
+    await Promise.all(
+      [...swapShortfalls.entries()].map(async ([token, shortfall]) => {
+        const swapCostBps = await this.estimateSwapCost("USDC", token, shortfall);
+        swapCostMap.set(token, swapCostBps);
+      }),
+    );
+
+    for (const [token, amountNeeded] of collateralNeeds) {
+      if (token === "USDC") continue;
+      const currentBalance = tokenBalances.get(token) ?? 0;
+      const shortfall = Math.max(0, amountNeeded - currentBalance);
       requirements.push({
         token,
         amountNeeded,
         currentBalance,
         shortfall,
         swapFrom: "USDC",
-        estimatedSwapCostBps: swapCostBps,
+        estimatedSwapCostBps: swapCostMap.get(token) ?? 0,
       });
     }
 
@@ -162,6 +177,17 @@ export class CollateralManager {
         abstractionWasEnabled = true;
       }
 
+      const spotMeta = await this.provider.spotMeta();
+      const tokenByName = new Map(spotMeta.tokens.map((token) => [token.name, token]));
+      const pairByTokenIndex = new Map<number, (typeof spotMeta.universe)[number]>();
+      for (const pair of spotMeta.universe) {
+        for (const tokenIndex of pair.tokens) {
+          if (!pairByTokenIndex.has(tokenIndex)) {
+            pairByTokenIndex.set(tokenIndex, pair);
+          }
+        }
+      }
+
       // Step 2: Execute swaps for each requirement with shortfall
       for (const req of plan.requirements) {
         if (req.shortfall <= 0 || req.token === "USDC") continue;
@@ -190,9 +216,7 @@ export class CollateralManager {
         const bestAsk = parseFloat(spotBook.levels[1][0].px);
         const limitPrice = (bestAsk * 1.005).toFixed(6); // 0.5% slippage on swap
 
-        // Find spot asset index from spotMeta
-        const spotMeta = await this.provider.spotMeta();
-        const spotToken = spotMeta.tokens.find((t) => t.name === req.token);
+        const spotToken = tokenByName.get(req.token);
         if (!spotToken) {
           return {
             success: false,
@@ -204,9 +228,7 @@ export class CollateralManager {
 
         // Spot asset index = 10000 + 2 * pair_index for the base token
         // Find the pair that has this token
-        const pair = spotMeta.universe.find((p) =>
-          p.tokens.includes(spotToken.index),
-        );
+        const pair = pairByTokenIndex.get(spotToken.index);
         if (!pair) {
           return {
             success: false,

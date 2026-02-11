@@ -1,10 +1,12 @@
 import * as hl from "@nktkas/hyperliquid";
 import { privateKeyToAccount } from "viem/accounts";
 import type { HLProvider } from "./provider.js";
+import { NoWalletError } from "../utils/errors.js";
 import type {
   Meta,
   AssetCtx,
   L2Book,
+  L2Level,
   ClearinghouseState,
   SpotClearinghouseState,
   SpotMeta,
@@ -25,7 +27,17 @@ import type {
 export interface ProviderConfig {
   privateKey?: `0x${string}`;
   testnet?: boolean;
+  l2BookCacheTtlMs?: number;
+  spotMetaCacheTtlMs?: number;
 }
+
+interface TimedCache<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const DEFAULT_L2_BOOK_CACHE_TTL_MS = 250;
+const DEFAULT_SPOT_META_CACHE_TTL_MS = 30_000;
 
 export class NktkasProvider implements HLProvider {
   private info: hl.InfoClient;
@@ -33,6 +45,12 @@ export class NktkasProvider implements HLProvider {
   private subs: hl.SubscriptionClient;
   private httpTransport: hl.HttpTransport;
   private wsTransport: hl.WebSocketTransport;
+  private readonly l2BookCacheTtlMs: number;
+  private readonly spotMetaCacheTtlMs: number;
+  private l2BookCache = new Map<string, TimedCache<L2Book>>();
+  private l2BookInFlight = new Map<string, Promise<L2Book>>();
+  private spotMetaCache: TimedCache<SpotMeta> | null = null;
+  private spotMetaInFlight: Promise<SpotMeta> | null = null;
 
   constructor(config: ProviderConfig) {
     this.httpTransport = new hl.HttpTransport({
@@ -44,6 +62,8 @@ export class NktkasProvider implements HLProvider {
 
     this.info = new hl.InfoClient({ transport: this.httpTransport });
     this.subs = new hl.SubscriptionClient({ transport: this.wsTransport });
+    this.l2BookCacheTtlMs = config.l2BookCacheTtlMs ?? DEFAULT_L2_BOOK_CACHE_TTL_MS;
+    this.spotMetaCacheTtlMs = config.spotMetaCacheTtlMs ?? DEFAULT_SPOT_META_CACHE_TTL_MS;
 
     if (config.privateKey) {
       const wallet = privateKeyToAccount(config.privateKey);
@@ -60,6 +80,10 @@ export class NktkasProvider implements HLProvider {
 
   async disconnect(): Promise<void> {
     await this.wsTransport.close();
+    this.l2BookCache.clear();
+    this.l2BookInFlight.clear();
+    this.spotMetaCache = null;
+    this.spotMetaInFlight = null;
   }
 
   // --- Info methods ---
@@ -85,8 +109,29 @@ export class NktkasProvider implements HLProvider {
   }
 
   async spotMeta(): Promise<SpotMeta> {
-    const raw = await this.info.spotMeta();
-    return raw as unknown as SpotMeta;
+    const now = Date.now();
+    if (this.spotMetaCache && this.spotMetaCache.expiresAt > now) {
+      return this.spotMetaCache.value;
+    }
+
+    if (this.spotMetaInFlight) {
+      return this.spotMetaInFlight;
+    }
+
+    this.spotMetaInFlight = this.info.spotMeta()
+      .then((raw) => {
+        const value = raw as unknown as SpotMeta;
+        this.spotMetaCache = {
+          value,
+          expiresAt: Date.now() + this.spotMetaCacheTtlMs,
+        };
+        return value;
+      })
+      .finally(() => {
+        this.spotMetaInFlight = null;
+      });
+
+    return this.spotMetaInFlight;
   }
 
   async allMids(): Promise<Record<string, string>> {
@@ -95,15 +140,42 @@ export class NktkasProvider implements HLProvider {
   }
 
   async l2Book(coin: string, nSigFigs?: number): Promise<L2Book> {
+    const cacheKey = `${coin}:${nSigFigs ?? "na"}`;
+    const now = Date.now();
+    const cached = this.l2BookCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+    if (this.l2BookInFlight.has(cacheKey)) {
+      return this.l2BookInFlight.get(cacheKey)!;
+    }
+
     const params: { coin: string; nSigFigs?: 2 | 3 | 4 | 5 } = { coin };
     if (nSigFigs !== undefined) {
       params.nSigFigs = nSigFigs as 2 | 3 | 4 | 5;
     }
-    const raw = await this.info.l2Book(params);
-    if (!raw) {
-      return { coin, time: Date.now(), levels: [[], []] };
-    }
-    return raw as unknown as L2Book;
+
+    const request = this.info.l2Book(params)
+      .then((raw) => {
+        const value = raw
+          ? raw as unknown as L2Book
+          : {
+            coin,
+            time: Date.now(),
+            levels: [[], []] as [L2Level[], L2Level[]],
+          };
+        this.l2BookCache.set(cacheKey, {
+          value,
+          expiresAt: Date.now() + this.l2BookCacheTtlMs,
+        });
+        return value;
+      })
+      .finally(() => {
+        this.l2BookInFlight.delete(cacheKey);
+      });
+
+    this.l2BookInFlight.set(cacheKey, request);
+    return request;
   }
 
   async clearinghouseState(user: string): Promise<ClearinghouseState> {
@@ -167,11 +239,11 @@ export class NktkasProvider implements HLProvider {
   // --- Exchange methods ---
 
   async placeOrder(params: OrderParams, builder?: { b: `0x${string}`; f: number }): Promise<OrderResult> {
-    if (!this.exchange) throw new Error("No wallet configured");
+    const exchange = this.requireExchange();
 
     const orderType = this.mapOrderType(params.orderType);
 
-    const result = await this.exchange.order({
+    const result = await exchange.order({
       orders: [{
         a: params.assetIndex,
         b: params.isBuy,
@@ -191,9 +263,9 @@ export class NktkasProvider implements HLProvider {
   }
 
   async cancelOrder(params: CancelParams): Promise<CancelResult> {
-    if (!this.exchange) throw new Error("No wallet configured");
+    const exchange = this.requireExchange();
 
-    const result = await this.exchange.cancel({
+    const result = await exchange.cancel({
       cancels: [{ a: params.asset, o: params.oid }],
     });
 
@@ -203,7 +275,7 @@ export class NktkasProvider implements HLProvider {
   }
 
   async batchOrders(params: OrderParams[], builder?: { b: `0x${string}`; f: number }): Promise<OrderResult> {
-    if (!this.exchange) throw new Error("No wallet configured");
+    const exchange = this.requireExchange();
 
     const orders = params.map((p) => ({
       a: p.assetIndex,
@@ -215,7 +287,7 @@ export class NktkasProvider implements HLProvider {
       c: p.cloid as `0x${string}` | undefined,
     }));
 
-    const result = await this.exchange.order({
+    const result = await exchange.order({
       orders,
       grouping: "na",
       ...(builder ? { builder } : {}),
@@ -227,9 +299,9 @@ export class NktkasProvider implements HLProvider {
   }
 
   async setLeverage(coin: string, leverage: number, isCross: boolean): Promise<void> {
-    if (!this.exchange) throw new Error("No wallet configured");
+    const exchange = this.requireExchange();
 
-    await this.exchange.updateLeverage({
+    await exchange.updateLeverage({
       asset: coin,
       leverage,
       isCross,
@@ -239,20 +311,20 @@ export class NktkasProvider implements HLProvider {
   // --- Collateral management methods ---
 
   async usdClassTransfer(amount: number, toPerp: boolean): Promise<void> {
-    if (!this.exchange) throw new Error("No wallet configured");
-    await this.exchange.usdClassTransfer({ amount, toPerp });
+    const exchange = this.requireExchange();
+    await exchange.usdClassTransfer({ amount, toPerp });
   }
 
   async setDexAbstraction(enabled: boolean): Promise<void> {
-    if (!this.exchange) throw new Error("No wallet configured");
-    await (this.exchange as any).userDexAbstraction({ enabled });
+    const exchange = this.requireExchange();
+    await (exchange as any).userDexAbstraction({ enabled });
   }
 
   // --- Builder fee methods ---
 
   async approveBuilderFee(params: { maxFeeRate: string; builder: string }): Promise<void> {
-    if (!this.exchange) throw new Error("No wallet configured");
-    await this.exchange.approveBuilderFee({
+    const exchange = this.requireExchange();
+    await exchange.approveBuilderFee({
       maxFeeRate: params.maxFeeRate,
       builder: params.builder as `0x${string}`,
     });
@@ -267,6 +339,11 @@ export class NktkasProvider implements HLProvider {
   }
 
   // --- Private helpers ---
+
+  private requireExchange(): hl.ExchangeClient {
+    if (!this.exchange) throw new NoWalletError();
+    return this.exchange;
+  }
 
   private mapOrderType(ot: OrderParams["orderType"]) {
     if (ot.limit) {

@@ -5,8 +5,6 @@ import type { PerpMarket } from "../market/types.js";
 import type { LogicalPosition } from "./types.js";
 
 export class PositionManager {
-  // Positions the SDK created — tracked by orderId
-  private managedOrders = new Set<string>();
   private readonly logger: Logger;
 
   constructor(
@@ -15,13 +13,6 @@ export class PositionManager {
     parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ module: "positions" });
-  }
-
-  /**
-   * Record that the SDK created this position.
-   */
-  trackOrder(orderId: string) {
-    this.managedOrders.add(orderId);
   }
 
   /**
@@ -50,7 +41,7 @@ export class PositionManager {
         liquidationPrice: pos.position.liquidationPx
           ? parseFloat(pos.position.liquidationPx)
           : null,
-        managedBySDK: false, // v0: we don't track this yet
+        managedBySDK: "unknown",
       });
     }
 

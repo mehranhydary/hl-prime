@@ -95,7 +95,7 @@ console.log(splitQuote.allocations)
 //   { market: flx:TSLA, size: 50, proportion: 0.25 },
 //   { market: km:TSLA, size: 30, proportion: 0.15 },
 // ]
-console.log(splitQuote.collateralPlan.swapsNeeded) // true (USDH needed)
+console.log(splitQuote.collateralPlan.swapsNeeded) // false (resolved at executeSplit time)
 
 const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
 console.log(splitReceipt.totalFilledSize) // "200"
@@ -137,16 +137,18 @@ hp funding TSLA
 hp quote TSLA buy 50
 
 # Execute trades via best market
-hp long TSLA 50 --key 0x...
-hp short TSLA 25 --key 0x...
+HP_PRIVATE_KEY=0x... hp long TSLA 50
+HP_PRIVATE_KEY=0x... hp short TSLA 25
 
 # View positions and balance
-hp positions --key 0x...
-hp balance --key 0x...
+HP_PRIVATE_KEY=0x... hp positions
+HP_PRIVATE_KEY=0x... hp balance
 
 # Use testnet
 hp markets TSLA --testnet
 ```
+
+For CLI secrets, use `HP_PRIVATE_KEY` (or `--key-env <NAME>`) instead of `--key` whenever possible.
 
 ## How Routing Works
 
@@ -171,8 +173,8 @@ When you call `hp.quoteSplit("TSLA", "buy", 200)`, the router:
 1. **Aggregates** all orderbooks into a single merged book with source tracking
 2. **Walks** the merged book greedily — always consuming the cheapest liquidity first, regardless of venue
 3. **Distributes** fills proportionally across sources at each price level
-4. **Estimates collateral costs** — checks your spot balances and simulates swap costs on the spot market for any non-USDC collateral you'd need
-5. **Builds** a `SplitExecutionPlan` with one leg per market
+4. **Builds** a `SplitExecutionPlan` with one leg per market
+5. **Defers collateral estimation** to `executeSplit()` so balances and swap costs are resolved from live account state at execution time
 
 On execution, the system automatically:
 - Enables **DEX abstraction** (Hyperliquid's unified account mode)
@@ -223,7 +225,7 @@ The builder fee only applies to orders placed through `execute()`, `executeSplit
 
 CLI flag to disable:
 ```bash
-hp long TSLA 50 --key 0x... --no-builder-fee
+HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 ```
 
 ## API Reference
@@ -395,7 +397,7 @@ Split plan:
 - flx:TSLA → 120 (24%) — USDH, 1.4 bps impact
 - km:TSLA → 80 (16%) — USDH, 2.1 bps impact
 
-Collateral: Need 86,240 USDH — will swap from USDC (~12 bps cost)
+Collateral: will be estimated at execution time from live balances (and swapped if needed)
 Aggregate avg price: $431.42 (vs $432.10 single-market)
 
 You: Execute the split
