@@ -15,7 +15,11 @@ interface MockDex {
   collateralToken: number;
 }
 
-function createMockProvider(books: Record<string, L2Book>, dexes?: MockDex[]): HLProvider {
+function createMockProvider(
+  books: Record<string, L2Book>,
+  dexes?: MockDex[],
+  throwCoins: Set<string> = new Set(),
+): HLProvider {
   const defaultDexes: MockDex[] = dexes ?? [
     {
       name: "xyz",
@@ -74,7 +78,10 @@ function createMockProvider(books: Record<string, L2Book>, dexes?: MockDex[]): H
       universe: [],
     }),
     allMids: async () => ({}),
-    l2Book: async (coin: string) => books[coin] ?? { coin, time: 0, levels: [[], []] },
+    l2Book: async (coin: string) => {
+      if (throwCoins.has(coin)) throw new Error(`book unavailable for ${coin}`);
+      return books[coin] ?? { coin, time: 0, levels: [[], []] };
+    },
     clearinghouseState: async () => ({
       marginSummary: { accountValue: "0", totalNtlPos: "0", totalRawUsd: "0", totalMarginUsed: "0" },
       crossMarginSummary: { accountValue: "0", totalNtlPos: "0", totalRawUsd: "0", totalMarginUsed: "0" },
@@ -166,5 +173,22 @@ describe("BookAggregator", () => {
       );
       expect(totalFromSources).toBeCloseTo(level.sz, 4);
     }
+  });
+
+  it("continues aggregation when one market book fails", async () => {
+    const books: Record<string, L2Book> = {
+      "xyz:TSLA": TSLA_BOOK_DEEP,
+      "flx:TSLA": TSLA_HIP3_BOOK,
+    };
+    const provider = createMockProvider(books, undefined, new Set(["flx:TSLA"]));
+    const registry = new MarketRegistry(provider, logger);
+    await registry.discover();
+
+    const aggregator = new BookAggregator(provider, registry, logger);
+    const result = await aggregator.aggregate("TSLA");
+
+    expect(result.marketBooks).toHaveLength(1);
+    expect(result.marketBooks[0].coin).toBe("xyz:TSLA");
+    expect(result.asks.length).toBeGreaterThan(0);
   });
 });

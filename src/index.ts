@@ -63,7 +63,6 @@ export class HyperliquidPrime {
       this._registry,
       this.logger,
       this.aggregator,
-      this.collateralManager,
     );
 
     // Resolve builder config: undefined → default, null → disabled, object → custom
@@ -162,33 +161,18 @@ export class HyperliquidPrime {
     size: number,
   ): Promise<Quote> {
     this.ensureConnected();
-
-    // Determine user collateral from balance if wallet is connected
-    let userCollateral: string[] = ["USDC"]; // default assumption
-    if (this.walletAddress) {
-      try {
-        const spotState = await this.provider.spotClearinghouseState(
-          this.walletAddress,
-        );
-        userCollateral = spotState.balances
-          .filter((b) => parseFloat(b.total) > 0)
-          .map((b) => b.coin);
-        // Always include USDC since it's the native perp collateral
-        if (!userCollateral.includes("USDC")) {
-          userCollateral.push("USDC");
-        }
-      } catch {
-        // Fall back to default
-      }
-    }
-
-    return this.router.quote(
+    const { collateral, warnings } = await this.resolveUserCollateral();
+    const quote = await this.router.quote(
       baseAsset,
       side,
       size,
-      userCollateral,
+      collateral,
       this._config.defaultSlippage ?? 0.01,
     );
+    if (warnings.length > 0) {
+      quote.warnings = [...(quote.warnings ?? []), ...warnings];
+    }
+    return quote;
   }
 
   // === Trading (wallet required) ===
@@ -197,11 +181,7 @@ export class HyperliquidPrime {
   async execute(plan: ExecutionPlan): Promise<ExecutionReceipt> {
     this.ensureConnected();
     const user = this.ensureWallet();
-    const receipt = await this.executor.execute(plan, user);
-    if (receipt.success && receipt.orderId !== undefined) {
-      this.positions.trackOrder(receipt.orderId.toString());
-    }
-    return receipt;
+    return this.executor.execute(plan, user);
   }
 
   /** Convenience: quote + execute in one call. */
@@ -228,55 +208,29 @@ export class HyperliquidPrime {
     size: number,
   ): Promise<SplitQuote> {
     this.ensureConnected();
-
-    let userCollateral: string[] = ["USDC"];
-    const userAddress = this.walletAddress ?? "";
-    if (this.walletAddress) {
-      try {
-        const spotState = await this.provider.spotClearinghouseState(
-          this.walletAddress,
-        );
-        userCollateral = spotState.balances
-          .filter((b) => parseFloat(b.total) > 0)
-          .map((b) => b.coin);
-        if (!userCollateral.includes("USDC")) {
-          userCollateral.push("USDC");
-        }
-      } catch {
-        // Fall back to default
-      }
-    }
-
-    return this.router.quoteSplit(
+    const { collateral, warnings } = await this.resolveUserCollateral();
+    const quote = await this.router.quoteSplit(
       baseAsset,
       side,
       size,
-      userCollateral,
-      userAddress,
+      collateral,
       this._config.defaultSlippage ?? 0.01,
     );
+    if (warnings.length > 0) {
+      quote.warnings = [...(quote.warnings ?? []), ...warnings];
+    }
+    return quote;
   }
 
   /** Execute a previously generated split quote. */
   async executeSplit(plan: SplitExecutionPlan): Promise<SplitExecutionReceipt> {
     this.ensureConnected();
     const user = this.ensureWallet();
-    const receipt = await this.executor.executeSplit(
+    return this.executor.executeSplit(
       plan,
       this.collateralManager,
       user,
     );
-
-    // Track successful orders
-    if (receipt.success) {
-      for (const leg of receipt.legs) {
-        if (leg.success && leg.orderId !== undefined) {
-          this.positions.trackOrder(leg.orderId.toString());
-        }
-      }
-    }
-
-    return receipt;
   }
 
   /** Convenience: split quote + execute in one call. */
@@ -364,6 +318,39 @@ export class HyperliquidPrime {
     this.connected = false;
     this.logger.info("Hyperliquid Prime disconnected");
   }
+
+  private async resolveUserCollateral(): Promise<{
+    collateral: string[];
+    warnings: string[];
+  }> {
+    let collateral: string[] = ["USDC"];
+    const warnings: string[] = [];
+    if (!this.walletAddress) {
+      return { collateral, warnings };
+    }
+
+    try {
+      const spotState = await this.provider.spotClearinghouseState(
+        this.walletAddress,
+      );
+      collateral = spotState.balances
+        .filter((b) => parseFloat(b.total) > 0)
+        .map((b) => b.coin);
+      if (!collateral.includes("USDC")) {
+        collateral.push("USDC");
+      }
+    } catch (error) {
+      warnings.push(
+        "Could not load spot balances for collateral matching; defaulting to USDC",
+      );
+      this.logger.warn(
+        { error },
+        "Falling back to default collateral set due to spot balance fetch failure",
+      );
+    }
+
+    return { collateral, warnings };
+  }
 }
 
 // Re-export types for consumers
@@ -374,7 +361,7 @@ export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, S
 export { isSplitQuote } from "./router/types.js";
 export type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
-export type { LogicalPosition, RiskProfile } from "./position/types.js";
+export type { LogicalPosition, ManagedPositionState, RiskProfile } from "./position/types.js";
 export type { Logger } from "./logging/logger.js";
 export { MarketRegistry } from "./market/registry.js";
 export { BookAggregator } from "./market/aggregator.js";
@@ -391,6 +378,7 @@ export {
   HyperliquidPrimeError,
   NoMarketsError,
   InsufficientLiquidityError,
+  MarketDataUnavailableError,
   NoWalletError,
   NotConnectedError,
   ExecutionError,

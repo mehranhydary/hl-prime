@@ -1,6 +1,6 @@
 import type { HLProvider } from "../provider/provider.js";
 import type { Logger } from "../logging/logger.js";
-import type { ExecutionPlan, SplitExecutionPlan } from "../router/types.js";
+import type { ExecutionPlan, SplitAllocation, SplitExecutionPlan } from "../router/types.js";
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./types.js";
 import type { CollateralManager } from "../collateral/manager.js";
 import type { CollateralReceipt } from "../collateral/types.js";
@@ -207,11 +207,18 @@ export class Executor {
 
     const timestamp = Date.now();
 
-    // Step 1: Prepare collateral (enable abstraction, swap if needed)
+    // Step 1: Estimate collateral using live balances at execution time.
+    const allocations: SplitAllocation[] = this.buildAllocationsFromLegs(plan);
+    const collateralPlan = await collateralManager.estimateRequirements(
+      allocations,
+      userAddress,
+    );
+
+    // Step 2: Prepare collateral (enable abstraction, swap if needed)
     let collateralReceipt: CollateralReceipt;
-    if (plan.collateralPlan.swapsNeeded) {
+    if (collateralPlan.swapsNeeded) {
       collateralReceipt = await collateralManager.prepare(
-        plan.collateralPlan,
+        collateralPlan,
         userAddress,
       );
       if (!collateralReceipt.success) {
@@ -234,7 +241,7 @@ export class Executor {
       };
     }
 
-    // Step 2: Place all leg orders via batchOrders (single atomic API call)
+    // Step 3: Place all leg orders via batchOrders (single atomic API call)
     try {
       const orderParams = plan.legs.map((leg) => ({
         assetIndex: leg.market.assetIndex,
@@ -250,7 +257,7 @@ export class Executor {
         this.wireBuilder ?? undefined,
       );
 
-      // Step 3: Map each status to a per-leg receipt
+      // Step 4: Map each status to a per-leg receipt
       const legs: ExecutionReceipt[] = plan.legs.map((leg, i) => {
         const status = result.statuses[i];
         let orderId: number | undefined;
@@ -289,7 +296,7 @@ export class Executor {
         };
       });
 
-      // Step 4: Aggregate results
+      // Step 5: Aggregate results
       let totalFilledSize = 0;
       let totalFilledCost = 0;
       let allSuccess = true;
@@ -339,5 +346,21 @@ export class Executor {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  private buildAllocationsFromLegs(plan: SplitExecutionPlan): SplitAllocation[] {
+    const totalSize = plan.legs.reduce((sum, leg) => sum + parseFloat(leg.size), 0);
+    return plan.legs.map((leg) => {
+      const size = parseFloat(leg.size);
+      const estimatedAvgPrice = parseFloat(leg.price);
+      const estimatedCost = size * estimatedAvgPrice;
+      return {
+        market: leg.market,
+        size,
+        estimatedCost,
+        estimatedAvgPrice,
+        proportion: totalSize > 0 ? size / totalSize : 0,
+      };
+    });
   }
 }

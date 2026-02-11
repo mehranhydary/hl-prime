@@ -3,7 +3,10 @@ import { NktkasProvider } from "../../src/provider/nktkas.js";
 import { MarketRegistry } from "../../src/market/registry.js";
 import { createLogger } from "../../src/logging/logger.js";
 
-describe("MarketRegistry (testnet)", () => {
+const runLive = process.env.LIVE_HL_TESTS === "1";
+const describeLive = runLive ? describe : describe.skip;
+
+describeLive("MarketRegistry (testnet live)", () => {
   let registry: MarketRegistry;
   let provider: NktkasProvider;
 

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NktkasProvider } from "../../src/provider/nktkas.js";
 
-describe("NktkasProvider (testnet)", () => {
+const runLive = process.env.LIVE_HL_TESTS === "1";
+const describeLive = runLive ? describe : describe.skip;
+
+describeLive("NktkasProvider (testnet live)", () => {
   let provider: NktkasProvider;
 
   beforeAll(async () => {

@@ -16,10 +16,13 @@ export class MarketRegistry {
   }
 
   async discover(): Promise<void> {
+    const nextGroups = new Map<string, MarketGroup>();
+    const nextSpotTokens = new Map<number, SpotToken>();
+
     // Fetch spot token metadata for collateral resolution
     const spotMeta = await this.provider.spotMeta();
     for (const token of spotMeta.tokens) {
-      this.spotTokens.set(token.index, token);
+      nextSpotTokens.set(token.index, token);
     }
 
     // Fetch all deployers and their metadata in parallel
@@ -28,28 +31,52 @@ export class MarketRegistry {
       this.provider.allPerpMetas(),
     ]);
 
+    const ctxResults = await Promise.allSettled(
+      allMetas.map((_, dexIndex) => {
+        const dex = dexs[dexIndex];
+        return this.provider.metaAndAssetCtxs(dex ? dex.name : "");
+      }),
+    );
+
     this.logger.info(
       { dexCount: dexs.length, spotTokens: spotMeta.tokens.length },
       "Discovering markets across all deployers",
     );
 
     let totalAssets = 0;
+    let dexContextFailures = 0;
 
     for (const [dexIndex, meta] of allMetas.entries()) {
       const dex = dexs[dexIndex];
       const dexName = dex ? dex.name : "__native__";
-      const collateral = this.resolveCollateralToken(meta.collateralToken);
-
-      // Fetch asset contexts for this dex
-      const [, assetCtxs] = await this.provider.metaAndAssetCtxs(
-        dex ? dex.name : "",
-      );
+      const collateral = this.resolveCollateralToken(meta.collateralToken, nextSpotTokens);
+      const ctxResult = ctxResults[dexIndex];
+      if (!ctxResult || ctxResult.status === "rejected") {
+        dexContextFailures++;
+        this.logger.warn(
+          {
+            dexName,
+            reason: ctxResult?.status === "rejected" ? String(ctxResult.reason) : "missing context result",
+          },
+          "Skipping deployer due to missing asset contexts",
+        );
+        continue;
+      }
+      const [, assetCtxs] = ctxResult.value;
 
       for (const [i, asset] of meta.universe.entries()) {
         // Skip delisted markets
         if (asset.isDelisted) continue;
 
         const ctx = assetCtxs[i];
+        if (!ctx) {
+          this.logger.warn(
+            { dexName, asset: asset.name, assetIndex: i },
+            "Skipping asset due to missing context",
+          );
+          continue;
+        }
+
         // Compute global asset ID:
         // Native (dexIndex 0): assetIndex = local index
         // HIP-3 (dexIndex > 0): assetIndex = 100000 + dexIndex * 10000 + local index
@@ -58,28 +85,32 @@ export class MarketRegistry {
         if (!parsed) continue;
 
         const key = parsed.baseAsset.toUpperCase();
-        if (!this.groups.has(key)) {
-          this.groups.set(key, {
+        if (!nextGroups.has(key)) {
+          nextGroups.set(key, {
             baseAsset: key,
             markets: [],
             hasAlternatives: false,
           });
         }
 
-        const group = this.groups.get(key)!;
+        const group = nextGroups.get(key)!;
         group.markets.push(parsed);
         group.hasAlternatives = group.markets.length > 1;
         totalAssets++;
       }
     }
 
+    this.groups = nextGroups;
+    this.spotTokens = nextSpotTokens;
+
     this.logger.info(
       {
         totalAssets,
-        totalGroups: this.groups.size,
-        groupsWithAlts: [...this.groups.values()].filter(
+        totalGroups: nextGroups.size,
+        groupsWithAlts: [...nextGroups.values()].filter(
           (g) => g.hasAlternatives,
         ).length,
+        dexContextFailures,
       },
       "Market discovery complete",
     );
@@ -135,8 +166,11 @@ export class MarketRegistry {
     return afterColon.replace(/\d+$/, "") || afterColon;
   }
 
-  private resolveCollateralToken(tokenIndex: number): string {
-    const token = this.spotTokens.get(tokenIndex);
+  private resolveCollateralToken(
+    tokenIndex: number,
+    tokens: Map<number, SpotToken> = this.spotTokens,
+  ): string {
+    const token = tokens.get(tokenIndex);
     if (token) return token.name;
     return `TOKEN_${tokenIndex}`;
   }

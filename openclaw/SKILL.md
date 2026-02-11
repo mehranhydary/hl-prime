@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-prime
-description: Trade on Hyperliquid's perp markets (native + HIP-3) with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Routes across both native HL perps (ETH, BTC) and HIP-3 deployer markets. Handles collateral swaps (USDC→USDH/USDT0) automatically when the best liquidity requires it.
+description: Trade on Hyperliquid's perp markets (native + HIP-3) with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Routes across both native HL perps (ETH, BTC) and HIP-3 deployer markets. Handles collateral swaps (USDC→USDH/USDT0) automatically during execution when the best liquidity requires it.
 ---
 
 # Hyperliquid Prime
@@ -93,12 +93,12 @@ hp funding TSLA
 hp quote TSLA buy 50
 
 # Execute trades
-hp long TSLA 50 --key 0x...
-hp short TSLA 25 --key 0x...
+HP_PRIVATE_KEY=0x... hp long TSLA 50
+HP_PRIVATE_KEY=0x... hp short TSLA 25
 
 # View positions and balance
-hp positions --key 0x...
-hp balance --key 0x...
+HP_PRIVATE_KEY=0x... hp positions
+HP_PRIVATE_KEY=0x... hp balance
 
 # Use testnet
 hp markets TSLA --testnet
@@ -116,7 +116,7 @@ When you call `hp.quote("TSLA", "buy", 50)`, the router:
    - **Collateral swap cost** (penalty) — estimated cost to swap into the required collateral
 4. **Selects** the lowest-score market and builds an execution plan
 
-For split orders (`quoteSplit`), the router merges all orderbooks, walks the combined book greedily to consume the cheapest liquidity first across all venues, and handles collateral swaps automatically.
+For split orders (`quoteSplit`), the router merges all orderbooks, walks the combined book greedily to consume the cheapest liquidity first across all venues, and builds split execution legs. Collateral requirements and swaps are estimated and executed at `executeSplit(...)` time using live balances.
 
 ## Configuration
 

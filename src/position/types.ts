@@ -1,5 +1,7 @@
 import type { PerpMarket } from "../market/types.js";
 
+export type ManagedPositionState = "managed" | "external" | "unknown";
+
 export interface LogicalPosition {
   baseAsset: string;
   coin: string;
@@ -11,7 +13,7 @@ export interface LogicalPosition {
   unrealizedPnl: number;
   leverage: number;
   liquidationPrice: number | null;
-  managedBySDK: boolean;
+  managedBySDK: ManagedPositionState;
 }
 
 export interface RiskProfile {

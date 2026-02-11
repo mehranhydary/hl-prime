@@ -283,4 +283,25 @@ describe("MarketRegistry", () => {
     expect(cash.dexName).toBe("cash");
     expect(cash.collateral).toBe("USDT");
   });
+
+  it("is idempotent across repeated discover() calls", async () => {
+    const provider = createMockProvider([
+      {
+        name: "xyz",
+        universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 0,
+      },
+      {
+        name: "flx",
+        universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 1,
+      },
+    ]);
+
+    const registry = new MarketRegistry(provider, logger);
+    await registry.discover();
+    await registry.discover();
+
+    expect(registry.getMarkets("TSLA")).toHaveLength(2);
+  });
 });
