@@ -10,7 +10,7 @@ import { CollateralManager } from "./collateral/manager.js";
 import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
 import { NoWalletError, NotConnectedError } from "./utils/errors.js";
-import type { HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
+import type { PerpMarket, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 import type { Quote, ExecutionPlan, SplitQuote, SplitExecutionPlan } from "./router/types.js";
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 import type { LogicalPosition } from "./position/types.js";
@@ -92,7 +92,7 @@ export class HyperliquidPrime {
   // === Read-Only (no wallet required) ===
 
   /** Get all HIP-3 markets for an asset. */
-  getMarkets(baseAsset: string): HIP3Market[] {
+  getMarkets(baseAsset: string): PerpMarket[] {
     this.ensureConnected();
     return this._registry.getMarkets(baseAsset);
   }
@@ -355,7 +355,7 @@ export class HyperliquidPrime {
 // Re-export types for consumers
 export type { HyperliquidPrimeConfig } from "./config.js";
 export type { HLProvider } from "./provider/provider.js";
-export type { HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
+export type { PerpMarket, HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, SplitExecutionPlan, SplitAllocation, SplitResult } from "./router/types.js";
 export { isSplitQuote } from "./router/types.js";
 export type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";

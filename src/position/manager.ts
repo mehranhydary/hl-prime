@@ -1,7 +1,7 @@
 import type { HLProvider } from "../provider/provider.js";
 import type { Logger } from "../logging/logger.js";
 import type { MarketRegistry } from "../market/registry.js";
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 import type { LogicalPosition } from "./types.js";
 
 export class PositionManager {
@@ -76,7 +76,7 @@ export class PositionManager {
     return grouped;
   }
 
-  private findMarket(coin: string): HIP3Market | undefined {
+  private findMarket(coin: string): PerpMarket | undefined {
     for (const group of this.registry.getAllGroups()) {
       const match = group.markets.find((m) => m.coin === coin);
       if (match) return match;

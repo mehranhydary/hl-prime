@@ -1,14 +1,14 @@
 # Hyperliquid Prime
 
-A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. When multiple deployers list the same asset (e.g. TSLA) with different collateral types (USDC, USDH, USDT0), Hyperliquid Prime automatically discovers all markets, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
+A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's perp markets — both native (ETH, BTC) and HIP-3 deployer markets (xyz's TSLA, Hyena's ETH). When multiple venues list the same asset with different collateral types (USDC, USDH, USDT0), Hyperliquid Prime automatically discovers all markets, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
 
 ## The Problem
 
-HIP-3 allows anyone to deploy perpetual markets on Hyperliquid. This means TSLA can be traded across multiple venues — xyz, flx, km, and cash — each with different collateral, liquidity depth, and funding rates. Traders are left manually comparing across fragmented markets.
+Hyperliquid has native perpetual markets (ETH, BTC, SOL) and HIP-3, which allows anyone to deploy additional perp markets. This means ETH can be traded on both the native HL market *and* third-party deployers like Hyena — each with different liquidity depth and funding rates. Similarly, TSLA exists across multiple HIP-3 venues (xyz, flx, km, cash) with different collateral types. Traders are left manually comparing across fragmented markets.
 
 ## What Hyperliquid Prime Does
 
-- **Discovers** all HIP-3 markets per asset and groups them
+- **Discovers** all perp markets per asset (native + HIP-3) and groups them
 - **Aggregates** orderbooks across collateral types into a unified view
 - **Routes** orders to the single best market based on price impact, funding rate, and collateral match
 - **Splits** large orders across multiple markets for better fills when a single venue lacks depth
@@ -33,7 +33,14 @@ import { HyperliquidPrime } from 'hyperliquid-prime'
 const hp = new HyperliquidPrime({ testnet: true })
 await hp.connect()
 
-// What HIP-3 markets exist for TSLA?
+// What markets exist for ETH? (native HL + HIP-3 deployers)
+const ethMarkets = hp.getMarkets('ETH')
+// [
+//   { coin: "ETH", dexName: "__native__", collateral: "USDC", isNative: true },
+//   { coin: "hyena:ETH", dexName: "hyena", collateral: "USDC", isNative: false },
+// ]
+
+// HIP-3-only assets also work
 const tslaMarkets = hp.getMarkets('TSLA')
 // [
 //   { coin: "xyz:TSLA", dexName: "xyz", collateral: "USDC", isNative: false },
@@ -98,10 +105,10 @@ console.log(splitReceipt.aggregateAvgPrice) // "431.42"
 const splitReceipt2 = await hp.longSplit('TSLA', 200)
 const splitReceipt3 = await hp.shortSplit('TSLA', 100)
 
-// Unified position view across all HIP-3 markets
+// Unified position view across all perp markets
 const positions = await hp.getGroupedPositions()
 const tslaPositions = positions.get('TSLA')
-// Shows all TSLA positions across all HIP-3 markets in one group
+// Shows all TSLA positions across all markets in one group
 
 // Account balance
 const balance = await hp.getBalance()
@@ -114,7 +121,8 @@ await hp.disconnect()
 The `hp` CLI provides the same functionality from the terminal:
 
 ```bash
-# Show all HIP-3 markets for an asset
+# Show all perp markets for an asset (native + HIP-3)
+hp markets ETH
 hp markets TSLA
 hp markets TSLA --json
 
@@ -193,7 +201,7 @@ interface HyperliquidPrimeConfig {
 
 | Method                           | Description                                  |
 | -------------------------------- | -------------------------------------------- |
-| `getMarkets(asset)`              | All HIP-3 markets for an asset               |
+| `getMarkets(asset)`              | All perp markets for an asset (native + HIP-3) |
 | `getAggregatedMarkets()`         | Asset groups with multiple markets            |
 | `getAggregatedBook(asset)`       | Merged orderbook across all markets           |
 | `getFundingComparison(asset)`    | Funding rates compared across markets         |
@@ -238,11 +246,11 @@ hyperliquid-prime/
 │   │   ├── provider.ts       # HLProvider interface
 │   │   ├── nktkas.ts         # Implementation
 │   │   └── types.ts          # Normalized types
-│   ├── market/               # HIP-3 market discovery
-│   │   ├── registry.ts       # Discovers & indexes markets per asset
+│   ├── market/               # Perp market discovery (native + HIP-3)
+│   │   ├── registry.ts       # Discovers & indexes all perp markets per asset
 │   │   ├── book.ts           # Book normalization helpers
 │   │   ├── aggregator.ts     # Merges books across collateral types
-│   │   └── types.ts          # HIP3Market, MarketGroup, AggregatedBook
+│   │   └── types.ts          # PerpMarket, MarketGroup, AggregatedBook
 │   ├── router/               # Smart order routing
 │   │   ├── router.ts         # Scores markets, picks best one (or splits across many)
 │   │   ├── simulator.ts      # Walks books, estimates fill cost
@@ -298,7 +306,7 @@ Once the skill is installed, you can trade via conversational commands:
 
 ```
 "What's the best market to buy 50 TSLA on Hyperliquid?"
-"Show me all HIP-3 markets for GOLD"
+"Show me all markets for GOLD"
 "Compare funding rates across ETH markets"
 "Get me a quote to short 100 NVDA"
 "Execute that TSLA trade"
@@ -328,7 +336,7 @@ For trading (not read-only), ensure your OpenClaw agent has access to your walle
 
 ```
 You: Find the best market for buying 100 UNI
-Agent: Found 4 HIP-3 markets for UNI. Analyzing...
+Agent: Found 4 markets for UNI. Analyzing...
 
 Best route: xyz:UNI
 - Price impact: 1.2 bps (lowest)

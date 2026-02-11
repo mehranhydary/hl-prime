@@ -1,9 +1,9 @@
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 
 export interface LogicalPosition {
   baseAsset: string;
   coin: string;
-  market: HIP3Market | undefined;
+  market: PerpMarket | undefined;
   side: "long" | "short";
   size: number;
   entryPrice: number;

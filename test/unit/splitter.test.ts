@@ -4,7 +4,7 @@ import { BookAggregator } from "../../src/market/aggregator.js";
 import type { HLProvider } from "../../src/provider/provider.js";
 import { MarketRegistry } from "../../src/market/registry.js";
 import { createLogger } from "../../src/logging/logger.js";
-import type { HIP3Market, AggregatedBook } from "../../src/market/types.js";
+import type { PerpMarket, AggregatedBook } from "../../src/market/types.js";
 import type { L2Book } from "../../src/provider/types.js";
 import {
   TSLA_BOOK_DEEP,
@@ -16,7 +16,7 @@ import { TSLA_XYZ, TSLA_FLX } from "../fixtures/markets.js";
 const logger = createLogger({ level: "silent" });
 
 // Build market lookup map
-function marketMap(...markets: HIP3Market[]): Map<string, HIP3Market> {
+function marketMap(...markets: PerpMarket[]): Map<string, PerpMarket> {
   return new Map(markets.map((m) => [m.coin, m]));
 }
 

@@ -1,9 +1,9 @@
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 import type { CollateralReceipt } from "../collateral/types.js";
 
 export interface ExecutionReceipt {
   success: boolean;
-  market: HIP3Market;
+  market: PerpMarket;
   side: "buy" | "sell";
   requestedSize: string;
   filledSize: string;

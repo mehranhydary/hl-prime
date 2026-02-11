@@ -1,4 +1,4 @@
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 import type { OrderType } from "../provider/types.js";
 import type { CollateralPlan } from "../collateral/types.js";
 
@@ -6,7 +6,7 @@ export interface Quote {
   baseAsset: string;
   side: "buy" | "sell";
   requestedSize: number;
-  selectedMarket: HIP3Market;
+  selectedMarket: PerpMarket;
   estimatedAvgPrice: number;
   estimatedPriceImpact: number;
   estimatedFundingRate: number;
@@ -15,7 +15,7 @@ export interface Quote {
 }
 
 export interface ExecutionPlan {
-  market: HIP3Market;
+  market: PerpMarket;
   side: "buy" | "sell";
   size: string;
   price: string;        // Limit price (market price + slippage for IOC)
@@ -24,7 +24,7 @@ export interface ExecutionPlan {
 }
 
 export interface MarketScore {
-  market: HIP3Market;
+  market: PerpMarket;
   priceImpact: number;       // Cost in basis points to fill at this size
   fundingRate: number;        // Current funding rate
   collateralMatch: boolean;   // Does user already hold this collateral?
@@ -44,7 +44,7 @@ export interface SimulationResult {
 // --- Split order types ---
 
 export interface SplitAllocation {
-  market: HIP3Market;
+  market: PerpMarket;
   size: number;               // allocated fill size for this market
   estimatedCost: number;      // size * estimated avg price
   estimatedAvgPrice: number;

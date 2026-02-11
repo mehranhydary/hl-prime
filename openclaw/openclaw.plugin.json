@@ -1,14 +1,14 @@
 {
   "id": "hyperliquid-prime",
   "name": "Hyperliquid Prime",
-  "description": "Prime broker SDK for Hyperliquid HIP-3 markets with intelligent order routing and cross-market splitting",
+  "description": "Prime broker SDK for Hyperliquid perp markets (native + HIP-3) with intelligent order routing and cross-market splitting",
   "version": "0.1.0",
   "author": "mehranhydary",
   "source": "https://github.com/mehranhydary/hl-prime",
   "skill": {
     "path": "./SKILL.md",
     "name": "hyperliquid-prime",
-    "description": "Trade on Hyperliquid's HIP-3 markets with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Handles collateral swaps automatically."
+    "description": "Trade on Hyperliquid's perp markets (native + HIP-3) with intelligent order routing and cross-market splitting. Routes across both native HL perps (ETH, BTC) and HIP-3 deployer markets. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Handles collateral swaps automatically."
   },
   "entrypoints": {
     "cli": {

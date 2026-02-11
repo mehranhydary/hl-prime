@@ -1,16 +1,16 @@
 ---
 name: hyperliquid-prime
-description: Trade on Hyperliquid's HIP-3 markets with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Handles collateral swaps (USDC→USDH/USDT0) automatically when the best liquidity requires it.
+description: Trade on Hyperliquid's perp markets (native + HIP-3) with intelligent order routing and cross-market splitting. Use when the user wants to trade crypto, stocks, or commodities on Hyperliquid, get best execution across fragmented markets, split large orders across multiple venues, compare funding rates, view aggregated orderbooks, or manage positions across multiple collateral types. Routes across both native HL perps (ETH, BTC) and HIP-3 deployer markets. Handles collateral swaps (USDC→USDH/USDT0) automatically when the best liquidity requires it.
 ---
 
 # Hyperliquid Prime
 
-A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's HIP-3 markets. Automatically discovers all markets for an asset, compares liquidity/funding/cost, and routes to the best execution — or splits across multiple venues for optimal fills with automatic collateral swaps.
+A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's perp markets — both native (ETH, BTC) and HIP-3 deployer markets. Automatically discovers all markets for an asset, compares liquidity/funding/cost, and routes to the best execution — or splits across multiple venues for optimal fills with automatic collateral swaps.
 
 ## When to Use This Skill
 
 - Trading crypto, stocks (AAPL, NVDA, TSLA), indexes, or commodities (GOLD, SILVER) on Hyperliquid
-- Need best execution across multiple HIP-3 markets for the same asset
+- Need best execution across multiple perp markets (native + HIP-3) for the same asset
 - Splitting large orders across venues for better fills and lower price impact
 - Comparing funding rates across different collateral types
 - Aggregated orderbook view across fragmented markets
@@ -33,8 +33,8 @@ import { HyperliquidPrime } from 'hyperliquid-prime'
 const hp = new HyperliquidPrime({ testnet: true })
 await hp.connect()
 
-// Get all HIP-3 markets for an asset
-const markets = hp.getMarkets('TSLA')
+// Get all perp markets for an asset (native + HIP-3)
+const markets = hp.getMarkets('ETH') // or 'TSLA', 'BTC', etc.
 
 // Get routing quote for best execution
 const quote = await hp.quote('TSLA', 'buy', 50)
@@ -79,7 +79,8 @@ await hp.disconnect()
 ### CLI
 
 ```bash
-# Show all HIP-3 markets for an asset
+# Show all perp markets for an asset (native + HIP-3)
+hp markets ETH
 hp markets TSLA
 
 # Aggregated orderbook
@@ -133,7 +134,7 @@ interface HyperliquidPrimeConfig {
 ## Key Methods
 
 ### Read-Only
-- `getMarkets(asset)` — All HIP-3 markets for an asset
+- `getMarkets(asset)` — All perp markets for an asset (native + HIP-3)
 - `getAggregatedMarkets()` — Asset groups with multiple markets
 - `getAggregatedBook(asset)` — Merged orderbook across all markets
 - `getFundingComparison(asset)` — Funding rates compared across markets
