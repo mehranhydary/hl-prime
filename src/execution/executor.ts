@@ -1,7 +1,9 @@
 import type { HLProvider } from "../provider/provider.js";
 import type { Logger } from "../logging/logger.js";
-import type { ExecutionPlan } from "../router/types.js";
-import type { ExecutionReceipt } from "./types.js";
+import type { ExecutionPlan, SplitExecutionPlan } from "../router/types.js";
+import type { ExecutionReceipt, SplitExecutionReceipt } from "./types.js";
+import type { CollateralManager } from "../collateral/manager.js";
+import type { CollateralReceipt } from "../collateral/types.js";
 
 export class Executor {
   private logger: Logger;
@@ -107,6 +109,158 @@ export class Executor {
         timestamp: Date.now(),
         error: error instanceof Error ? error.message : String(error),
         raw: error,
+      };
+    }
+  }
+
+  /**
+   * Execute a split order plan across multiple markets.
+   * Flow: prepare collateral → batch place all leg orders → aggregate receipts.
+   */
+  async executeSplit(
+    plan: SplitExecutionPlan,
+    collateralManager: CollateralManager,
+    userAddress: string,
+  ): Promise<SplitExecutionReceipt> {
+    this.logger.info(
+      {
+        legs: plan.legs.length,
+        side: plan.side,
+        totalSize: plan.totalSize,
+        markets: plan.legs.map((l) => l.market.coin),
+      },
+      "Executing split order",
+    );
+
+    const timestamp = Date.now();
+
+    // Step 1: Prepare collateral (enable abstraction, swap if needed)
+    let collateralReceipt: CollateralReceipt;
+    if (plan.collateralPlan.swapsNeeded) {
+      collateralReceipt = await collateralManager.prepare(
+        plan.collateralPlan,
+        userAddress,
+      );
+      if (!collateralReceipt.success) {
+        return {
+          success: false,
+          legs: [],
+          collateralReceipt,
+          totalRequestedSize: plan.totalSize,
+          totalFilledSize: "0",
+          aggregateAvgPrice: "0",
+          timestamp,
+          error: `Collateral preparation failed: ${collateralReceipt.error}`,
+        };
+      }
+    } else {
+      collateralReceipt = {
+        success: true,
+        swapsExecuted: [],
+        abstractionWasEnabled: false,
+      };
+    }
+
+    // Step 2: Place all leg orders via batchOrders (single atomic API call)
+    try {
+      const orderParams = plan.legs.map((leg) => ({
+        assetIndex: leg.market.assetIndex,
+        isBuy: leg.side === "buy",
+        price: leg.price,
+        size: leg.size,
+        reduceOnly: false,
+        orderType: leg.orderType,
+      }));
+
+      const result = await this.provider.batchOrders(orderParams);
+
+      // Step 3: Map each status to a per-leg receipt
+      const legs: ExecutionReceipt[] = plan.legs.map((leg, i) => {
+        const status = result.statuses[i];
+        let orderId: number | undefined;
+        let filledSize = "0";
+        let avgPrice = "0";
+        let success = false;
+        let error: string | undefined;
+
+        if (status && typeof status === "object") {
+          if ("filled" in status) {
+            orderId = status.filled.oid;
+            filledSize = status.filled.totalSz;
+            avgPrice = status.filled.avgPx;
+            success = true;
+          } else if ("resting" in status) {
+            orderId = status.resting.oid;
+            filledSize = "0";
+            avgPrice = leg.price;
+            success = true; // Order is resting, not failed
+          } else if ("error" in status) {
+            error = status.error;
+          }
+        }
+
+        return {
+          success,
+          market: leg.market,
+          side: leg.side,
+          requestedSize: leg.size,
+          filledSize,
+          avgPrice,
+          orderId,
+          timestamp,
+          error,
+          raw: status,
+        };
+      });
+
+      // Step 4: Aggregate results
+      let totalFilledSize = 0;
+      let totalFilledCost = 0;
+      let allSuccess = true;
+
+      for (const leg of legs) {
+        const filled = parseFloat(leg.filledSize);
+        const price = parseFloat(leg.avgPrice);
+        totalFilledSize += filled;
+        totalFilledCost += filled * price;
+        if (!leg.success) allSuccess = false;
+      }
+
+      const aggregateAvgPrice = totalFilledSize > 0
+        ? (totalFilledCost / totalFilledSize).toFixed(6)
+        : "0";
+
+      this.logger.info(
+        {
+          allSuccess,
+          totalFilledSize,
+          aggregateAvgPrice,
+          legsSucceeded: legs.filter((l) => l.success).length,
+          legsFailed: legs.filter((l) => !l.success).length,
+        },
+        "Split order executed",
+      );
+
+      return {
+        success: allSuccess,
+        legs,
+        collateralReceipt,
+        totalRequestedSize: plan.totalSize,
+        totalFilledSize: totalFilledSize.toString(),
+        aggregateAvgPrice,
+        timestamp,
+      };
+    } catch (error) {
+      this.logger.error({ error }, "Split order execution failed");
+      return {
+        success: false,
+        legs: [],
+        collateralReceipt,
+        totalRequestedSize: plan.totalSize,
+        totalFilledSize: "0",
+        aggregateAvgPrice: "0",
+        timestamp,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }

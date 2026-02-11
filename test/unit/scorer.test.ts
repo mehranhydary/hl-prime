@@ -24,13 +24,13 @@ describe("MarketScorer", () => {
     expect(low.totalScore).toBeLessThan(high.totalScore);
   });
 
-  it("penalizes missing collateral heavily", () => {
+  it("penalizes missing collateral with default swap cost", () => {
     const withCollateral = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"]);
     const noCollateral = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDH"]);
 
-    expect(noCollateral.totalScore).toBeGreaterThan(
-      withCollateral.totalScore + 5000,
-    );
+    // Default swap cost is 50 bps
+    expect(noCollateral.totalScore).toBeGreaterThan(withCollateral.totalScore);
+    expect(noCollateral.totalScore - withCollateral.totalScore).toBeCloseTo(50, 0);
     expect(noCollateral.collateralMatch).toBe(false);
     expect(withCollateral.collateralMatch).toBe(true);
   });
@@ -61,5 +61,26 @@ describe("MarketScorer", () => {
   it("returns no reason when collateral matches", () => {
     const score = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"]);
     expect(score.reason).toBeUndefined();
+  });
+
+  it("uses explicit swap cost instead of default", () => {
+    const withDefault = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDH"]);
+    const withExplicit = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDH"], 5);
+
+    // Explicit 5 bps should be much less penalty than default 50 bps
+    expect(withExplicit.totalScore).toBeLessThan(withDefault.totalScore);
+    expect(withExplicit.swapCostBps).toBe(5);
+    expect(withDefault.swapCostBps).toBe(50);
+  });
+
+  it("does not set swapCostBps when collateral matches", () => {
+    const score = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"]);
+    expect(score.swapCostBps).toBeUndefined();
+  });
+
+  it("includes swap cost in reason message", () => {
+    const score = scorer.score(baseSim, TSLA_FLX, "buy", ["USDC"], 3.5);
+    expect(score.reason).toContain("USDH");
+    expect(score.reason).toContain("3.5");
   });
 });

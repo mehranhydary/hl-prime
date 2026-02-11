@@ -46,6 +46,10 @@ export interface HLProvider {
   batchOrders(params: OrderParams[]): Promise<OrderResult>;
   setLeverage(coin: string, leverage: number, isCross: boolean): Promise<void>;
 
+  // Collateral management (requires wallet)
+  usdClassTransfer(amount: number, toPerp: boolean): Promise<void>;
+  setDexAbstraction(enabled: boolean): Promise<void>;
+
   // Lifecycle
   connect(): Promise<void>;
   disconnect(): Promise<void>;

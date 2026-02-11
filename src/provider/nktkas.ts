@@ -234,6 +234,18 @@ export class NktkasProvider implements HLProvider {
     });
   }
 
+  // --- Collateral management methods ---
+
+  async usdClassTransfer(amount: number, toPerp: boolean): Promise<void> {
+    if (!this.exchange) throw new Error("No wallet configured");
+    await this.exchange.usdClassTransfer({ amount, toPerp });
+  }
+
+  async setDexAbstraction(enabled: boolean): Promise<void> {
+    if (!this.exchange) throw new Error("No wallet configured");
+    await (this.exchange as any).userDexAbstraction({ enabled });
+  }
+
   // --- Private helpers ---
 
   private mapOrderType(ot: OrderParams["orderType"]) {

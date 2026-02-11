@@ -6,12 +6,13 @@ import { MarketRegistry } from "./market/registry.js";
 import { BookAggregator } from "./market/aggregator.js";
 import { Router } from "./router/router.js";
 import { Executor } from "./execution/executor.js";
+import { CollateralManager } from "./collateral/manager.js";
 import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
 import { NoWalletError, NotConnectedError } from "./utils/errors.js";
 import type { HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
-import type { Quote, ExecutionPlan } from "./router/types.js";
-import type { ExecutionReceipt } from "./execution/types.js";
+import type { Quote, ExecutionPlan, SplitQuote, SplitExecutionPlan } from "./router/types.js";
+import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 import type { LogicalPosition } from "./position/types.js";
 import type { Logger } from "./logging/logger.js";
 
@@ -20,6 +21,7 @@ export class HyperliquidPrime {
   private _registry: MarketRegistry;
   private router: Router;
   private executor: Executor;
+  private collateralManager: CollateralManager;
   private positions: PositionManager;
   private aggregator: BookAggregator;
   private logger: Logger;
@@ -54,7 +56,14 @@ export class HyperliquidPrime {
       this._registry,
       this.logger,
     );
-    this.router = new Router(this.provider, this._registry, this.logger);
+    this.collateralManager = new CollateralManager(this.provider, this.logger);
+    this.router = new Router(
+      this.provider,
+      this._registry,
+      this.logger,
+      this.aggregator,
+      this.collateralManager,
+    );
     this.executor = new Executor(this.provider, this.logger);
     this.positions = new PositionManager(
       this.provider,
@@ -198,6 +207,81 @@ export class HyperliquidPrime {
     return this.execute(q.plan);
   }
 
+  /** Generate a split quote across multiple HIP-3 markets. Does NOT execute. */
+  async quoteSplit(
+    baseAsset: string,
+    side: "buy" | "sell",
+    size: number,
+  ): Promise<SplitQuote> {
+    this.ensureConnected();
+
+    let userCollateral: string[] = ["USDC"];
+    const userAddress = this.walletAddress ?? "";
+    if (this.walletAddress) {
+      try {
+        const spotState = await this.provider.spotClearinghouseState(
+          this.walletAddress,
+        );
+        userCollateral = spotState.balances
+          .filter((b) => parseFloat(b.total) > 0)
+          .map((b) => b.coin);
+        if (!userCollateral.includes("USDC")) {
+          userCollateral.push("USDC");
+        }
+      } catch {
+        // Fall back to default
+      }
+    }
+
+    return this.router.quoteSplit(
+      baseAsset,
+      side,
+      size,
+      userCollateral,
+      userAddress,
+      this._config.defaultSlippage ?? 0.01,
+    );
+  }
+
+  /** Execute a previously generated split quote. */
+  async executeSplit(plan: SplitExecutionPlan): Promise<SplitExecutionReceipt> {
+    this.ensureConnected();
+    const user = this.ensureWallet();
+    const receipt = await this.executor.executeSplit(
+      plan,
+      this.collateralManager,
+      user,
+    );
+
+    // Track successful orders
+    if (receipt.success) {
+      for (const leg of receipt.legs) {
+        if (leg.success && leg.orderId !== undefined) {
+          this.positions.trackOrder(leg.orderId.toString());
+        }
+      }
+    }
+
+    return receipt;
+  }
+
+  /** Convenience: split quote + execute in one call. */
+  async longSplit(
+    baseAsset: string,
+    size: number,
+  ): Promise<SplitExecutionReceipt> {
+    const q = await this.quoteSplit(baseAsset, "buy", size);
+    return this.executeSplit(q.splitPlan);
+  }
+
+  async shortSplit(
+    baseAsset: string,
+    size: number,
+  ): Promise<SplitExecutionReceipt> {
+    const q = await this.quoteSplit(baseAsset, "sell", size);
+    return this.executeSplit(q.splitPlan);
+  }
+
   async close(baseAsset: string): Promise<ExecutionReceipt[]> {
     this.ensureConnected();
     const user = this.ensureWallet();
@@ -272,8 +356,10 @@ export class HyperliquidPrime {
 export type { HyperliquidPrimeConfig } from "./config.js";
 export type { HLProvider } from "./provider/provider.js";
 export type { HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
-export type { Quote, ExecutionPlan, MarketScore, SimulationResult } from "./router/types.js";
-export type { ExecutionReceipt } from "./execution/types.js";
+export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, SplitExecutionPlan, SplitAllocation, SplitResult } from "./router/types.js";
+export { isSplitQuote } from "./router/types.js";
+export type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
+export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
 export type { LogicalPosition, RiskProfile } from "./position/types.js";
 export type { Logger } from "./logging/logger.js";
 export { MarketRegistry } from "./market/registry.js";
@@ -281,6 +367,8 @@ export { BookAggregator } from "./market/aggregator.js";
 export { Router } from "./router/router.js";
 export { FillSimulator } from "./router/simulator.js";
 export { MarketScorer } from "./router/scorer.js";
+export { SplitOptimizer } from "./router/splitter.js";
+export { CollateralManager } from "./collateral/manager.js";
 export { Executor } from "./execution/executor.js";
 export { PositionManager } from "./position/manager.js";
 export { NktkasProvider } from "./provider/nktkas.js";
