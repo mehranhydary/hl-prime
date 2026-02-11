@@ -1,4 +1,4 @@
-import type { HIP3Market, AggregatedBook, AggregatedLevel } from "../market/types.js";
+import type { PerpMarket, AggregatedBook, AggregatedLevel } from "../market/types.js";
 import type { SplitAllocation, SplitResult } from "./types.js";
 
 /**
@@ -13,7 +13,7 @@ export class SplitOptimizer {
    * @param book     Aggregated book from BookAggregator (levels already price-sorted)
    * @param side     "buy" walks asks, "sell" walks bids
    * @param size     Total size to fill
-   * @param markets  Market metadata keyed by coin (for HIP3Market lookup)
+   * @param markets  Market metadata keyed by coin (for PerpMarket lookup)
    * @param minAllocationSize  Minimum allocation per market; smaller amounts get redistributed
    * @returns SplitResult with per-market allocations, or null if insufficient liquidity
    */
@@ -21,7 +21,7 @@ export class SplitOptimizer {
     book: AggregatedBook,
     side: "buy" | "sell",
     size: number,
-    markets: Map<string, HIP3Market>,
+    markets: Map<string, PerpMarket>,
     minAllocationSize = 0.001,
   ): SplitResult | null {
     const levels: AggregatedLevel[] = side === "buy" ? book.asks : book.bids;

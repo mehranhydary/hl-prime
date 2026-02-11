@@ -1,7 +1,7 @@
 import type { HLProvider } from "../provider/provider.js";
 import type { MetaAsset, AssetCtx, SpotToken } from "../provider/types.js";
 import type { Logger } from "../logging/logger.js";
-import type { HIP3Market, MarketGroup } from "./types.js";
+import type { PerpMarket, MarketGroup } from "./types.js";
 
 export class MarketRegistry {
   private groups = new Map<string, MarketGroup>();
@@ -50,7 +50,11 @@ export class MarketRegistry {
         if (asset.isDelisted) continue;
 
         const ctx = assetCtxs[i];
-        const parsed = this.parseAsset(asset, i, ctx, dexName, collateral);
+        // Compute global asset ID:
+        // Native (dexIndex 0): assetIndex = local index
+        // HIP-3 (dexIndex > 0): assetIndex = 100000 + dexIndex * 10000 + local index
+        const globalAssetIndex = dexIndex === 0 ? i : 100000 + dexIndex * 10000 + i;
+        const parsed = this.parseAsset(asset, globalAssetIndex, ctx, dexName, collateral);
         if (!parsed) continue;
 
         const key = parsed.baseAsset.toUpperCase();
@@ -81,7 +85,7 @@ export class MarketRegistry {
     );
   }
 
-  getMarkets(baseAsset: string): HIP3Market[] {
+  getMarkets(baseAsset: string): PerpMarket[] {
     return this.groups.get(baseAsset.toUpperCase())?.markets ?? [];
   }
 
@@ -103,7 +107,7 @@ export class MarketRegistry {
     ctx: AssetCtx,
     dexName: string,
     collateral: string,
-  ): HIP3Market | null {
+  ): PerpMarket | null {
     const isNative = dexName === "__native__";
 
     return {

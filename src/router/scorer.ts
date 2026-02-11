@@ -1,4 +1,4 @@
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 import type { MarketScore, SimulationResult } from "./types.js";
 
 /** Default swap cost estimate (bps) when no spot book data is available */
@@ -19,7 +19,7 @@ export class MarketScorer {
    */
   score(
     simulation: SimulationResult,
-    market: HIP3Market,
+    market: PerpMarket,
     side: "buy" | "sell",
     userCollateral: string[],
     swapCostBps?: number,

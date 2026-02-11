@@ -2,7 +2,7 @@ import type { HLProvider } from "../provider/provider.js";
 import type { Logger } from "../logging/logger.js";
 import type { MarketRegistry } from "../market/registry.js";
 import type { BookAggregator } from "../market/aggregator.js";
-import type { HIP3Market } from "../market/types.js";
+import type { PerpMarket } from "../market/types.js";
 import type { CollateralManager } from "../collateral/manager.js";
 import type { Quote, MarketScore, SplitQuote, SplitExecutionPlan } from "./types.js";
 import { FillSimulator } from "./simulator.js";
@@ -147,7 +147,7 @@ export class Router {
     }
 
     // Build market lookup
-    const marketMap = new Map<string, HIP3Market>();
+    const marketMap = new Map<string, PerpMarket>();
     for (const m of markets) {
       marketMap.set(m.coin, m);
     }
