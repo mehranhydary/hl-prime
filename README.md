@@ -227,6 +227,79 @@ hyperliquid-prime/
 
 The provider interface (`HLProvider`) is the only module that imports `@nktkas/hyperliquid` directly. Swapping to a different SDK or going direct is a one-file change.
 
+## OpenClaw Skill (AI-Assisted Trading)
+
+Hyperliquid Prime includes an [OpenClaw](https://openclaw.ai) skill for AI-assisted trading via natural language.
+
+### Installation
+
+Install the skill via ClawHub:
+```bash
+clawhub install mehranhydary/hl-prime
+```
+
+Or manually clone to your OpenClaw skills directory:
+```bash
+cd ~/.openclaw/skills
+git clone https://github.com/mehranhydary/hl-prime.git hyperliquid-prime
+```
+
+### What You Can Ask
+
+Once the skill is installed, you can trade via conversational commands:
+
+```
+"What's the best market to buy 50 TSLA on Hyperliquid?"
+"Show me all HIP-3 markets for GOLD"
+"Compare funding rates across ETH markets"
+"Get me a quote to short 100 NVDA"
+"Execute that TSLA trade"
+"Show my positions across all markets"
+"Which market has the best price impact for buying 10 BTC?"
+```
+
+### How It Works
+
+The OpenClaw skill provides:
+- **Natural language market discovery** — "Find all markets for AAPL"
+- **Intelligent routing guidance** — AI explains which market is best and why
+- **Quote explanations** — "The xyz:TSLA market has lowest price impact (0.8 bps) and favorable funding"
+- **Aggregated data access** — View combined orderbooks and funding comparisons conversationally
+- **Position summaries** — "Show my TSLA exposure across all collateral types"
+
+### Configuration
+
+The skill works with your existing Hyperliquid Prime installation. No additional config needed — it uses the SDK directly.
+
+For trading (not read-only), ensure your OpenClaw agent has access to your wallet or private key configuration.
+
+### Example Session
+
+```
+You: Find the best market for buying 100 UNI
+Agent: Found 4 HIP-3 markets for UNI. Analyzing...
+
+Best route: xyz:UNI
+- Price impact: 1.2 bps (lowest)
+- Funding: -0.01% (you earn funding)
+- Collateral: USDC (you hold USDC)
+
+Alternative: cash:UNI
+- Price impact: 2.8 bps
+- Funding: +0.03%
+- Collateral: USDT0
+
+Recommendation: Route through xyz:UNI for lowest cost.
+
+You: Execute it
+Agent: Executed 100 UNI long on xyz:UNI
+Filled: 100 UNI at avg price $12.34
+Market: xyz:UNI
+Status: success
+```
+
+See [openclaw/SKILL.md](./openclaw/SKILL.md) for full skill documentation.
+
 ## Development
 
 ```bash
