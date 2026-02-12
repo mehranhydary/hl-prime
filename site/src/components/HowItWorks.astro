@@ -1,0 +1,60 @@
+---
+const steps = [
+  {
+    num: "01",
+    title: "Discover",
+    desc: "HP scans all native Hyperliquid and HIP-3 deployer markets, grouping them by base asset. TSLA might exist across xyz, flx, km, and cash — each with different collateral.",
+    code: `const markets = hp.getMarkets('TSLA')
+// → xyz:TSLA (USDC), flx:TSLA (USDH),
+//   km:TSLA (USDH), cash:TSLA (USDT0)`,
+  },
+  {
+    num: "02",
+    title: "Score & Route",
+    desc: "Each venue is scored on price impact, funding rate direction, and collateral swap cost. The router picks the lowest-cost option — or splits across many.",
+    code: `const quote = await hp.quote('TSLA', 'buy', 50)
+// → xyz:TSLA selected
+//   impact: 0.8 bps, funding: -0.01%
+//   3 alternatives scored`,
+  },
+  {
+    num: "03",
+    title: "Execute",
+    desc: "Place on the best single market, or split across venues with automatic collateral swaps. DEX abstraction, leverage, and batch orders are handled for you.",
+    code: `const receipt = await hp.execute(quote.plan)
+// → filled 50 TSLA at $431.50
+//   market: xyz:TSLA, status: success`,
+  },
+];
+---
+
+<section class="py-20 md:py-28">
+  <div class="max-w-5xl mx-auto px-6">
+    <h2 class="text-3xl md:text-4xl font-medium text-center mb-4" style="color: var(--text-primary);">
+      How it works
+    </h2>
+    <p class="text-center mb-16 max-w-xl mx-auto" style="color: var(--text-muted);">
+      Three steps from fragmented markets to best execution.
+    </p>
+
+    <div class="flex flex-col gap-12">
+      {steps.map((step) => (
+        <div class="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-8 items-start">
+          <div>
+            <div class="flex items-center gap-3 mb-3">
+              <span
+                class="text-sm font-bold px-2.5 py-1 rounded-md"
+                style="background: #76cfc115; color: var(--accent);"
+              >{step.num}</span>
+              <h3 class="text-xl font-bold" style="color: var(--text-primary);">{step.title}</h3>
+            </div>
+            <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+              {step.desc}
+            </p>
+          </div>
+          <pre class="text-sm !mt-0"><code>{step.code}</code></pre>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

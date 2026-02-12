@@ -1,0 +1,268 @@
+@import "tailwindcss";
+
+/* ─── ABCDiatype Font ─── */
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-Light-Trial.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-LightItalic-Trial.otf") format("opentype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-Regular-Trial.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-RegularItalic-Trial.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-Medium-Trial.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-MediumItalic-Trial.otf") format("opentype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-Bold-Trial.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABCDiatype";
+  src: url("/fonts/ABCDiatype-BoldItalic-Trial.otf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ─── Color System ─── */
+:root {
+  --bg-primary: #ffffff;
+  --bg-surface: #f5f5f5;
+  --bg-deep: #193233;
+  --text-primary: #193233;
+  --text-secondary: #4a4a4a;
+  --text-muted: #969e9c;
+  --accent: #76cfc1;
+  --accent-glow: #193233;
+  --cta: #FFFFFF;
+  --cta-hover: #e0e0e0;
+  --border: #e0e0e0;
+  --code-bg: #0d1f20;
+  --code-text: #adfff3;
+  --card-border: #e0e0e0;
+}
+
+.dark {
+  --bg-primary: #000000;
+  --bg-surface: #0a0a0a;
+  --bg-deep: #000000;
+  --text-primary: #adfff3;
+  --text-secondary: #76cfc1;
+  --text-muted: #969e9c;
+  --accent: #76cfc1;
+  --accent-glow: #adfff3;
+  --cta: #FFFFFF;
+  --cta-hover: #d0d0d0;
+  --border: #1a2f2f;
+  --code-bg: #0a0a0a;
+  --code-text: #adfff3;
+  --card-border: #1a2f2f;
+}
+
+/* ─── Base ─── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: "ABCDiatype", system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  margin: 0;
+}
+
+::selection {
+  background-color: #76cfc140;
+}
+
+/* ─── Typography ─── */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+a:hover {
+  color: var(--accent-glow);
+}
+
+/* ─── Code ─── */
+code, pre {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", monospace;
+}
+
+pre {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  border: 1px solid var(--border);
+}
+
+code {
+  font-size: 0.875em;
+}
+
+/* ─── Utilities ─── */
+.gradient-text {
+  background: linear-gradient(135deg, #76cfc1, #adfff3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  padding-right: 0.05em;
+}
+
+.italic-liquid {
+  font-style: italic;
+}
+
+.glow-border {
+  border: 1px solid var(--card-border);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.glow-border:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px #76cfc115;
+}
+
+/* ─── Tab System ─── */
+.tab-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+.tab-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: #76cfc110;
+}
+
+.tab-panel {
+  display: none;
+}
+.tab-panel.active {
+  display: block;
+}
+
+/* ─── Copy Button ─── */
+.copy-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0.375rem 0.625rem;
+  background: #ffffff15;
+  border: 1px solid #ffffff20;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.copy-btn:hover {
+  background: #ffffff25;
+  color: #ffffff;
+}
+
+/* ─── Comparison Visual ─── */
+.market-card {
+  background: #000000;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: "ABCDiatype", system-ui, sans-serif;
+  color: #ffffff;
+  font-size: 0.85rem;
+}
+
+.deployer-tag {
+  background: #2a4a4b;
+  color: #76cfc1;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.leverage-tag {
+  background: #193233;
+  color: #76cfc1;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.price-label {
+  color: #969e9c;
+  font-size: 0.7rem;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 2px;
+}
+
+.price-value {
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,25 @@
+---
+const stats = [
+  { label: "Native + HIP-3", desc: "Multi-venue discovery" },
+  { label: "Smart Routing", desc: "Best execution, every trade" },
+  { label: "Order Splitting", desc: "Across multiple markets" },
+  { label: "1 bps", desc: "Builder fee" },
+];
+---
+
+<section class="border-y" style="border-color: var(--border); background: var(--bg-surface);">
+  <div class="max-w-6xl mx-auto px-6 py-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+      {stats.map((stat) => (
+        <div class="text-center">
+          <div class="text-lg md:text-xl font-bold mb-1" style="color: var(--accent);">
+            {stat.label}
+          </div>
+          <div class="text-xs md:text-sm" style="color: var(--text-muted);">
+            {stat.desc}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
