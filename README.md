@@ -118,7 +118,30 @@ await hp.disconnect()
 
 ### CLI
 
-The `hp` CLI provides the same functionality from the terminal:
+Install globally to get the `hp` command:
+
+```bash
+npm install -g hyperliquid-prime
+hp markets TSLA
+```
+
+Or run one-off without installing:
+
+```bash
+npx hyperliquid-prime markets TSLA
+```
+
+If `hp` isn't found after global install, ensure npm's bin directory is on your PATH:
+
+```bash
+# Check where npm installs global binaries
+npm bin -g
+
+# Add to ~/.zshrc or ~/.bashrc if needed
+export PATH="$(npm bin -g):$PATH"
+```
+
+#### Usage
 
 ```bash
 # Show all perp markets for an asset (native + HIP-3)
