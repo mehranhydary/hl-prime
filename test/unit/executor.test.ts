@@ -126,6 +126,37 @@ describe("Executor", () => {
   });
 
   describe("single-order execution behavior", () => {
+    it("applies leverage before placing an order when requested", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const receipt = await executor.execute(
+        makePlan({ leverage: 5, isCross: false }),
+        USER,
+      );
+
+      expect(receipt.success).toBe(true);
+      expect(provider.setLeverage).toHaveBeenCalledWith("xyz:TSLA", 5, false);
+      expect(provider.placeOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("fails before order placement when leverage setup errors", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        setLeverage: vi.fn().mockRejectedValue(new Error("invalid leverage")),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const receipt = await executor.execute(
+        makePlan({ leverage: 50, isCross: true }),
+        USER,
+      );
+
+      expect(receipt.success).toBe(false);
+      expect(receipt.error).toContain("invalid leverage");
+      expect(provider.placeOrder).not.toHaveBeenCalled();
+    });
+
     it("returns rejected receipt on order status error", async () => {
       const provider = makeProvider({
         maxBuilderFee: vi.fn().mockResolvedValue(10),
@@ -217,6 +248,58 @@ describe("Executor", () => {
         expect.any(Array),
         { b: BUILDER_ADDR, f: 10 },
       );
+    });
+
+    it("applies per-leg leverage once per unique market setting before split order", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+      const legs = [
+        makePlan({ leverage: 4, isCross: true }),
+        makePlan({ leverage: 4, isCross: true }),
+        makePlan({
+          market: { ...TSLA_XYZ, coin: "flx:TSLA" },
+          leverage: 3,
+          isCross: false,
+        }),
+      ];
+
+      await executor.executeSplit(
+        makeSplitPlan({
+          legs,
+          totalSize: "3",
+        }),
+        collateralManager,
+        USER,
+      );
+
+      expect(provider.setLeverage).toHaveBeenCalledTimes(2);
+      expect(provider.setLeverage).toHaveBeenNthCalledWith(1, "xyz:TSLA", 4, true);
+      expect(provider.setLeverage).toHaveBeenNthCalledWith(2, "flx:TSLA", 3, false);
+    });
+
+    it("fails split execution when leverage setup fails", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        setLeverage: vi.fn().mockRejectedValue(new Error("leverage rejected")),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+
+      const receipt = await executor.executeSplit(
+        makeSplitPlan({
+          legs: [makePlan({ leverage: 100, isCross: true })],
+        }),
+        collateralManager,
+        USER,
+      );
+
+      expect(receipt.success).toBe(false);
+      expect(receipt.error).toContain("Leverage setup failed");
+      expect(provider.batchOrders).not.toHaveBeenCalled();
+      expect(collateralManager.estimateRequirements).not.toHaveBeenCalled();
     });
 
     it("estimates collateral at execution time even when quote plan says no swaps", async () => {
