@@ -77,6 +77,7 @@ describe("HyperliquidPrime quote facade", () => {
       1,
       ["USDC"],
       0.01,
+      undefined,
     );
     expect(quote.warnings?.some((w) => w.includes("defaulting to USDC"))).toBe(true);
   });
@@ -99,7 +100,7 @@ describe("HyperliquidPrime quote facade", () => {
     (hp as any).connected = true;
     (hp as any).walletAddress = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01";
 
-    await hp.quoteSplit("TSLA", "buy", 1);
+    await hp.quoteSplit("TSLA", "buy", 1, { leverage: 4, isCross: false });
 
     expect(routerMock.quoteSplit).toHaveBeenCalledWith(
       "TSLA",
@@ -107,6 +108,16 @@ describe("HyperliquidPrime quote facade", () => {
       1,
       ["USDH", "USDC"],
       0.01,
+      { leverage: 4, isCross: false },
     );
+  });
+
+  it("rejects isCross without leverage for explicitness", async () => {
+    const hp = new HyperliquidPrime({ testnet: true, logLevel: "silent" });
+    (hp as any).connected = true;
+
+    await expect(
+      hp.quote("TSLA", "buy", 1, { isCross: false }),
+    ).rejects.toThrow("isCross requires leverage");
   });
 });

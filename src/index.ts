@@ -12,7 +12,13 @@ import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
 import { HyperliquidPrimeError, NoWalletError, NotConnectedError } from "./utils/errors.js";
 import type { PerpMarket, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
-import type { Quote, ExecutionPlan, SplitQuote, SplitExecutionPlan } from "./router/types.js";
+import type {
+  Quote,
+  ExecutionPlan,
+  SplitQuote,
+  SplitExecutionPlan,
+  TradeExecutionOptions,
+} from "./router/types.js";
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 import type { LogicalPosition } from "./position/types.js";
 import type { Logger } from "./logging/logger.js";
@@ -159,8 +165,10 @@ export class HyperliquidPrime {
     baseAsset: string,
     side: "buy" | "sell",
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<Quote> {
     this.ensureConnected();
+    const tradeOptions = this.normalizeTradeOptions(options);
     const { collateral, warnings } = await this.resolveUserCollateral();
     const quote = await this.router.quote(
       baseAsset,
@@ -168,6 +176,7 @@ export class HyperliquidPrime {
       size,
       collateral,
       this._config.defaultSlippage ?? 0.01,
+      tradeOptions,
     );
     if (warnings.length > 0) {
       quote.warnings = [...(quote.warnings ?? []), ...warnings];
@@ -188,16 +197,18 @@ export class HyperliquidPrime {
   async long(
     baseAsset: string,
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<ExecutionReceipt> {
-    const q = await this.quote(baseAsset, "buy", size);
+    const q = await this.quote(baseAsset, "buy", size, options);
     return this.execute(q.plan);
   }
 
   async short(
     baseAsset: string,
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<ExecutionReceipt> {
-    const q = await this.quote(baseAsset, "sell", size);
+    const q = await this.quote(baseAsset, "sell", size, options);
     return this.execute(q.plan);
   }
 
@@ -206,8 +217,10 @@ export class HyperliquidPrime {
     baseAsset: string,
     side: "buy" | "sell",
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<SplitQuote> {
     this.ensureConnected();
+    const tradeOptions = this.normalizeTradeOptions(options);
     const { collateral, warnings } = await this.resolveUserCollateral();
     const quote = await this.router.quoteSplit(
       baseAsset,
@@ -215,6 +228,7 @@ export class HyperliquidPrime {
       size,
       collateral,
       this._config.defaultSlippage ?? 0.01,
+      tradeOptions,
     );
     if (warnings.length > 0) {
       quote.warnings = [...(quote.warnings ?? []), ...warnings];
@@ -237,16 +251,18 @@ export class HyperliquidPrime {
   async longSplit(
     baseAsset: string,
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<SplitExecutionReceipt> {
-    const q = await this.quoteSplit(baseAsset, "buy", size);
+    const q = await this.quoteSplit(baseAsset, "buy", size, options);
     return this.executeSplit(q.splitPlan);
   }
 
   async shortSplit(
     baseAsset: string,
     size: number,
+    options?: TradeExecutionOptions,
   ): Promise<SplitExecutionReceipt> {
-    const q = await this.quoteSplit(baseAsset, "sell", size);
+    const q = await this.quoteSplit(baseAsset, "sell", size, options);
     return this.executeSplit(q.splitPlan);
   }
 
@@ -351,6 +367,29 @@ export class HyperliquidPrime {
 
     return { collateral, warnings };
   }
+
+  private normalizeTradeOptions(
+    options?: TradeExecutionOptions,
+  ): TradeExecutionOptions | undefined {
+    if (!options) return undefined;
+    if (options.isCross !== undefined && options.leverage === undefined) {
+      throw new HyperliquidPrimeError(
+        "isCross requires leverage. Provide leverage when specifying margin mode.",
+      );
+    }
+    if (options.leverage === undefined) {
+      return undefined;
+    }
+    if (!Number.isFinite(options.leverage) || options.leverage <= 0) {
+      throw new HyperliquidPrimeError(
+        `Invalid leverage "${options.leverage}". Expected a positive number.`,
+      );
+    }
+    return {
+      leverage: options.leverage,
+      isCross: options.isCross ?? true,
+    };
+  }
 }
 
 // Re-export types for consumers
@@ -362,6 +401,7 @@ export { isSplitQuote } from "./router/types.js";
 export type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
 export type { LogicalPosition, ManagedPositionState, RiskProfile } from "./position/types.js";
+export type { TradeExecutionOptions } from "./router/types.js";
 export type { Logger } from "./logging/logger.js";
 export { MarketRegistry } from "./market/registry.js";
 export { BookAggregator } from "./market/aggregator.js";

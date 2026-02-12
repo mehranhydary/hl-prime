@@ -5,7 +5,13 @@ import type { MarketRegistry } from "../market/registry.js";
 import type { BookAggregator } from "../market/aggregator.js";
 import type { PerpMarket } from "../market/types.js";
 import type { CollateralPlan } from "../collateral/types.js";
-import type { Quote, MarketScore, SplitQuote, SplitExecutionPlan } from "./types.js";
+import type {
+  Quote,
+  MarketScore,
+  SplitQuote,
+  SplitExecutionPlan,
+  TradeExecutionOptions,
+} from "./types.js";
 import { FillSimulator } from "./simulator.js";
 import { MarketScorer } from "./scorer.js";
 import { SplitOptimizer } from "./splitter.js";
@@ -50,6 +56,7 @@ export class Router {
     size: number,
     userCollateral: string[],
     slippage = 0.01,
+    tradeOptions?: TradeExecutionOptions,
   ): Promise<Quote> {
     const markets = this.registry.getMarkets(baseAsset);
     if (markets.length === 0) {
@@ -138,6 +145,8 @@ export class Router {
         price: slippagePrice.toFixed(6), // TODO: respect tick size
         orderType: { limit: { tif: "Ioc" } },
         slippage,
+        leverage: tradeOptions?.leverage,
+        isCross: tradeOptions?.isCross,
       },
     };
   }
@@ -153,6 +162,7 @@ export class Router {
     size: number,
     userCollateral: string[],
     slippage = 0.01,
+    tradeOptions?: TradeExecutionOptions,
   ): Promise<SplitQuote> {
     if (!this.aggregator) {
       throw new Error("BookAggregator required for split quotes");
@@ -246,6 +256,8 @@ export class Router {
         price: slippagePrice.toFixed(6),
         orderType: { limit: { tif: "Ioc" as const } },
         slippage,
+        leverage: tradeOptions?.leverage,
+        isCross: tradeOptions?.isCross,
       };
     });
 
