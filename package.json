@@ -1,7 +1,7 @@
 {
 	"name": "hyperliquid-prime",
 	"version": "0.1.2",
-	"description": "Prime broker SDK for Hyperliquid HIP-3 markets — unified trading across fragmented markets",
+	"description": "Prime broker SDK for Hyperliquid markets — unified trading across fragmented markets",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
