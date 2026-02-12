@@ -2,6 +2,13 @@ import type { PerpMarket } from "../market/types.js";
 import type { OrderType } from "../provider/types.js";
 import type { CollateralPlan } from "../collateral/types.js";
 
+export interface TradeExecutionOptions {
+  /** Target leverage for the trade. When omitted, exchange defaults are used. */
+  leverage?: number;
+  /** Margin mode used when setting leverage. Default: true (cross). */
+  isCross?: boolean;
+}
+
 export interface Quote {
   baseAsset: string;
   side: "buy" | "sell";
@@ -22,6 +29,8 @@ export interface ExecutionPlan {
   price: string;        // Limit price (market price + slippage for IOC)
   orderType: OrderType;
   slippage: number;
+  leverage?: number;
+  isCross?: boolean;
 }
 
 export interface MarketScore {

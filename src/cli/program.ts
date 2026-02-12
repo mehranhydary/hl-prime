@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { createContext } from "./context.js";
 import { output, formatTable } from "./output.js";
+import type { TradeExecutionOptions } from "../index.js";
 
 interface ProgramOptions {
   testnet?: boolean;
@@ -48,6 +49,21 @@ function parsePositiveInt(raw: string, label: string): number {
     throw new Error(`Invalid ${label} "${raw}". Expected a positive integer.`);
   }
   return value;
+}
+
+function parseTradeOptions(opts: {
+  leverage?: string;
+  isolated?: boolean;
+}): TradeExecutionOptions | undefined {
+  if (opts.isolated && opts.leverage === undefined) {
+    throw new Error("--isolated requires --leverage.");
+  }
+  if (opts.leverage === undefined) return undefined;
+  const leverage = parsePositiveNumber(opts.leverage, "leverage");
+  return {
+    leverage,
+    isCross: opts.isolated ? false : true,
+  };
 }
 
 export function createProgram(): Command {
@@ -173,10 +189,18 @@ export function createProgram(): Command {
     .argument("<asset>", "Base asset symbol")
     .argument("<side>", "buy or sell")
     .argument("<size>", "Size in base asset units")
-    .action(async (asset: string, sideRaw: string, sizeRaw: string) => withClient(program, async (hp, opts) => {
+    .option("-l, --leverage <x>", "Set leverage for the quote plan")
+    .option("--isolated", "Use isolated margin mode when leverage is set", false)
+    .action(async (
+      asset: string,
+      sideRaw: string,
+      sizeRaw: string,
+      cmdOpts: { leverage?: string; isolated?: boolean },
+    ) => withClient(program, async (hp, opts) => {
       const side = parseSide(sideRaw);
       const size = parsePositiveNumber(sizeRaw, "size");
-      const quote = await hp.quote(asset, side, size);
+      const tradeOptions = parseTradeOptions(cmdOpts);
+      const quote = await hp.quote(asset, side, size, tradeOptions);
       if (opts.json) {
         output(quote, true);
         return;
@@ -217,9 +241,16 @@ export function createProgram(): Command {
     .description("Open a long position via best market")
     .argument("<asset>", "Base asset symbol")
     .argument("<size>", "Size in base asset units")
-    .action(async (asset: string, sizeRaw: string) => withClient(program, async (hp, opts) => {
+    .option("-l, --leverage <x>", "Set leverage before execution")
+    .option("--isolated", "Use isolated margin mode when leverage is set", false)
+    .action(async (
+      asset: string,
+      sizeRaw: string,
+      cmdOpts: { leverage?: string; isolated?: boolean },
+    ) => withClient(program, async (hp, opts) => {
       const size = parsePositiveNumber(sizeRaw, "size");
-      const receipt = await hp.long(asset, size);
+      const tradeOptions = parseTradeOptions(cmdOpts);
+      const receipt = await hp.long(asset, size, tradeOptions);
       if (opts.json) {
         output(receipt, true);
         return;
@@ -236,9 +267,16 @@ export function createProgram(): Command {
     .description("Open a short position via best market")
     .argument("<asset>", "Base asset symbol")
     .argument("<size>", "Size in base asset units")
-    .action(async (asset: string, sizeRaw: string) => withClient(program, async (hp, opts) => {
+    .option("-l, --leverage <x>", "Set leverage before execution")
+    .option("--isolated", "Use isolated margin mode when leverage is set", false)
+    .action(async (
+      asset: string,
+      sizeRaw: string,
+      cmdOpts: { leverage?: string; isolated?: boolean },
+    ) => withClient(program, async (hp, opts) => {
       const size = parsePositiveNumber(sizeRaw, "size");
-      const receipt = await hp.short(asset, size);
+      const tradeOptions = parseTradeOptions(cmdOpts);
+      const receipt = await hp.short(asset, size, tradeOptions);
       if (opts.json) {
         output(receipt, true);
         return;

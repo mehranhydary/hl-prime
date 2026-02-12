@@ -137,6 +137,30 @@ describe("Router", () => {
     expect(quote.warnings).toBeUndefined();
   });
 
+  it("includes leverage settings in generated execution plans", async () => {
+    const provider = createMockProvider({
+      "xyz:TSLA": TSLA_BOOK_DEEP,
+      "flx:TSLA": TSLA_HIP3_BOOK,
+    });
+    const { router } = await createRouter(provider);
+
+    const quote = await router.quote("TSLA", "buy", 2, ["USDC"], 0.01, {
+      leverage: 5,
+      isCross: false,
+    });
+    expect(quote.plan.leverage).toBe(5);
+    expect(quote.plan.isCross).toBe(false);
+
+    const splitQuote = await router.quoteSplit("TSLA", "buy", 5, ["USDC"], 0.01, {
+      leverage: 3,
+      isCross: true,
+    });
+    for (const leg of splitQuote.splitPlan.legs) {
+      expect(leg.leverage).toBe(3);
+      expect(leg.isCross).toBe(true);
+    }
+  });
+
   it("degrades quote when a market book fails", async () => {
     const provider = createMockProvider(
       {

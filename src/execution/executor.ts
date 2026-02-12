@@ -99,6 +99,8 @@ export class Executor {
     );
 
     try {
+      await this.applyLeverageIfRequested(plan);
+
       const result = await this.provider.placeOrder(
         {
           assetIndex: plan.market.assetIndex,
@@ -207,14 +209,36 @@ export class Executor {
 
     const timestamp = Date.now();
 
-    // Step 1: Estimate collateral using live balances at execution time.
+    // Step 1: Apply requested leverage per leg/market before any transfers/orders.
+    try {
+      await this.applySplitLeverage(plan);
+    } catch (error) {
+      const collateralReceipt: CollateralReceipt = {
+        success: false,
+        swapsExecuted: [],
+        abstractionWasEnabled: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      return {
+        success: false,
+        legs: [],
+        collateralReceipt,
+        totalRequestedSize: plan.totalSize,
+        totalFilledSize: "0",
+        aggregateAvgPrice: "0",
+        timestamp,
+        error: `Leverage setup failed: ${collateralReceipt.error}`,
+      };
+    }
+
+    // Step 2: Estimate collateral using live balances at execution time.
     const allocations: SplitAllocation[] = this.buildAllocationsFromLegs(plan);
     const collateralPlan = await collateralManager.estimateRequirements(
       allocations,
       userAddress,
     );
 
-    // Step 2: Prepare collateral (enable abstraction, swap if needed)
+    // Step 3: Prepare collateral (enable abstraction, swap if needed)
     let collateralReceipt: CollateralReceipt;
     if (collateralPlan.swapsNeeded) {
       collateralReceipt = await collateralManager.prepare(
@@ -241,7 +265,7 @@ export class Executor {
       };
     }
 
-    // Step 3: Place all leg orders via batchOrders (single atomic API call)
+    // Step 4: Place all leg orders via batchOrders (single atomic API call)
     try {
       const orderParams = plan.legs.map((leg) => ({
         assetIndex: leg.market.assetIndex,
@@ -257,7 +281,7 @@ export class Executor {
         this.wireBuilder ?? undefined,
       );
 
-      // Step 4: Map each status to a per-leg receipt
+      // Step 5: Map each status to a per-leg receipt
       const legs: ExecutionReceipt[] = plan.legs.map((leg, i) => {
         const status = result.statuses[i];
         let orderId: number | undefined;
@@ -296,7 +320,7 @@ export class Executor {
         };
       });
 
-      // Step 5: Aggregate results
+      // Step 6: Aggregate results
       let totalFilledSize = 0;
       let totalFilledCost = 0;
       let allSuccess = true;
@@ -362,5 +386,29 @@ export class Executor {
         proportion: totalSize > 0 ? size / totalSize : 0,
       };
     });
+  }
+
+  private async applyLeverageIfRequested(plan: ExecutionPlan): Promise<void> {
+    if (plan.leverage === undefined) return;
+    if (!Number.isFinite(plan.leverage) || plan.leverage <= 0) {
+      throw new Error(`Invalid leverage "${plan.leverage}" for ${plan.market.coin}`);
+    }
+    const isCross = plan.isCross ?? true;
+    this.logger.info(
+      { market: plan.market.coin, leverage: plan.leverage, isCross },
+      "Applying leverage before execution",
+    );
+    await this.provider.setLeverage(plan.market.coin, plan.leverage, isCross);
+  }
+
+  private async applySplitLeverage(plan: SplitExecutionPlan): Promise<void> {
+    const applied = new Set<string>();
+    for (const leg of plan.legs) {
+      if (leg.leverage === undefined) continue;
+      const key = `${leg.market.coin}:${leg.leverage}:${leg.isCross ?? true}`;
+      if (applied.has(key)) continue;
+      await this.applyLeverageIfRequested(leg);
+      applied.add(key);
+    }
   }
 }
