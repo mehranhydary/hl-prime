@@ -1,0 +1,109 @@
+---
+const npmCode = `<span style="color: #969e9c;">$</span> npm install hyperliquid-prime
+
+<span style="color: #969e9c;">// Then in your code:</span>
+<span style="color: #76cfc1;">import</span> &#123; HyperliquidPrime &#125; <span style="color: #76cfc1;">from</span> <span style="color: #FFFFFF;">'hyperliquid-prime'</span>
+
+<span style="color: #76cfc1;">const</span> hp = <span style="color: #76cfc1;">new</span> <span style="color: #adfff3;">HyperliquidPrime</span>(&#123; testnet: <span style="color: #FFFFFF;">true</span> &#125;)
+<span style="color: #76cfc1;">await</span> hp.connect()
+
+<span style="color: #969e9c;">// Where's the best execution for 50 TSLA?</span>
+<span style="color: #76cfc1;">const</span> quote = <span style="color: #76cfc1;">await</span> hp.quote(<span style="color: #FFFFFF;">'TSLA'</span>, <span style="color: #FFFFFF;">'buy'</span>, <span style="color: #adfff3;">50</span>)
+<span style="color: #76cfc1;">const</span> receipt = <span style="color: #76cfc1;">await</span> hp.execute(quote.plan)`;
+
+const cliCode = `<span style="color: #969e9c;">$</span> npm install -g hyperliquid-prime
+
+<span style="color: #969e9c;"># Discover all TSLA markets</span>
+<span style="color: #969e9c;">$</span> hp markets TSLA
+
+<span style="color: #969e9c;"># Get a routing quote</span>
+<span style="color: #969e9c;">$</span> hp quote TSLA buy 50 --leverage 5
+
+<span style="color: #969e9c;"># Execute a trade</span>
+<span style="color: #969e9c;">$</span> HP_PRIVATE_KEY=0x... hp long TSLA 50
+
+<span style="color: #969e9c;"># Split across venues</span>
+<span style="color: #969e9c;">$</span> HP_PRIVATE_KEY=0x... hp long-split TSLA 200`;
+
+const openclawCode = `<span style="color: #969e9c;">$</span> clawhub install mehranhydary/hl-prime
+
+<span style="color: #969e9c;"># Then talk to your AI agent:</span>
+
+<span style="color: #adabb8;">You:</span> <span style="color: #FFFFFF;">"Find the best market for buying 100 UNI"</span>
+
+<span style="color: #76cfc1;">Agent:</span> Found 4 markets for UNI. Best route: xyz:UNI
+  - Price impact: 1.2 bps (lowest)
+  - Funding: -0.01% (you earn funding)
+  - Collateral: USDC
+
+<span style="color: #adabb8;">You:</span> <span style="color: #FFFFFF;">"Execute it"</span>
+
+<span style="color: #76cfc1;">Agent:</span> Filled 100 UNI at avg price $12.34`;
+---
+
+<section id="install" class="py-20 md:py-28">
+  <div class="max-w-3xl mx-auto px-6">
+    <h2 class="text-3xl md:text-4xl font-medium text-center mb-4" style="color: var(--text-primary);">
+      Get started in seconds
+    </h2>
+    <p class="text-center mb-10" style="color: var(--text-muted);">
+      Install the SDK, import, and start trading across all Hyperliquid perp markets.
+    </p>
+
+    <!-- Tabs -->
+    <div class="flex justify-center gap-2 mb-6">
+      <button class="tab-btn active" data-tab="npm">npm</button>
+      <button class="tab-btn" data-tab="cli">CLI</button>
+      <button class="tab-btn" data-tab="openclaw">OpenClaw</button>
+    </div>
+
+    <!-- Tab panels -->
+    <div class="relative">
+      <div id="panel-npm" class="tab-panel active">
+        <div class="relative">
+          <pre class="text-sm"><code set:html={npmCode} /></pre>
+          <button class="copy-btn" data-copy="npm install hyperliquid-prime">Copy</button>
+        </div>
+      </div>
+
+      <div id="panel-cli" class="tab-panel">
+        <div class="relative">
+          <pre class="text-sm"><code set:html={cliCode} /></pre>
+          <button class="copy-btn" data-copy="npm install -g hyperliquid-prime">Copy</button>
+        </div>
+      </div>
+
+      <div id="panel-openclaw" class="tab-panel">
+        <div class="relative">
+          <pre class="text-sm"><code set:html={openclawCode} /></pre>
+          <button class="copy-btn" data-copy="clawhub install mehranhydary/hl-prime">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+  (function () {
+    var tabs = document.querySelectorAll(".tab-btn");
+    var panels = document.querySelectorAll(".tab-panel");
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        tabs.forEach(function (t) { t.classList.remove("active"); });
+        panels.forEach(function (p) { p.classList.remove("active"); });
+        tab.classList.add("active");
+        document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+      });
+    });
+
+    document.querySelectorAll(".copy-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        navigator.clipboard.writeText(btn.dataset.copy);
+        var orig = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(function () { btn.textContent = orig; }, 1500);
+      });
+    });
+  })();
+</script>

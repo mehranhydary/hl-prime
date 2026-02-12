@@ -1,0 +1,65 @@
+---
+const copyText = `import { HyperliquidPrime } from 'hyperliquid-prime'
+
+const hp = new HyperliquidPrime({
+  privateKey: '0x...',
+  testnet: true,
+})
+await hp.connect()
+
+// Single best market
+const quote = await hp.quote('TSLA', 'buy', 50, { leverage: 5 })
+const receipt = await hp.execute(quote.plan)
+
+// Split across venues for better fills
+const split = await hp.quoteSplit('TSLA', 'buy', 200)
+const splitReceipt = await hp.executeSplit(split.splitPlan)
+
+// Or one-liners
+await hp.long('ETH', 10, { leverage: 10 })
+await hp.shortSplit('TSLA', 100)
+
+// Unified position view
+const positions = await hp.getGroupedPositions()
+await hp.disconnect()`;
+
+const codeHtml = `<span style="color: #76cfc1;">import</span> &#123; HyperliquidPrime &#125; <span style="color: #76cfc1;">from</span> <span style="color: #FFFFFF;">'hyperliquid-prime'</span>
+
+<span style="color: #76cfc1;">const</span> hp = <span style="color: #76cfc1;">new</span> <span style="color: #adfff3;">HyperliquidPrime</span>(&#123;
+  privateKey: <span style="color: #FFFFFF;">'0x...'</span>,
+  testnet: <span style="color: #FFFFFF;">true</span>,
+&#125;)
+<span style="color: #76cfc1;">await</span> hp.connect()
+
+<span style="color: #969e9c;">// Single best market</span>
+<span style="color: #76cfc1;">const</span> quote = <span style="color: #76cfc1;">await</span> hp.quote(<span style="color: #FFFFFF;">'TSLA'</span>, <span style="color: #FFFFFF;">'buy'</span>, <span style="color: #adfff3;">50</span>, &#123; leverage: <span style="color: #adfff3;">5</span> &#125;)
+<span style="color: #76cfc1;">const</span> receipt = <span style="color: #76cfc1;">await</span> hp.execute(quote.plan)
+
+<span style="color: #969e9c;">// Split across venues for better fills</span>
+<span style="color: #76cfc1;">const</span> split = <span style="color: #76cfc1;">await</span> hp.quoteSplit(<span style="color: #FFFFFF;">'TSLA'</span>, <span style="color: #FFFFFF;">'buy'</span>, <span style="color: #adfff3;">200</span>)
+<span style="color: #76cfc1;">const</span> splitReceipt = <span style="color: #76cfc1;">await</span> hp.executeSplit(split.splitPlan)
+
+<span style="color: #969e9c;">// Or one-liners</span>
+<span style="color: #76cfc1;">await</span> hp.long(<span style="color: #FFFFFF;">'ETH'</span>, <span style="color: #adfff3;">10</span>, &#123; leverage: <span style="color: #adfff3;">10</span> &#125;)
+<span style="color: #76cfc1;">await</span> hp.shortSplit(<span style="color: #FFFFFF;">'TSLA'</span>, <span style="color: #adfff3;">100</span>)
+
+<span style="color: #969e9c;">// Unified position view</span>
+<span style="color: #76cfc1;">const</span> positions = <span style="color: #76cfc1;">await</span> hp.getGroupedPositions()
+<span style="color: #76cfc1;">await</span> hp.disconnect()`;
+---
+
+<section class="py-20 md:py-28" style="background: var(--bg-surface);">
+  <div class="max-w-4xl mx-auto px-6">
+    <h2 class="text-3xl md:text-4xl font-medium text-center mb-4" style="color: var(--text-primary);">
+      Built for developers
+    </h2>
+    <p class="text-center mb-10 max-w-xl mx-auto" style="color: var(--text-muted);">
+      Clean TypeScript API with quote-then-execute flow, split orders, and escape hatches.
+    </p>
+
+    <div class="relative">
+      <pre class="text-sm"><code set:html={codeHtml} /></pre>
+      <button class="copy-btn" data-copy={copyText}>Copy</button>
+    </div>
+  </div>
+</section>

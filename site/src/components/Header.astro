@@ -1,0 +1,88 @@
+---
+import ThemeToggle from "./ThemeToggle.astro";
+---
+
+<header
+  class="sticky top-0 z-50 backdrop-blur-md border-b transition-colors duration-300"
+  style="background: var(--bg-primary); border-color: var(--border); background: color-mix(in srgb, var(--bg-primary) 85%, transparent);"
+>
+  <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+    <!-- Logo -->
+    <a href="/" class="flex items-center group">
+      <span class="text-3xl" style="color: var(--accent); font-family: serif;">&#961;</span>
+    </a>
+
+    <!-- Nav -->
+    <nav class="hidden md:flex items-center gap-8">
+      <a
+        href="#features"
+        class="text-sm font-medium transition-colors"
+        style="color: var(--text-muted)"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-muted)'"
+      >Features</a>
+      <a
+        href="#install"
+        class="text-sm font-medium transition-colors"
+        style="color: var(--text-muted)"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-muted)'"
+      >Install</a>
+      <a
+        href="https://github.com/mehranhydary/hl-prime"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sm font-medium transition-colors"
+        style="color: var(--text-muted)"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-muted)'"
+      >GitHub</a>
+      <a
+        href="#openclaw"
+        class="text-sm font-medium transition-colors"
+        style="color: var(--text-muted)"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-muted)'"
+      >OpenClaw</a>
+    </nav>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-3">
+      <ThemeToggle />
+      <!-- Mobile menu button -->
+      <button
+        id="mobile-menu-btn"
+        class="md:hidden w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer"
+        aria-label="Open menu"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--text-muted)">
+          <path d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile nav -->
+  <div id="mobile-menu" class="hidden md:hidden border-t px-6 pb-4" style="border-color: var(--border)">
+    <nav class="flex flex-col gap-3 pt-4">
+      <a href="#features" class="text-sm font-medium py-1" style="color: var(--text-muted)">Features</a>
+      <a href="#install" class="text-sm font-medium py-1" style="color: var(--text-muted)">Install</a>
+      <a href="https://github.com/mehranhydary/hl-prime" target="_blank" rel="noopener noreferrer" class="text-sm font-medium py-1" style="color: var(--text-muted)">GitHub</a>
+      <a href="#openclaw" class="text-sm font-medium py-1" style="color: var(--text-muted)">OpenClaw</a>
+    </nav>
+  </div>
+</header>
+
+<script is:inline>
+  (function () {
+    const btn = document.getElementById("mobile-menu-btn");
+    const menu = document.getElementById("mobile-menu");
+    btn.addEventListener("click", () => {
+      menu.classList.toggle("hidden");
+    });
+    // Close on link click
+    menu.querySelectorAll("a").forEach((a) => {
+      a.addEventListener("click", () => menu.classList.add("hidden"));
+    });
+  })();
+</script>

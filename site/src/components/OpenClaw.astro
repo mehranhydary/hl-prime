@@ -1,0 +1,76 @@
+---
+const conversationHtml = `<span style="color: #adabb8;">You:</span> <span style="color: #FFFFFF;">"Find the best market for buying 100 UNI"</span>
+
+<span style="color: #76cfc1;">Agent:</span> Found 4 markets for UNI across 3 deployers.
+  Best route: <span style="color: #adfff3;">xyz:UNI</span>
+  - Price impact: <span style="color: #adfff3;">1.2 bps</span> (lowest)
+  - Funding: <span style="color: #adfff3;">-0.01%</span> (you earn funding)
+  - Collateral: USDC (no swap needed)
+
+<span style="color: #adabb8;">You:</span> <span style="color: #FFFFFF;">"Execute it with 5x leverage"</span>
+
+<span style="color: #76cfc1;">Agent:</span> Filled <span style="color: #adfff3;">100 UNI</span> at avg price <span style="color: #adfff3;">$12.34</span>
+  Market: xyz:UNI | Leverage: 5x | Status: <span style="color: #76cfc1;">success</span>
+
+<span style="color: #adabb8;">You:</span> <span style="color: #FFFFFF;">"Split buy 500 TSLA across all venues"</span>
+
+<span style="color: #76cfc1;">Agent:</span> Splitting across 3 venues for best aggregate fill:
+  - xyz:TSLA  → <span style="color: #adfff3;">250</span> (USDC)
+  - flx:TSLA  → <span style="color: #adfff3;">150</span> (USDH, swapped from USDC)
+  - cash:TSLA → <span style="color: #adfff3;">100</span> (USDT0, swapped from USDC)
+  Total impact: <span style="color: #adfff3;">2.1 bps</span> vs <span style="color: #969e9c;">8.4 bps single-venue</span>`;
+---
+
+<section id="openclaw" class="py-20 md:py-28" style="background: var(--bg-surface);">
+  <div class="max-w-4xl mx-auto px-6">
+    <h2 class="text-3xl md:text-4xl font-medium text-center mb-4" style="color: var(--text-primary);">
+      Trade with natural language
+    </h2>
+    <p class="text-center mb-6 max-w-2xl mx-auto" style="color: var(--text-muted);">
+      Hyper<span class="italic-liquid">liquid</span> Prime is available as an
+      <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">OpenClaw</a>
+      skill. Install it and let your AI agent discover markets, compare prices, and execute trades for you.
+    </p>
+
+    <!-- Install command -->
+    <div class="flex justify-center mb-10">
+      <div class="relative inline-block">
+        <pre class="text-sm !py-3 !px-5"><code><span style="color: #969e9c;">$</span> clawhub install mehranhydary/hl-prime</code></pre>
+        <button class="copy-btn" data-copy="clawhub install mehranhydary/hl-prime">Copy</button>
+      </div>
+    </div>
+
+    <!-- Conversation example -->
+    <div class="relative">
+      <pre class="text-sm"><code set:html={conversationHtml} /></pre>
+    </div>
+
+    <div class="text-center mt-8">
+      <a
+        href="https://openclaw.ai"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+        style="border-color: var(--border); color: var(--text-primary);"
+      >
+        Learn more about OpenClaw
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"></path>
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+  (function () {
+    document.querySelectorAll("#openclaw .copy-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        navigator.clipboard.writeText(btn.dataset.copy);
+        var orig = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(function () { btn.textContent = orig; }, 1500);
+      });
+    });
+  })();
+</script>
