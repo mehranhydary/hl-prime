@@ -38,6 +38,7 @@ const markets = hp.getMarkets('ETH') // or 'TSLA', 'BTC', etc.
 
 // Get routing quote for best execution
 const quote = await hp.quote('TSLA', 'buy', 50)
+const quoteWithLev = await hp.quote('TSLA', 'buy', 50, { leverage: 5, isCross: true })
 
 // Aggregated orderbook
 const book = await hp.getAggregatedBook('TSLA')
@@ -58,15 +59,15 @@ const hp = new HyperliquidPrime({
 await hp.connect()
 
 // Quote then execute (recommended)
-const quote = await hp.quote('TSLA', 'buy', 50)
+const quote = await hp.quote('TSLA', 'buy', 50, { leverage: 5, isCross: true })
 const receipt = await hp.execute(quote.plan)
 
 // One-step convenience
-const receipt2 = await hp.long('TSLA', 50)
-const receipt3 = await hp.short('TSLA', 25)
+const receipt2 = await hp.long('TSLA', 50, { leverage: 5 })
+const receipt3 = await hp.short('TSLA', 25, { leverage: 3, isCross: false })
 
 // Split across multiple markets for better fills
-const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200)
+const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200, { leverage: 4 })
 const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
 // Or one-step: await hp.longSplit('TSLA', 200)
 
@@ -91,10 +92,14 @@ hp funding TSLA
 
 # Get routing quote
 hp quote TSLA buy 50
+hp quote TSLA buy 50 --leverage 5
+hp quote TSLA buy 50 --leverage 3 --isolated
 
 # Execute trades
 HP_PRIVATE_KEY=0x... hp long TSLA 50
 HP_PRIVATE_KEY=0x... hp short TSLA 25
+HP_PRIVATE_KEY=0x... hp long TSLA 50 --leverage 5
+HP_PRIVATE_KEY=0x... hp short TSLA 25 --leverage 3 --isolated
 
 # View positions and balance
 HP_PRIVATE_KEY=0x... hp positions
@@ -140,7 +145,9 @@ When you call `hp.quote("TSLA", "buy", 50)`, the router:
    - **Collateral swap cost** (penalty) — estimated cost to swap into the required collateral
 4. **Selects** the lowest-score market and builds an execution plan
 
-For split orders (`quoteSplit`), the router merges all orderbooks, walks the combined book greedily to consume the cheapest liquidity first across all venues, and builds split execution legs. Collateral requirements and swaps are estimated and executed at `executeSplit(...)` time using live balances.
+For split orders (`quoteSplit`), the router merges all orderbooks, walks the combined book greedily to consume the cheapest liquidity first across all venues, and builds split execution legs. Collateral requirements and swaps are estimated and executed at `executeSplit(...)` time using live balances. If leverage is included in the quote options, execution applies that leverage per market leg before order placement.
+
+For single-market orders, leverage included in `quote(...)` is carried into the execution plan and applied before the order is sent.
 
 ## Configuration
 
@@ -167,17 +174,22 @@ A 1 basis point (0.01%) builder fee is included by default on all SDK-executed o
 - `getAggregatedMarkets()` — Asset groups with multiple markets
 - `getAggregatedBook(asset)` — Merged orderbook across all markets
 - `getFundingComparison(asset)` — Funding rates compared across markets
-- `quote(asset, side, size)` — Routing quote for single best market
-- `quoteSplit(asset, side, size)` — Split quote across multiple markets
+- `quote(asset, side, size, options?)` — Routing quote for single best market
+- `quoteSplit(asset, side, size, options?)` — Split quote across multiple markets
 
 ### Trading (wallet required)
 - `execute(plan)` — Execute a single-market quote
 - `executeSplit(plan)` — Execute a split quote (handles collateral swaps)
-- `long(asset, size)` — Quote + execute a long on best market
-- `short(asset, size)` — Quote + execute a short on best market
-- `longSplit(asset, size)` — Split quote + execute a long across markets
-- `shortSplit(asset, size)` — Split quote + execute a short across markets
+- `long(asset, size, options?)` — Quote + execute a long on best market
+- `short(asset, size, options?)` — Quote + execute a short on best market
+- `longSplit(asset, size, options?)` — Split quote + execute a long across markets
+- `shortSplit(asset, size, options?)` — Split quote + execute a short across markets
 - `close(asset)` — Close all positions for an asset
+
+### Trade Options
+- `leverage?: number` — Positive number, e.g. `5` for 5x.
+- `isCross?: boolean` — Default `true` (cross); set `false` for isolated.
+- `isCross` requires `leverage`. If leverage is omitted, no leverage-setting API call is made.
 
 ### Position & Balance
 - `getPositions()` — All positions with market metadata

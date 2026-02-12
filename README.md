@@ -75,7 +75,7 @@ const hp = new HyperliquidPrime({
 await hp.connect()
 
 // Two-step: quote then execute (recommended)
-const quote = await hp.quote('TSLA', 'buy', 50)
+const quote = await hp.quote('TSLA', 'buy', 50, { leverage: 5, isCross: true })
 // Review the quote...
 const receipt = await hp.execute(quote.plan)
 console.log(receipt.success) // true
@@ -84,11 +84,11 @@ console.log(receipt.avgPrice) // "431.50"
 console.log(receipt.market.coin) // "xyz:TSLA"
 
 // One-step convenience
-const receipt2 = await hp.long('TSLA', 50)
-const receipt3 = await hp.short('TSLA', 25)
+const receipt2 = await hp.long('TSLA', 50, { leverage: 5 })
+const receipt3 = await hp.short('TSLA', 25, { leverage: 3, isCross: false }) // isolated 3x
 
 // --- Split orders across multiple markets for better fills ---
-const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200)
+const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200, { leverage: 4 })
 console.log(splitQuote.allocations)
 // [
 //   { market: xyz:TSLA, size: 120, proportion: 0.6 },
@@ -158,10 +158,14 @@ hp funding TSLA
 
 # Get a routing quote (does not execute)
 hp quote TSLA buy 50
+hp quote TSLA buy 50 --leverage 5
+hp quote TSLA buy 50 --leverage 3 --isolated
 
 # Execute trades via best market
 HP_PRIVATE_KEY=0x... hp long TSLA 50
 HP_PRIVATE_KEY=0x... hp short TSLA 25
+HP_PRIVATE_KEY=0x... hp long TSLA 50 --leverage 5
+HP_PRIVATE_KEY=0x... hp short TSLA 25 --leverage 3 --isolated
 
 # View positions and balance
 HP_PRIVATE_KEY=0x... hp positions
@@ -188,6 +192,7 @@ When you call `hp.quote("TSLA", "buy", 50)`, the router:
 4. **Selects** the lowest-score market and builds an execution plan with IOC limit order + slippage
 
 The result is a `Quote` object containing the selected market, estimated cost, and a ready-to-execute `ExecutionPlan`. You review it, then call `execute(plan)` to place the order.
+If leverage is provided in `quote(...)`, the plan carries it and `execute(...)` applies it to the selected market before placing the order.
 
 ### Split Routing (Multi-Market)
 
@@ -204,6 +209,7 @@ On execution, the system automatically:
 - **Transfers** USDC from perp to spot if needed
 - **Swaps** USDC → target tokens (e.g., USDH) via spot market
 - **Places all leg orders** in a single atomic `batchOrders` call
+- **Applies leverage per leg market** first when provided (same leverage by default unless custom plans are edited)
 
 If only one market has competitive liquidity, 100% routes there — equivalent to single-market behavior.
 
@@ -261,8 +267,8 @@ HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 | `getAggregatedMarkets()`         | Asset groups with multiple markets            |
 | `getAggregatedBook(asset)`       | Merged orderbook across all markets           |
 | `getFundingComparison(asset)`    | Funding rates compared across markets         |
-| `quote(asset, side, size)`       | Routing quote for single best market          |
-| `quoteSplit(asset, side, size)`  | Split quote across multiple markets           |
+| `quote(asset, side, size, options?)`       | Routing quote for single best market          |
+| `quoteSplit(asset, side, size, options?)`  | Split quote across multiple markets           |
 
 ### Trading Methods (wallet required)
 
@@ -270,11 +276,26 @@ HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 | ------------------------- | ------------------------------------------------- |
 | `execute(plan)`           | Execute a single-market quote                     |
 | `executeSplit(plan)`      | Execute a split quote (handles collateral swaps)  |
-| `long(asset, size)`       | Quote + execute a long on best market             |
-| `short(asset, size)`      | Quote + execute a short on best market            |
-| `longSplit(asset, size)`  | Split quote + execute a long across markets       |
-| `shortSplit(asset, size)` | Split quote + execute a short across markets      |
+| `long(asset, size, options?)`       | Quote + execute a long on best market             |
+| `short(asset, size, options?)`      | Quote + execute a short on best market            |
+| `longSplit(asset, size, options?)`  | Split quote + execute a long across markets       |
+| `shortSplit(asset, size, options?)` | Split quote + execute a short across markets      |
 | `close(asset)`            | Close all positions for an asset                  |
+
+### Trade Options
+
+Most quote/one-step methods accept optional trade options:
+
+```typescript
+interface TradeExecutionOptions {
+  leverage?: number; // Positive number, e.g. 5 for 5x
+  isCross?: boolean; // Default true (cross); false = isolated
+}
+```
+
+Notes:
+- `isCross` requires `leverage` (margin mode is only set when leverage is explicitly requested).
+- If `leverage` is omitted, the SDK does not call `setLeverage` and uses exchange/account defaults.
 
 ### Position & Balance
 
