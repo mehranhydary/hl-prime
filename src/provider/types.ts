@@ -1,6 +1,24 @@
 // Normalized types decoupled from @nktkas/hyperliquid SDK types.
 // These are the shapes the rest of Hyperliquid Prime works with.
 
+export type CandleInterval =
+  | "1m" | "3m" | "5m" | "15m" | "30m"
+  | "1h" | "2h" | "4h" | "8h" | "12h"
+  | "1d" | "3d" | "1w" | "1M";
+
+export interface Candle {
+  t: number;   // open timestamp (ms)
+  T: number;   // close timestamp (ms)
+  s: string;   // asset symbol
+  i: string;   // interval
+  o: string;   // open price
+  c: string;   // close price
+  h: string;   // high price
+  l: string;   // low price
+  v: string;   // volume (base)
+  n: number;   // number of trades
+}
+
 export interface MetaAsset {
   name: string;
   szDecimals: number;
@@ -77,6 +95,7 @@ export interface ClearinghouseState {
   };
   assetPositions: AssetPosition[];
   crossMaintenanceMarginUsed: string;
+  withdrawable?: string;
 }
 
 export interface AssetPosition {
@@ -148,6 +167,44 @@ export interface FundingRecord {
   time: number;
 }
 
+export interface FrontendOpenOrder {
+  coin: string;
+  side: "B" | "A";
+  limitPx: string;
+  sz: string;
+  oid: number;
+  timestamp: number;
+  origSz: string;
+  triggerCondition: string;
+  isTrigger: boolean;
+  triggerPx: string;
+  children: unknown[];
+  isPositionTpsl: boolean;
+  reduceOnly: boolean;
+  orderType: string;
+  tif: string | null;
+  cloid?: string | null;
+}
+
+export interface HistoricalOrder {
+  order: FrontendOpenOrder;
+  status: string;
+  statusTimestamp: number;
+}
+
+export interface UserFundingEntry {
+  time: number;
+  hash: `0x${string}`;
+  delta: {
+    type: "funding";
+    coin: string;
+    usdc: string;
+    szi: string;
+    fundingRate: string;
+    nSamples: number | null;
+  };
+}
+
 export interface OrderType {
   limit?: { tif: "Alo" | "Ioc" | "Gtc" };
   trigger?: {
@@ -185,6 +242,28 @@ export interface CancelParams {
 
 export interface CancelResult {
   statuses: string[];
+}
+
+// Referral types
+export interface ReferralUserState {
+  user: `0x${string}`;
+  cumVlm: string;
+  cumRewardedFeesSinceReferred: string;
+  cumFeesRewardedToReferrer: string;
+  timeJoined: number;
+}
+
+export interface ReferralResponse {
+  referredBy: { referrer: `0x${string}`; code: string } | null;
+  cumVlm: string;
+  unclaimedRewards: string;
+  claimedRewards: string;
+  builderRewards: string;
+  referrerState:
+    | { stage: "ready"; data: { code: string; nReferrals: number; referralStates: ReferralUserState[] } }
+    | { stage: "needToCreateCode" }
+    | { stage: "needToTrade"; data: { required: string } };
+  rewardHistory: { earned: string; vlm: string; referralVlm: string; time: number }[];
 }
 
 // Subscription event types

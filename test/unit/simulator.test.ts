@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { FillSimulator } from "../../src/router/simulator.js";
+import type { L2Book } from "../../src/provider/types.js";
 import {
   TSLA_BOOK_DEEP,
   TSLA_BOOK_THIN,
@@ -71,6 +72,60 @@ describe("FillSimulator", () => {
     });
   });
 
+  describe("one-sided books", () => {
+    it("returns null for buy on asks-only-empty book", () => {
+      const onlyBids: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[{ px: "100", sz: "10", n: 1 }], []],
+      };
+      expect(sim.simulate(onlyBids, "buy", 1)).toBeNull();
+    });
+
+    it("returns null for sell on bids-only-empty book", () => {
+      const onlyAsks: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[], [{ px: "100", sz: "10", n: 1 }]],
+      };
+      expect(sim.simulate(onlyAsks, "sell", 1)).toBeNull();
+    });
+
+    it("sells into a one-sided bid book", () => {
+      const onlyBids: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[{ px: "100", sz: "10", n: 1 }, { px: "99", sz: "5", n: 1 }], []],
+      };
+      const result = sim.simulate(onlyBids, "sell", 5);
+      expect(result).not.toBeNull();
+      expect(result!.avgPrice).toBe(100);
+    });
+
+    it("buys from a one-sided ask book", () => {
+      const onlyAsks: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[], [{ px: "200", sz: "10", n: 1 }]],
+      };
+      const result = sim.simulate(onlyAsks, "buy", 3);
+      expect(result).not.toBeNull();
+      expect(result!.avgPrice).toBe(200);
+    });
+  });
+
+  describe("wide spread", () => {
+    it("calculates high impact for wide spread (1000+ bps)", () => {
+      const wideSpread: L2Book = {
+        coin: "WIDE", time: 0,
+        levels: [
+          [{ px: "90", sz: "10", n: 1 }],
+          [{ px: "110", sz: "10", n: 1 }],
+        ],
+      };
+      // mid = 100, buying at 110 → impact = |110 - 100| / 100 * 10000 = 1000 bps
+      const result = sim.simulate(wideSpread, "buy", 1);
+      expect(result).not.toBeNull();
+      expect(result!.priceImpactBps).toBeCloseTo(1000, 0);
+    });
+  });
+
   describe("getMidPrice", () => {
     it("returns mid between best bid and ask", () => {
       const mid = sim.getMidPrice(TSLA_BOOK_DEEP);
@@ -80,6 +135,22 @@ describe("FillSimulator", () => {
     it("returns 0 for empty book", () => {
       const mid = sim.getMidPrice(EMPTY_BOOK);
       expect(mid).toBe(0);
+    });
+
+    it("returns best bid when no asks", () => {
+      const onlyBids: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[{ px: "50", sz: "1", n: 1 }], []],
+      };
+      expect(sim.getMidPrice(onlyBids)).toBe(50);
+    });
+
+    it("returns best ask when no bids", () => {
+      const onlyAsks: L2Book = {
+        coin: "TEST", time: 0,
+        levels: [[], [{ px: "75", sz: "1", n: 1 }]],
+      };
+      expect(sim.getMidPrice(onlyAsks)).toBe(75);
     });
   });
 });

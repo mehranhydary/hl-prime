@@ -4,7 +4,7 @@ import type { HLProvider } from "../../src/provider/provider.js";
 import type { CollateralManager } from "../../src/collateral/manager.js";
 import type { CollateralPlan } from "../../src/collateral/types.js";
 import type { ExecutionPlan, SplitExecutionPlan } from "../../src/router/types.js";
-import { TSLA_XYZ } from "../fixtures/markets.js";
+import { TSLA_FLX, TSLA_XYZ } from "../fixtures/markets.js";
 import pino from "pino";
 
 const logger = pino({ level: "silent" });
@@ -137,8 +137,41 @@ describe("Executor", () => {
       );
 
       expect(receipt.success).toBe(true);
-      expect(provider.setLeverage).toHaveBeenCalledWith("xyz:TSLA", 5, false);
+      expect(provider.setLeverage).toHaveBeenCalledWith(TSLA_XYZ.assetIndex, 5, false);
       expect(provider.placeOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to isolated leverage for only-isolated assets", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const receipt = await executor.execute(
+        makePlan({
+          market: { ...TSLA_XYZ, onlyIsolated: true },
+          leverage: 5,
+          isCross: true,
+        }),
+        USER,
+      );
+
+      expect(receipt.success).toBe(true);
+      expect(provider.setLeverage).toHaveBeenCalledWith(TSLA_XYZ.assetIndex, 5, false);
+    });
+
+    it("clamps leverage to market maxLeverage as safety guard", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      // TSLA_XYZ has maxLeverage = 10, request 20x → should clamp to 10
+      const receipt = await executor.execute(
+        makePlan({ leverage: 20, isCross: true }),
+        USER,
+      );
+
+      expect(receipt.success).toBe(true);
+      expect(provider.setLeverage).toHaveBeenCalledWith(TSLA_XYZ.assetIndex, 10, true);
     });
 
     it("fails before order placement when leverage setup errors", async () => {
@@ -148,7 +181,7 @@ describe("Executor", () => {
       });
       const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
       const receipt = await executor.execute(
-        makePlan({ leverage: 50, isCross: true }),
+        makePlan({ leverage: 5, isCross: true }),
         USER,
       );
 
@@ -197,6 +230,20 @@ describe("Executor", () => {
       expect(receipt.success).toBe(false);
       expect(receipt.error).toContain("rpc timeout");
     });
+
+    it("returns failed receipt for waitingForFill status", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        placeOrder: vi.fn().mockResolvedValue({
+          statuses: ["waitingForFill"],
+        }),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const receipt = await executor.execute(makePlan(), USER);
+
+      expect(receipt.success).toBe(false);
+      expect(receipt.error).toContain("waitingForFill");
+    });
   });
 
   describe("builder approval behavior", () => {
@@ -224,6 +271,67 @@ describe("Executor", () => {
         maxFeeRate: "0.05%",
         builder: BUILDER_ADDR,
       });
+    });
+
+    it("treats maxBuilderFee bps-unit responses as sufficient approval", async () => {
+      const provider = makeProvider({
+        // Some environments return this in bps (1 bps = 0.01%) rather than 0.1 bps.
+        maxBuilderFee: vi.fn().mockResolvedValue(1),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      await executor.execute(makePlan(), USER);
+
+      expect(provider.approveBuilderFee).not.toHaveBeenCalled();
+      expect(provider.placeOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        { b: BUILDER_ADDR, f: 10 },
+      );
+    });
+
+    it("places the order without builder when approval check fails", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockRejectedValue(new Error("maxBuilderFee unavailable")),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      await executor.execute(makePlan(), USER);
+
+      expect(provider.placeOrder).toHaveBeenCalledWith(
+        expect.any(Object),
+        undefined,
+      );
+    });
+
+    it("stops retrying builder approval when deposit is required", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockRejectedValue(
+          new Error("Must deposit before performing actions. User: 0x123"),
+        ),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      await executor.execute(makePlan(), USER);
+      await executor.execute(makePlan(), USER);
+
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(1);
+      expect(provider.placeOrder).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not auto-approve builder fee in agent sessions", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(0),
+        getSignerAddress: vi.fn().mockReturnValue("0x8988ee386c52f415452598a8c671f4876a17fce1"),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      await executor.execute(makePlan(), USER);
+      await executor.execute(makePlan(), USER);
+
+      expect(provider.approveBuilderFee).not.toHaveBeenCalled();
+      // 1 initial check + 2 poll retries per execute call = 3 per call, 6 total
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(6);
+      expect(provider.placeOrder).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -260,7 +368,7 @@ describe("Executor", () => {
         makePlan({ leverage: 4, isCross: true }),
         makePlan({ leverage: 4, isCross: true }),
         makePlan({
-          market: { ...TSLA_XYZ, coin: "flx:TSLA" },
+          market: TSLA_FLX,
           leverage: 3,
           isCross: false,
         }),
@@ -276,8 +384,46 @@ describe("Executor", () => {
       );
 
       expect(provider.setLeverage).toHaveBeenCalledTimes(2);
-      expect(provider.setLeverage).toHaveBeenNthCalledWith(1, "xyz:TSLA", 4, true);
-      expect(provider.setLeverage).toHaveBeenNthCalledWith(2, "flx:TSLA", 3, false);
+      expect(provider.setLeverage).toHaveBeenNthCalledWith(1, TSLA_XYZ.assetIndex, 4, true);
+      expect(provider.setLeverage).toHaveBeenNthCalledWith(2, TSLA_FLX.assetIndex, 3, false);
+    });
+
+    it("estimates collateral from leverage-adjusted margin (not full notional)", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+      });
+      const estimateRequirements = vi.fn().mockResolvedValue({
+        requirements: [],
+        totalSwapCostBps: 0,
+        swapsNeeded: false,
+        abstractionEnabled: false,
+      } satisfies CollateralPlan);
+      const collateralManager = makeCollateralManager({
+        estimateRequirements,
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      const leg = makePlan({
+        market: TSLA_FLX,
+        size: "13.625649",
+        price: "73.3929",
+        leverage: 20,
+        isCross: false,
+      });
+
+      await executor.executeSplit(
+        makeSplitPlan({
+          legs: [leg],
+          totalSize: leg.size,
+        }),
+        collateralManager,
+        USER,
+      );
+
+      expect(estimateRequirements).toHaveBeenCalledTimes(1);
+      const allocations = estimateRequirements.mock.calls[0][0] as Array<{ estimatedCost: number }>;
+      const expectedMargin = parseFloat(leg.size) * parseFloat(leg.price) / 20;
+      expect(allocations[0].estimatedCost).toBeCloseTo(expectedMargin, 6);
     });
 
     it("fails split execution when leverage setup fails", async () => {
@@ -375,6 +521,82 @@ describe("Executor", () => {
       expect(receipt.legs[0].success).toBe(true);
       expect(receipt.legs[1].success).toBe(false);
       expect(receipt.legs[1].error).toContain("post only reject");
+    });
+
+    it("surfaces waiting statuses as leg errors in split execution", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        batchOrders: vi.fn().mockResolvedValue({
+          statuses: ["waitingForFill"],
+        }),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+
+      const receipt = await executor.executeSplit(makeSplitPlan(), collateralManager, USER);
+
+      expect(receipt.success).toBe(false);
+      expect(receipt.legs[0].success).toBe(false);
+      expect(receipt.legs[0].error).toContain("waitingForFill");
+    });
+
+    it("handles all legs succeeding in a multi-leg split", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        batchOrders: vi.fn().mockResolvedValue({
+          statuses: [
+            { filled: { oid: 1, totalSz: "3", avgPx: "431.50" } },
+            { filled: { oid: 2, totalSz: "5", avgPx: "431.70" } },
+          ],
+        }),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+
+      const receipt = await executor.executeSplit(
+        makeSplitPlan({
+          legs: [
+            makePlan({ size: "3" }),
+            makePlan({ market: TSLA_FLX, size: "5" }),
+          ],
+          totalSize: "8",
+        }),
+        collateralManager,
+        USER,
+      );
+
+      expect(receipt.success).toBe(true);
+      expect(receipt.legs).toHaveLength(2);
+      expect(receipt.legs[0].success).toBe(true);
+      expect(receipt.legs[1].success).toBe(true);
+    });
+
+    it("handles batchOrders throwing an error", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        batchOrders: vi.fn().mockRejectedValue(new Error("network timeout")),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+
+      const receipt = await executor.executeSplit(makeSplitPlan(), collateralManager, USER);
+      expect(receipt.success).toBe(false);
+      expect(receipt.error).toContain("network timeout");
+    });
+
+    it("returns resting status as success in split legs", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn().mockResolvedValue(10),
+        batchOrders: vi.fn().mockResolvedValue({
+          statuses: [{ resting: { oid: 42 } }],
+        }),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+      const collateralManager = makeCollateralManager();
+
+      const receipt = await executor.executeSplit(makeSplitPlan(), collateralManager, USER);
+      expect(receipt.success).toBe(true);
+      expect(receipt.legs[0].success).toBe(true);
     });
   });
 });

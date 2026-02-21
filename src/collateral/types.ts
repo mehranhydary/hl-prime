@@ -1,9 +1,9 @@
 export interface CollateralRequirement {
   token: string;              // e.g., "USDH"
-  amountNeeded: number;       // USD-equivalent amount needed for this leg
+  amountNeeded: number;       // USD-equivalent margin needed for this leg
   currentBalance: number;     // user's current spot balance of this token
   shortfall: number;          // max(0, amountNeeded - currentBalance)
-  swapFrom: string;           // token to swap from (typically "USDC")
+  swapFrom: string;           // token to swap from (selected from available stable balances)
   estimatedSwapCostBps: number; // estimated cost to swap in basis points
 }
 

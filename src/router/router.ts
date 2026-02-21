@@ -7,6 +7,7 @@ import type { PerpMarket } from "../market/types.js";
 import type { CollateralPlan } from "../collateral/types.js";
 import type {
   Quote,
+  ExecutionPlan,
   MarketScore,
   SplitQuote,
   SplitExecutionPlan,
@@ -20,6 +21,11 @@ import {
   InsufficientLiquidityError,
   MarketDataUnavailableError,
 } from "../utils/errors.js";
+import {
+  quantizeOrderPrice,
+  quantizeOrderSize,
+  sizeDecimalsForMarket,
+} from "../utils/order-precision.js";
 
 const BOOK_FETCH_TIMEOUT_MS = 2_500;
 
@@ -76,6 +82,7 @@ export class Router {
 
     // Simulate + score each market
     const scored: MarketScore[] = [];
+    const requestedLeverage = tradeOptions?.leverage;
 
     for (const { market, book } of snapshots) {
       const sim = this.simulator.simulate(book, side, size);
@@ -91,7 +98,7 @@ export class Router {
         continue;
       }
 
-      scored.push(this.scorer.score(sim, market, side, userCollateral));
+      scored.push(this.scorer.score(sim, market, side, userCollateral, undefined, requestedLeverage));
     }
 
     // Sort by score (lower = better)
@@ -123,10 +130,19 @@ export class Router {
     }
     const sim = this.simulator.simulate(bestSnapshot.book, side, size)!;
 
-    const slippagePrice =
-      side === "buy"
-        ? sim.avgPrice * (1 + slippage)
-        : sim.avgPrice * (1 - slippage);
+    const legResult = buildExecutionLeg({
+      market: best.market,
+      side,
+      rawSize: size,
+      estimatedAvgPrice: sim.avgPrice,
+      slippage,
+      requestedLeverage,
+      requestedIsCross: tradeOptions?.isCross,
+    });
+    warnings.push(...legResult.warnings);
+    if (!legResult.leg) {
+      throw new InsufficientLiquidityError(baseAsset, size);
+    }
 
     return {
       baseAsset,
@@ -138,16 +154,7 @@ export class Router {
       estimatedFundingRate: parseFloat(best.market.funding ?? "0"),
       alternativesConsidered: scored,
       warnings: warnings.length > 0 ? warnings : undefined,
-      plan: {
-        market: best.market,
-        side,
-        size: size.toString(),
-        price: slippagePrice.toFixed(6), // TODO: respect tick size
-        orderType: { limit: { tif: "Ioc" } },
-        slippage,
-        leverage: tradeOptions?.leverage,
-        isCross: tradeOptions?.isCross,
-      },
+      plan: legResult.leg,
     };
   }
 
@@ -220,6 +227,7 @@ export class Router {
 
     // Score each market for the alternativesConsidered list
     const scored: MarketScore[] = [];
+    const requestedLeverage = tradeOptions?.leverage;
     for (const alloc of splitResult.allocations) {
       const book = bookMap.get(alloc.market.coin);
       if (!book) {
@@ -237,29 +245,34 @@ export class Router {
             alloc.market,
             side,
             userCollateral,
+            undefined,
+            requestedLeverage,
           ),
         );
       }
     }
     scored.sort((a, b) => a.totalScore - b.totalScore);
 
-    // Build execution legs
-    const legs = splitResult.allocations.map((alloc) => {
-      const slippagePrice = side === "buy"
-        ? alloc.estimatedAvgPrice * (1 + slippage)
-        : alloc.estimatedAvgPrice * (1 - slippage);
-
-      return {
+    // Build execution legs with per-market leverage clamping
+    const rawLegs = splitResult.allocations.map((alloc) => {
+      const legResult = buildExecutionLeg({
         market: alloc.market,
         side,
-        size: alloc.size.toString(),
-        price: slippagePrice.toFixed(6),
-        orderType: { limit: { tif: "Ioc" as const } },
+        rawSize: alloc.size,
+        estimatedAvgPrice: alloc.estimatedAvgPrice,
         slippage,
-        leverage: tradeOptions?.leverage,
-        isCross: tradeOptions?.isCross,
-      };
+        requestedLeverage,
+        requestedIsCross: tradeOptions?.isCross,
+      });
+      for (const w of legResult.warnings) {
+        this.pushWarning(warnings, w);
+      }
+      return legResult.leg;
     });
+    const legs = rawLegs.filter((leg): leg is NonNullable<typeof leg> => leg !== null);
+    if (legs.length === 0) {
+      throw new InsufficientLiquidityError(baseAsset, size);
+    }
 
     // Compute weighted funding rate
     const weightedFunding = splitResult.allocations.reduce(
@@ -389,4 +402,92 @@ export class Router {
       warnings.push(warning);
     }
   }
+}
+
+/**
+ * Clamp requested leverage to the market's max. Returns undefined if no leverage was requested.
+ */
+function clampLeverage(
+  requested: number | undefined,
+  market: PerpMarket,
+): number | undefined {
+  if (requested === undefined) return undefined;
+  return Math.min(requested, market.maxLeverage);
+}
+
+function resolveIsCross(
+  requested: boolean | undefined,
+  market: PerpMarket,
+  warnings: string[],
+): boolean | undefined {
+  if (requested === undefined) return undefined;
+  if (requested && market.onlyIsolated) {
+    const warning = `${market.coin}: cross margin unsupported on this asset; using isolated margin`;
+    if (!warnings.includes(warning)) {
+      warnings.push(warning);
+    }
+    return false;
+  }
+  return requested;
+}
+
+/**
+ * Build a single execution leg from raw inputs, applying slippage, leverage
+ * clamping, margin mode resolution, and size/price quantization.
+ *
+ * Shared between quote() and quoteSplit() to eliminate DRY violation.
+ * Returns null (with warnings) if the quantized size or price rounds to zero.
+ */
+function buildExecutionLeg(params: {
+  market: PerpMarket;
+  side: "buy" | "sell";
+  rawSize: number;
+  estimatedAvgPrice: number;
+  slippage: number;
+  requestedLeverage: number | undefined;
+  requestedIsCross: boolean | undefined;
+}): { leg: ExecutionPlan | null; warnings: string[] } {
+  const warnings: string[] = [];
+
+  const slippagePrice = params.side === "buy"
+    ? params.estimatedAvgPrice * (1 + params.slippage)
+    : params.estimatedAvgPrice * (1 - params.slippage);
+
+  const effectiveLeverage = clampLeverage(params.requestedLeverage, params.market);
+  if (params.requestedLeverage !== undefined && effectiveLeverage !== params.requestedLeverage) {
+    warnings.push(
+      `${params.market.coin}: leverage clamped to ${effectiveLeverage}x (market max), requested ${params.requestedLeverage}x`,
+    );
+  }
+
+  const effectiveIsCross = resolveIsCross(params.requestedIsCross, params.market, warnings);
+  const orderSize = quantizeOrderSize(params.rawSize, params.market);
+  const orderPrice = quantizeOrderPrice(slippagePrice, params.side, params.market);
+
+  if (parseFloat(orderSize) <= 0) {
+    warnings.push(
+      `${params.market.coin}: rounded order size to zero at ${sizeDecimalsForMarket(params.market)} decimals; leg skipped`,
+    );
+    return { leg: null, warnings };
+  }
+  if (parseFloat(orderPrice) <= 0) {
+    warnings.push(
+      `${params.market.coin}: rounded order price to zero; leg skipped`,
+    );
+    return { leg: null, warnings };
+  }
+
+  return {
+    leg: {
+      market: params.market,
+      side: params.side,
+      size: orderSize,
+      price: orderPrice,
+      orderType: { limit: { tif: "Ioc" as const } },
+      slippage: params.slippage,
+      leverage: effectiveLeverage,
+      isCross: effectiveIsCross,
+    },
+    warnings,
+  };
 }

@@ -40,6 +40,7 @@ export interface MarketScore {
   collateralMatch: boolean;   // Does user already hold this collateral?
   totalScore: number;         // Lower is better
   swapCostBps?: number;       // Estimated cost to swap into this collateral
+  leverageClamped?: number;   // If set, requested leverage was clamped to this market's max
   reason?: string;            // Why this wasn't selected
 }
 

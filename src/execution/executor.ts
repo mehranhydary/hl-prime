@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { HLProvider } from "../provider/provider.js";
 import type { Logger } from "../logging/logger.js";
 import type { ExecutionPlan, SplitAllocation, SplitExecutionPlan } from "../router/types.js";
-import type { ExecutionReceipt, SplitExecutionReceipt } from "./types.js";
+import type { ExecutionReceipt, LegReceipt, SplitExecutionReceipt } from "./types.js";
 import type { CollateralManager } from "../collateral/manager.js";
 import type { CollateralReceipt } from "../collateral/types.js";
 import type { BuilderConfig } from "../config.js";
@@ -12,10 +13,20 @@ interface WireBuilder {
   f: number; // 0.1bps units
 }
 
+interface ParsedOrderStatus {
+  success: boolean;
+  orderId: number | undefined;
+  filledSize: string;
+  avgPrice: string;
+  error?: string;
+}
+
 export class Executor {
   private logger: Logger;
   private wireBuilder: WireBuilder | null;
+  private builderEnabledForOrders = false;
   private approvalChecked = false;
+  private builderManualApprovalWarned = false;
 
   constructor(
     private provider: HLProvider,
@@ -47,12 +58,59 @@ export class Executor {
         builder: this.wireBuilder.b,
       });
 
-      if (currentApproval >= this.wireBuilder.f) {
+      if (this.isBuilderApprovalSufficient(currentApproval, this.wireBuilder.f)) {
         this.logger.debug(
-          { builder: this.wireBuilder.b, approved: currentApproval, required: this.wireBuilder.f },
+          {
+            builder: this.wireBuilder.b,
+            approvedRaw: currentApproval,
+            approvedTenthsBps: this.normalizedApprovalTenthsBps(currentApproval),
+            requiredTenthsBps: this.wireBuilder.f,
+          },
           "Builder fee already approved",
         );
+        this.builderEnabledForOrders = true;
         this.approvalChecked = true;
+        this.builderManualApprovalWarned = false;
+        return;
+      }
+
+      const signerAddress = this.provider.getSignerAddress?.();
+      const isAgentSession = Boolean(
+        signerAddress && signerAddress.toLowerCase() !== userAddress.toLowerCase(),
+      );
+      if (isAgentSession) {
+        // The master wallet may have just approved the builder fee (e.g. via the trade form's
+        // pre-trade actions). Poll briefly to allow the on-chain state to propagate before
+        // giving up.
+        const approved = await this.pollBuilderApproval(userAddress);
+        if (approved) {
+          this.builderEnabledForOrders = true;
+          this.approvalChecked = true;
+          this.builderManualApprovalWarned = false;
+          this.logger.info(
+            { builder: this.wireBuilder.b, user: userAddress },
+            "Builder fee confirmed after polling",
+          );
+          return;
+        }
+
+        this.builderEnabledForOrders = false;
+        if (!this.builderManualApprovalWarned) {
+          this.logger.warn(
+            {
+              builder: this.wireBuilder.b,
+              signer: signerAddress,
+              user: userAddress,
+              approvedRaw: currentApproval,
+              approvedTenthsBps: this.normalizedApprovalTenthsBps(currentApproval),
+              requiredTenthsBps: this.wireBuilder.f,
+              maxFeeRate: `${(this.wireBuilder.f / 1000).toFixed(2)}%`,
+            },
+            "Builder fee not approved for user. Approve with master wallet (setup flow) to enable builder fees.",
+          );
+          this.builderManualApprovalWarned = true;
+        }
+        // Keep checking on future orders so builder fee can auto-enable after external approval.
         return;
       }
 
@@ -70,12 +128,23 @@ export class Executor {
         builder: this.wireBuilder.b,
       });
 
+      this.builderEnabledForOrders = true;
       this.approvalChecked = true;
       this.logger.info("Builder fee approved successfully");
     } catch (error) {
+      this.builderEnabledForOrders = false;
+      if (this.isDepositRequiredError(error)) {
+        // Terminal condition until funds are deposited: avoid noisy retries every order.
+        this.approvalChecked = true;
+        this.logger.warn(
+          { error },
+          "Builder fee approval unavailable before first deposit; disabling builder fee checks for this session.",
+        );
+        return;
+      }
       this.logger.warn(
         { error },
-        "Failed to check/approve builder fee — will retry on next order. Orders may fail if not pre-approved.",
+        "Failed to check/approve builder fee — continuing without builder fee for this order; will retry next order.",
       );
       // Do NOT set approvalChecked = true so we retry on the next order attempt
     }
@@ -101,6 +170,8 @@ export class Executor {
     try {
       await this.applyLeverageIfRequested(plan);
 
+      const builder = this.builderEnabledForOrders ? this.wireBuilder ?? undefined : undefined;
+      const cloid = `0x${randomUUID().replace(/-/g, "")}`;
       const result = await this.provider.placeOrder(
         {
           assetIndex: plan.market.assetIndex,
@@ -109,41 +180,26 @@ export class Executor {
           size: plan.size,
           reduceOnly: false,
           orderType: plan.orderType,
+          cloid,
         },
-        this.wireBuilder ?? undefined,
+        builder,
       );
 
-      // Parse the order result to extract fill info
-      const status = result.statuses[0];
-      let orderId: number | undefined;
-      let filledSize = "0";
-      let avgPrice = "0";
-
-      if (status && typeof status === "object") {
-        if ("filled" in status) {
-          orderId = status.filled.oid;
-          filledSize = status.filled.totalSz;
-          avgPrice = status.filled.avgPx;
-        } else if ("resting" in status) {
-          orderId = status.resting.oid;
-          // Resting means not yet filled — IOC orders shouldn't reach here
-          filledSize = "0";
-          avgPrice = plan.price;
-        } else if ("error" in status) {
-          this.logger.error({ error: status.error, plan }, "Order rejected");
-          return {
-            success: false,
-            market: plan.market,
-            side: plan.side,
-            requestedSize: plan.size,
-            filledSize: "0",
-            avgPrice: "0",
-            orderId: undefined,
-            timestamp: Date.now(),
-            error: status.error,
-            raw: result,
-          };
-        }
+      const parsed = this.parseOrderStatus(result.statuses[0], plan.price);
+      if (!parsed.success) {
+        this.logger.error({ error: parsed.error, status: result.statuses[0], plan }, "Order rejected");
+        return {
+          success: false,
+          market: plan.market,
+          side: plan.side,
+          requestedSize: plan.size,
+          filledSize: parsed.filledSize,
+          avgPrice: parsed.avgPrice,
+          orderId: parsed.orderId,
+          timestamp: Date.now(),
+          error: parsed.error ?? "Order rejected",
+          raw: result,
+        };
       }
 
       const receipt: ExecutionReceipt = {
@@ -151,9 +207,9 @@ export class Executor {
         market: plan.market,
         side: plan.side,
         requestedSize: plan.size,
-        filledSize,
-        avgPrice,
-        orderId,
+        filledSize: parsed.filledSize,
+        avgPrice: parsed.avgPrice,
+        orderId: parsed.orderId,
         timestamp: Date.now(),
         raw: result,
       };
@@ -189,6 +245,9 @@ export class Executor {
   /**
    * Execute a split order plan across multiple markets.
    * Flow: prepare collateral → batch place all leg orders → aggregate receipts.
+   *
+   * Returns per-leg receipts so callers can see exactly which legs succeeded
+   * even when some fail (partial fill scenario).
    */
   async executeSplit(
     plan: SplitExecutionPlan,
@@ -213,22 +272,12 @@ export class Executor {
     try {
       await this.applySplitLeverage(plan);
     } catch (error) {
-      const collateralReceipt: CollateralReceipt = {
+      return this.failedSplitReceipt(plan, timestamp, {
         success: false,
         swapsExecuted: [],
         abstractionWasEnabled: false,
         error: error instanceof Error ? error.message : String(error),
-      };
-      return {
-        success: false,
-        legs: [],
-        collateralReceipt,
-        totalRequestedSize: plan.totalSize,
-        totalFilledSize: "0",
-        aggregateAvgPrice: "0",
-        timestamp,
-        error: `Leverage setup failed: ${collateralReceipt.error}`,
-      };
+      }, `Leverage setup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // Step 2: Estimate collateral using live balances at execution time.
@@ -236,6 +285,21 @@ export class Executor {
     const collateralPlan = await collateralManager.estimateRequirements(
       allocations,
       userAddress,
+    );
+    this.logger.info(
+      {
+        user: userAddress,
+        swapsNeeded: collateralPlan.swapsNeeded,
+        requirements: collateralPlan.requirements.map((req) => ({
+          token: req.token,
+          amountNeeded: req.amountNeeded,
+          currentBalance: req.currentBalance,
+          shortfall: req.shortfall,
+          swapFrom: req.swapFrom,
+          estimatedSwapCostBps: req.estimatedSwapCostBps,
+        })),
+      },
+      "Collateral estimate at execution time (live balances)",
     );
 
     // Step 3: Prepare collateral (enable abstraction, swap if needed)
@@ -246,16 +310,8 @@ export class Executor {
         userAddress,
       );
       if (!collateralReceipt.success) {
-        return {
-          success: false,
-          legs: [],
-          collateralReceipt,
-          totalRequestedSize: plan.totalSize,
-          totalFilledSize: "0",
-          aggregateAvgPrice: "0",
-          timestamp,
-          error: `Collateral preparation failed: ${collateralReceipt.error}`,
-        };
+        return this.failedSplitReceipt(plan, timestamp, collateralReceipt,
+          `Collateral preparation failed: ${collateralReceipt.error}`);
       }
     } else {
       collateralReceipt = {
@@ -274,48 +330,28 @@ export class Executor {
         size: leg.size,
         reduceOnly: false,
         orderType: leg.orderType,
+        cloid: `0x${randomUUID().replace(/-/g, "")}`,
       }));
 
       const result = await this.provider.batchOrders(
         orderParams,
-        this.wireBuilder ?? undefined,
+        this.builderEnabledForOrders ? this.wireBuilder ?? undefined : undefined,
       );
 
       // Step 5: Map each status to a per-leg receipt
-      const legs: ExecutionReceipt[] = plan.legs.map((leg, i) => {
+      const legs: LegReceipt[] = plan.legs.map((leg, i) => {
         const status = result.statuses[i];
-        let orderId: number | undefined;
-        let filledSize = "0";
-        let avgPrice = "0";
-        let success = false;
-        let error: string | undefined;
-
-        if (status && typeof status === "object") {
-          if ("filled" in status) {
-            orderId = status.filled.oid;
-            filledSize = status.filled.totalSz;
-            avgPrice = status.filled.avgPx;
-            success = true;
-          } else if ("resting" in status) {
-            orderId = status.resting.oid;
-            filledSize = "0";
-            avgPrice = leg.price;
-            success = true; // Order is resting, not failed
-          } else if ("error" in status) {
-            error = status.error;
-          }
-        }
+        const parsed = this.parseOrderStatus(status, leg.price);
 
         return {
-          success,
           market: leg.market,
           side: leg.side,
           requestedSize: leg.size,
-          filledSize,
-          avgPrice,
-          orderId,
-          timestamp,
-          error,
+          filledSize: parsed.filledSize,
+          avgPrice: parsed.avgPrice,
+          orderId: parsed.orderId,
+          success: parsed.success,
+          error: parsed.error,
           raw: status,
         };
       });
@@ -323,53 +359,87 @@ export class Executor {
       // Step 6: Aggregate results
       let totalFilledSize = 0;
       let totalFilledCost = 0;
-      let allSuccess = true;
+      let succeededCount = 0;
+      let failedCount = 0;
 
       for (const leg of legs) {
         const filled = parseFloat(leg.filledSize);
         const price = parseFloat(leg.avgPrice);
         totalFilledSize += filled;
         totalFilledCost += filled * price;
-        if (!leg.success) allSuccess = false;
+        if (leg.success) {
+          succeededCount++;
+        } else {
+          failedCount++;
+        }
       }
 
+      const allSucceeded = failedCount === 0;
+      const partialFill = succeededCount > 0 && failedCount > 0;
       const aggregateAvgPrice = totalFilledSize > 0
         ? (totalFilledCost / totalFilledSize).toFixed(6)
         : "0";
 
+      const warnings: string[] = [];
+      if (partialFill) {
+        const failedLegs = legs.filter((l) => !l.success);
+        warnings.push(
+          `Partial fill: ${succeededCount}/${legs.length} legs succeeded. ` +
+          `Failed: ${failedLegs.map((l) => `${l.market.coin} (${l.error ?? "unknown"})`).join(", ")}`,
+        );
+      }
+
       this.logger.info(
         {
-          allSuccess,
+          allSucceeded,
+          partialFill,
           totalFilledSize,
           aggregateAvgPrice,
-          legsSucceeded: legs.filter((l) => l.success).length,
-          legsFailed: legs.filter((l) => !l.success).length,
+          legsSucceeded: succeededCount,
+          legsFailed: failedCount,
         },
         "Split order executed",
       );
 
       return {
-        success: allSuccess,
+        success: allSucceeded,
+        allSucceeded,
+        partialFill,
         legs,
         collateralReceipt,
         totalRequestedSize: plan.totalSize,
         totalFilledSize: totalFilledSize.toString(),
         aggregateAvgPrice,
         timestamp,
+        warnings,
       };
     } catch (error) {
       this.logger.error({ error }, "Split order execution failed");
-      return {
-        success: false,
-        legs: [],
-        collateralReceipt,
-        totalRequestedSize: plan.totalSize,
-        totalFilledSize: "0",
-        aggregateAvgPrice: "0",
-        timestamp,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return this.failedSplitReceipt(plan, timestamp, collateralReceipt,
+        error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /** Build a failed SplitExecutionReceipt with consistent shape. */
+  private failedSplitReceipt(
+    plan: SplitExecutionPlan,
+    timestamp: number,
+    collateralReceipt: CollateralReceipt,
+    error: string,
+  ): SplitExecutionReceipt {
+    return {
+      success: false,
+      allSucceeded: false,
+      partialFill: false,
+      legs: [],
+      collateralReceipt,
+      totalRequestedSize: plan.totalSize,
+      totalFilledSize: "0",
+      aggregateAvgPrice: "0",
+      timestamp,
+      warnings: [],
+      error,
+    };
   }
 
   private buildAllocationsFromLegs(plan: SplitExecutionPlan): SplitAllocation[] {
@@ -377,7 +447,11 @@ export class Executor {
     return plan.legs.map((leg) => {
       const size = parseFloat(leg.size);
       const estimatedAvgPrice = parseFloat(leg.price);
-      const estimatedCost = size * estimatedAvgPrice;
+      const notional = size * estimatedAvgPrice;
+      const leverage = Number.isFinite(leg.leverage) && (leg.leverage ?? 0) > 0
+        ? (leg.leverage as number)
+        : 1;
+      const estimatedCost = notional / leverage;
       return {
         market: leg.market,
         size,
@@ -390,15 +464,37 @@ export class Executor {
 
   private async applyLeverageIfRequested(plan: ExecutionPlan): Promise<void> {
     if (plan.leverage === undefined) return;
+    if (!Number.isFinite(plan.market.assetIndex)) {
+      throw new Error(`Invalid asset index "${plan.market.assetIndex}" for ${plan.market.coin}`);
+    }
     if (!Number.isFinite(plan.leverage) || plan.leverage <= 0) {
       throw new Error(`Invalid leverage "${plan.leverage}" for ${plan.market.coin}`);
     }
-    const isCross = plan.isCross ?? true;
+
+    // Safety clamp: never send leverage exceeding the market's maximum to the exchange
+    const maxLev = plan.market.maxLeverage;
+    let effective = plan.leverage;
+    if (maxLev > 0 && effective > maxLev) {
+      this.logger.warn(
+        { market: plan.market.coin, requested: effective, max: maxLev },
+        "Clamping leverage to market maximum (safety guard)",
+      );
+      effective = maxLev;
+    }
+
+    let isCross = plan.isCross ?? true;
+    if (isCross && plan.market.onlyIsolated) {
+      this.logger.warn(
+        { market: plan.market.coin, assetIndex: plan.market.assetIndex },
+        "Cross margin not supported for this asset; switching leverage update to isolated margin",
+      );
+      isCross = false;
+    }
     this.logger.info(
-      { market: plan.market.coin, leverage: plan.leverage, isCross },
+      { market: plan.market.coin, assetIndex: plan.market.assetIndex, leverage: effective, isCross },
       "Applying leverage before execution",
     );
-    await this.provider.setLeverage(plan.market.coin, plan.leverage, isCross);
+    await this.provider.setLeverage(plan.market.assetIndex, effective, isCross);
   }
 
   private async applySplitLeverage(plan: SplitExecutionPlan): Promise<void> {
@@ -410,5 +506,133 @@ export class Executor {
       await this.applyLeverageIfRequested(leg);
       applied.add(key);
     }
+  }
+
+  private parseOrderStatus(status: unknown, fallbackPrice: string): ParsedOrderStatus {
+    if (!status) {
+      return {
+        success: false,
+        orderId: undefined,
+        filledSize: "0",
+        avgPrice: "0",
+        error: "Exchange returned no order status.",
+      };
+    }
+
+    if (typeof status === "string") {
+      if (status === "waitingForFill" || status === "waitingForTrigger") {
+        return {
+          success: false,
+          orderId: undefined,
+          filledSize: "0",
+          avgPrice: "0",
+          error: `Order did not fill immediately (${status}).`,
+        };
+      }
+
+      return {
+        success: false,
+        orderId: undefined,
+        filledSize: "0",
+        avgPrice: "0",
+        error: `Unknown order status: ${status}`,
+      };
+    }
+
+    if (typeof status !== "object") {
+      return {
+        success: false,
+        orderId: undefined,
+        filledSize: "0",
+        avgPrice: "0",
+        error: "Unrecognized order status payload.",
+      };
+    }
+
+    const value = status as Record<string, unknown>;
+
+    if ("filled" in value && value.filled && typeof value.filled === "object") {
+      const filled = value.filled as Record<string, unknown>;
+      return {
+        success: true,
+        orderId: typeof filled.oid === "number" ? filled.oid : undefined,
+        filledSize: typeof filled.totalSz === "string" ? filled.totalSz : "0",
+        avgPrice: typeof filled.avgPx === "string" ? filled.avgPx : "0",
+      };
+    }
+
+    if ("resting" in value && value.resting && typeof value.resting === "object") {
+      const resting = value.resting as Record<string, unknown>;
+      return {
+        success: true,
+        orderId: typeof resting.oid === "number" ? resting.oid : undefined,
+        filledSize: "0",
+        avgPrice: fallbackPrice,
+      };
+    }
+
+    if ("error" in value) {
+      return {
+        success: false,
+        orderId: undefined,
+        filledSize: "0",
+        avgPrice: "0",
+        error: typeof value.error === "string" ? value.error : "Order rejected.",
+      };
+    }
+
+    return {
+      success: false,
+      orderId: undefined,
+      filledSize: "0",
+      avgPrice: "0",
+      error: "Unknown order status payload from exchange.",
+    };
+  }
+
+  private isDepositRequiredError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /must deposit before performing actions/i.test(message);
+  }
+
+  private normalizedApprovalTenthsBps(rawApproval: number): number {
+    if (!Number.isFinite(rawApproval) || rawApproval <= 0) return 0;
+    const raw = Math.max(0, rawApproval);
+    const candidates = [raw, raw * 10];
+    if (raw < 1) {
+      candidates.push(raw * 1000);
+    }
+    return Math.max(...candidates);
+  }
+
+  private isBuilderApprovalSufficient(rawApproval: number, requiredTenthsBps: number): boolean {
+    return this.normalizedApprovalTenthsBps(rawApproval) >= requiredTenthsBps;
+  }
+
+  /**
+   * Poll maxBuilderFee a few times with short delays to allow on-chain state propagation.
+   * The master wallet may have just signed the approval via the frontend pre-trade flow.
+   */
+  private async pollBuilderApproval(
+    userAddress: string,
+    retries = 2,
+    delayMs = 500,
+  ): Promise<boolean> {
+    if (!this.wireBuilder) return false;
+    for (let i = 0; i < retries; i++) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const approval = await this.provider.maxBuilderFee({
+          user: userAddress,
+          builder: this.wireBuilder.b,
+        });
+        if (this.isBuilderApprovalSufficient(approval, this.wireBuilder.f)) {
+          return true;
+        }
+      } catch {
+        // Ignore transient errors during polling
+      }
+    }
+    return false;
   }
 }

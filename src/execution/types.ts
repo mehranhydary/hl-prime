@@ -22,13 +22,36 @@ export type OrderStatusType =
   | "cancelled"
   | "rejected";
 
+/** Per-leg receipt within a split execution. */
+export interface LegReceipt {
+  market: PerpMarket;
+  side: "buy" | "sell";
+  requestedSize: string;
+  filledSize: string;
+  avgPrice: string;
+  orderId: number | undefined;
+  success: boolean;
+  error?: string;
+  raw?: unknown;
+}
+
 export interface SplitExecutionReceipt {
-  success: boolean;             // true if ALL legs succeeded
-  legs: ExecutionReceipt[];     // per-market receipts
+  /** True only if ALL legs succeeded. */
+  allSucceeded: boolean;
+  /** True if at least one leg succeeded but not all. */
+  partialFill: boolean;
+  /** Individual per-leg results. */
+  legs: LegReceipt[];
   collateralReceipt: CollateralReceipt;
   totalRequestedSize: string;
   totalFilledSize: string;
-  aggregateAvgPrice: string;    // weighted by filled size
+  /** Weighted average price across all filled legs. */
+  aggregateAvgPrice: string;
   timestamp: number;
+  /** Warnings generated during execution. */
+  warnings: string[];
   error?: string;
+
+  /** @deprecated Use allSucceeded instead. */
+  success: boolean;
 }

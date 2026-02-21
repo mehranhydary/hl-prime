@@ -36,11 +36,12 @@
 	],
 	"license": "MIT",
 	"dependencies": {
-		"@nktkas/hyperliquid": "^0.30.0",
+		"@nktkas/hyperliquid": "^0.31.0",
 		"better-sqlite3": "^11.0.0",
 		"commander": "^12.0.0",
 		"pino": "^9.0.0",
-		"viem": "^2.0.0"
+		"viem": "^2.0.0",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.0.0",

@@ -5,6 +5,7 @@ import type { PerpMarket, MarketGroup } from "./types.js";
 
 export class MarketRegistry {
   private groups = new Map<string, MarketGroup>();
+  private coinIndex = new Map<string, PerpMarket>();
   private spotTokens = new Map<number, SpotToken>();
   private logger: Logger;
 
@@ -103,6 +104,15 @@ export class MarketRegistry {
     this.groups = nextGroups;
     this.spotTokens = nextSpotTokens;
 
+    // Build coin→market index for O(1) lookup by coin name
+    const nextCoinIndex = new Map<string, PerpMarket>();
+    for (const group of nextGroups.values()) {
+      for (const market of group.markets) {
+        nextCoinIndex.set(market.coin, market);
+      }
+    }
+    this.coinIndex = nextCoinIndex;
+
     this.logger.info(
       {
         totalAssets,
@@ -132,6 +142,11 @@ export class MarketRegistry {
     return [...this.groups.values()].filter((g) => g.hasAlternatives);
   }
 
+  /** O(1) lookup of a market by its full coin name (e.g. "xyz:TSLA"). */
+  findByCoin(coin: string): PerpMarket | undefined {
+    return this.coinIndex.get(coin);
+  }
+
   private parseAsset(
     asset: MetaAsset,
     index: number,
@@ -150,8 +165,14 @@ export class MarketRegistry {
       dexName,
       collateral,
       isNative,
+      maxLeverage: asset.maxLeverage,
+      szDecimals: asset.szDecimals,
+      onlyIsolated: asset.onlyIsolated,
+      marginMode: asset.marginMode,
       funding: ctx.funding,
       openInterest: ctx.openInterest,
+      prevDayPx: ctx.prevDayPx,
+      dayNtlVlm: ctx.dayNtlVlm,
       markPrice: ctx.markPx,
       oraclePx: ctx.oraclePx,
     };

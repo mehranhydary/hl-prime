@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" class="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Prime</title>
+		<script>
+			(function() {
+				var t = localStorage.getItem('prime-theme');
+				if (t === 'light') {
+					document.documentElement.classList.remove('dark');
+					document.documentElement.classList.add('light');
+				}
+			})();
+		</script>
+	</head>
+	<body class="bg-surface-0 text-text-secondary min-h-screen">
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

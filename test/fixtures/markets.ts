@@ -8,6 +8,7 @@ export const TSLA_XYZ: PerpMarket = {
   dexName: "xyz",
   collateral: "USDC",
   isNative: false,
+  maxLeverage: 10,
   funding: "0.00000625",
   openInterest: "37735.156",
   markPrice: "431.56",
@@ -20,6 +21,7 @@ export const TSLA_FLX: PerpMarket = {
   dexName: "flx",
   collateral: "USDH",
   isNative: false,
+  maxLeverage: 10,
   funding: "-0.0002",
   openInterest: "1780.1",
   markPrice: "431.86",
@@ -32,9 +34,24 @@ export const TSLA_CASH: PerpMarket = {
   dexName: "cash",
   collateral: "USDT0",
   isNative: false,
+  maxLeverage: 10,
   funding: "0.0005",
   openInterest: "3839.184",
   markPrice: "431.48",
+};
+
+/** Low-leverage variant for testing leverage clamping */
+export const TSLA_LOW_LEV: PerpMarket = {
+  baseAsset: "TSLA",
+  coin: "lowlev:TSLA",
+  assetIndex: 140000,
+  dexName: "lowlev",
+  collateral: "USDC",
+  isNative: false,
+  maxLeverage: 5,
+  funding: "0.0001",
+  openInterest: "2000",
+  markPrice: "431.60",
 };
 
 export const ALL_TSLA_MARKETS = [TSLA_XYZ, TSLA_FLX, TSLA_CASH];
@@ -46,6 +63,7 @@ export const BTC_NATIVE: PerpMarket = {
   dexName: "__native__",
   collateral: "USDC",
   isNative: true,
+  maxLeverage: 50,
   funding: "0.00005",
   openInterest: "100000",
   markPrice: "42000.50",
@@ -59,6 +77,7 @@ export const ETH_NATIVE: PerpMarket = {
   dexName: "__native__",
   collateral: "USDC",
   isNative: true,
+  maxLeverage: 50,
   funding: "0.00003",
   openInterest: "500000",
   markPrice: "3200.00",
@@ -71,6 +90,7 @@ export const ETH_HYENA: PerpMarket = {
   dexName: "hyena",
   collateral: "USDC",
   isNative: false,
+  maxLeverage: 20,
   funding: "0.00001",
   openInterest: "12000",
   markPrice: "3200.50",

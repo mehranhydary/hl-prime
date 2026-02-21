@@ -227,6 +227,59 @@ describe("SplitOptimizer", () => {
       expect(result!.midPrice).toBeGreaterThan(0);
     });
 
+    it("handles very small size that fits in first level", async () => {
+      const book = await aggregateBooks({
+        "xyz:TSLA": TSLA_BOOK_DEEP,
+        "flx:TSLA": TSLA_HIP3_BOOK,
+      });
+      const markets = marketMap(TSLA_XYZ, TSLA_FLX);
+      const result = optimizer.optimize(book, "buy", 0.1, markets);
+      expect(result).not.toBeNull();
+      expect(result!.totalSize).toBeCloseTo(0.1, 2);
+      expect(result!.allocations.length).toBe(1);
+    });
+
+    it("handles 3+ market split with a third dex", async () => {
+      const thirdDex = [{
+        name: "xyz",
+        universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 0,
+      }, {
+        name: "flx",
+        universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 1,
+      }, {
+        name: "cash",
+        universe: [{ name: "cash:TSLA", szDecimals: 3, maxLeverage: 10 }],
+        collateralToken: 2,
+      }];
+      const cashBook: L2Book = {
+        coin: "cash:TSLA",
+        time: 1707580800000,
+        levels: [
+          [{ px: "430.50", sz: "4.0", n: 2 }, { px: "430.00", sz: "10.0", n: 3 }],
+          [{ px: "431.60", sz: "4.0", n: 2 }, { px: "432.10", sz: "10.0", n: 3 }],
+        ],
+      };
+      const TSLA_CASH_MKT: PerpMarket = {
+        baseAsset: "TSLA", coin: "cash:TSLA", assetIndex: 130001,
+        dexName: "cash", collateral: "USDT0", isNative: false,
+        maxLeverage: 10, funding: "0.0005", openInterest: "3839", markPrice: "431.48",
+      };
+
+      const book = await aggregateBooks(
+        { "xyz:TSLA": TSLA_BOOK_DEEP, "flx:TSLA": TSLA_HIP3_BOOK, "cash:TSLA": cashBook },
+        thirdDex,
+      );
+
+      const markets = marketMap(TSLA_XYZ, TSLA_FLX, TSLA_CASH_MKT);
+      // Request enough to span all 3 markets at first ask levels
+      const result = optimizer.optimize(book, "buy", 12, markets);
+      expect(result).not.toBeNull();
+      expect(result!.totalSize).toBeCloseTo(12, 1);
+      expect(result!.allocations.length).toBeGreaterThanOrEqual(2);
+    });
+
     it("proportions are correct for multi-market split", async () => {
       const book = await aggregateBooks({
         "xyz:TSLA": TSLA_BOOK_DEEP,

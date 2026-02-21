@@ -8,9 +8,16 @@ export interface PerpMarket {
   collateral: string;      // "USDC", "USDH", "USDT0"
   isNative: boolean;       // true for core HL perps, false for HIP-3
 
+  maxLeverage: number;     // From MetaAsset
+  szDecimals?: number;     // Size precision allowed by exchange for this market
+  onlyIsolated?: boolean;  // Some assets disallow cross margin for leverage updates
+  marginMode?: string;     // Raw mode hint from exchange metadata (if provided)
+
   // Populated from assetCtx
   funding?: string;
   openInterest?: string;
+  prevDayPx?: string;
+  dayNtlVlm?: string;
   markPrice?: string;
   oraclePx?: string;
 }

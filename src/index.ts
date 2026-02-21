@@ -11,17 +11,22 @@ import { CollateralManager } from "./collateral/manager.js";
 import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
 import { HyperliquidPrimeError, NoWalletError, NotConnectedError } from "./utils/errors.js";
+import { assetVariants } from "./utils/asset.js";
 import type { PerpMarket, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 import type {
   Quote,
   ExecutionPlan,
+  SplitAllocation,
   SplitQuote,
   SplitExecutionPlan,
   TradeExecutionOptions,
 } from "./router/types.js";
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 import type { LogicalPosition } from "./position/types.js";
+import type { CollateralPlan } from "./collateral/types.js";
+import type { ReferralResponse } from "./provider/types.js";
 import type { Logger } from "./logging/logger.js";
+import type { WithWarnings } from "./types/result.js";
 
 export class HyperliquidPrime {
   private provider: HLProvider;
@@ -43,11 +48,6 @@ export class HyperliquidPrime {
       pretty: config.prettyLogs ?? false,
     });
 
-    this.provider = new NktkasProvider({
-      privateKey: config.privateKey,
-      testnet: config.testnet ?? false,
-    });
-
     // Derive wallet address if private key is provided
     if (config.privateKey) {
       this.walletAddress =
@@ -56,6 +56,12 @@ export class HyperliquidPrime {
     } else {
       this.walletAddress = config.walletAddress;
     }
+
+    this.provider = new NktkasProvider({
+      privateKey: config.privateKey,
+      walletAddress: this.walletAddress as `0x${string}` | undefined,
+      testnet: config.testnet ?? false,
+    });
 
     this._registry = new MarketRegistry(this.provider, this.logger);
     this.aggregator = new BookAggregator(
@@ -190,7 +196,9 @@ export class HyperliquidPrime {
   async execute(plan: ExecutionPlan): Promise<ExecutionReceipt> {
     this.ensureConnected();
     const user = this.ensureWallet();
-    return this.executor.execute(plan, user);
+    const receipt = await this.executor.execute(plan, user);
+    this.provider.invalidateBalanceCaches?.();
+    return receipt;
   }
 
   /** Convenience: quote + execute in one call. */
@@ -240,11 +248,29 @@ export class HyperliquidPrime {
   async executeSplit(plan: SplitExecutionPlan): Promise<SplitExecutionReceipt> {
     this.ensureConnected();
     const user = this.ensureWallet();
-    return this.executor.executeSplit(
+    const receipt = await this.executor.executeSplit(
       plan,
       this.collateralManager,
       user,
     );
+    this.provider.invalidateBalanceCaches?.();
+    return receipt;
+  }
+
+  /**
+   * Estimate collateral swaps required for a split execution plan.
+   * Read-only: no transfers, swaps, or abstraction writes are performed.
+   */
+  async estimateSplitCollateral(
+    plan: SplitExecutionPlan,
+    userAddress?: string,
+  ): Promise<CollateralPlan> {
+    this.ensureConnected();
+    const user = userAddress ?? this.walletAddress;
+    if (!user) throw new NoWalletError();
+
+    const allocations = this.buildAllocationsFromSplitPlan(plan);
+    return this.collateralManager.estimateRequirements(allocations, user);
   }
 
   /** Convenience: split quote + execute in one call. */
@@ -269,15 +295,26 @@ export class HyperliquidPrime {
   async close(baseAsset: string): Promise<ExecutionReceipt[]> {
     this.ensureConnected();
     const user = this.ensureWallet();
-    const allPositions = await this.positions.getPositions(user);
+    const requestedVariants = assetVariants(baseAsset);
+    const { data: allPositions } = await this.positions.getPositions(user);
     const toClose = allPositions.filter(
-      (p) => p.baseAsset.toUpperCase() === baseAsset.toUpperCase() && p.size > 0,
+      (p) => {
+        if (p.size <= 0 || requestedVariants.size === 0) return false;
+        const positionVariants = new Set<string>([
+          ...assetVariants(p.baseAsset),
+          ...assetVariants(p.coin),
+        ]);
+        for (const variant of positionVariants) {
+          if (requestedVariants.has(variant)) return true;
+        }
+        return false;
+      },
     );
 
     const receipts: ExecutionReceipt[] = [];
     for (const pos of toClose) {
       const side = pos.side === "long" ? "sell" : "buy";
-      const q = await this.quote(pos.coin, side, pos.size);
+      const q = await this.quote(pos.baseAsset, side, pos.size);
       const receipt = await this.execute(q.plan);
       receipts.push(receipt);
     }
@@ -286,15 +323,15 @@ export class HyperliquidPrime {
 
   // === Positions ===
 
-  /** Get all positions. */
-  async getPositions(): Promise<LogicalPosition[]> {
+  /** Get all positions with warnings about any failed deployer fetches. */
+  async getPositions(): Promise<WithWarnings<LogicalPosition[]>> {
     this.ensureConnected();
     const user = this.ensureWallet();
     return this.positions.getPositions(user);
   }
 
-  /** Get positions grouped by base asset (unified view). */
-  async getGroupedPositions(): Promise<Map<string, LogicalPosition[]>> {
+  /** Get positions grouped by base asset (unified view) with warnings. */
+  async getGroupedPositions(): Promise<WithWarnings<Map<string, LogicalPosition[]>>> {
     this.ensureConnected();
     const user = this.ensureWallet();
     return this.positions.getGroupedPositions(user);
@@ -313,6 +350,50 @@ export class HyperliquidPrime {
     const user = this.ensureWallet();
     const state = await this.provider.clearinghouseState(user);
     return state.marginSummary;
+  }
+
+  // === Agent Wallet Management ===
+
+  /** Approve an agent wallet to trade on behalf of this account. Master signs. */
+  async approveAgent(agentAddress: `0x${string}`, agentName?: string): Promise<void> {
+    this.ensureConnected();
+    return this.provider.approveAgent({
+      agentAddress,
+      agentName: agentName ?? null,
+    });
+  }
+
+  /** List approved agent wallets for the current user. */
+  async listAgents(): Promise<{ address: `0x${string}`; name: string; validUntil: number }[]> {
+    this.ensureConnected();
+    const user = this.ensureWallet();
+    return this.provider.extraAgents(user);
+  }
+
+  /** Set abstraction mode for the user. Master signs. */
+  async setAbstraction(
+    abstraction: "dexAbstraction" | "unifiedAccount" | "portfolioMargin" | "disabled",
+  ): Promise<void> {
+    this.ensureConnected();
+    const user = this.ensureWallet();
+    return this.provider.userSetAbstraction({
+      user: user as `0x${string}`,
+      abstraction,
+    });
+  }
+
+  /** Set abstraction mode as an agent. Agent signs. */
+  async agentSetAbstraction(abstraction: "i" | "u" | "p"): Promise<void> {
+    this.ensureConnected();
+    return this.provider.agentSetAbstraction({ abstraction });
+  }
+
+  // === Referral ===
+
+  /** Get referral data for any user (public read, no wallet needed). */
+  async getReferral(user: string): Promise<ReferralResponse> {
+    this.ensureConnected();
+    return this.provider.referral(user);
   }
 
   // === Escape Hatches ===
@@ -390,6 +471,30 @@ export class HyperliquidPrime {
       isCross: options.isCross ?? true,
     };
   }
+
+  private buildAllocationsFromSplitPlan(plan: SplitExecutionPlan): SplitAllocation[] {
+    const totalSize = plan.legs.reduce(
+      (sum, leg) => sum + parseFloat(leg.size),
+      0,
+    );
+
+    return plan.legs.map((leg) => {
+      const size = parseFloat(leg.size);
+      const estimatedAvgPrice = parseFloat(leg.price);
+      const notional = size * estimatedAvgPrice;
+      const leverage = Number.isFinite(leg.leverage) && (leg.leverage ?? 0) > 0
+        ? (leg.leverage as number)
+        : 1;
+      const estimatedCost = notional / leverage;
+      return {
+        market: leg.market,
+        size,
+        estimatedCost,
+        estimatedAvgPrice,
+        proportion: totalSize > 0 ? size / totalSize : 0,
+      };
+    });
+  }
 }
 
 // Re-export types for consumers
@@ -398,8 +503,9 @@ export type { HLProvider } from "./provider/provider.js";
 export type { PerpMarket, HIP3Market, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, SplitExecutionPlan, SplitAllocation, SplitResult } from "./router/types.js";
 export { isSplitQuote } from "./router/types.js";
-export type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
+export type { ExecutionReceipt, SplitExecutionReceipt, LegReceipt } from "./execution/types.js";
 export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
+export type { ReferralResponse, ReferralUserState } from "./provider/types.js";
 export type { LogicalPosition, ManagedPositionState, RiskProfile } from "./position/types.js";
 export type { TradeExecutionOptions } from "./router/types.js";
 export type { Logger } from "./logging/logger.js";
@@ -423,3 +529,5 @@ export {
   NotConnectedError,
   ExecutionError,
 } from "./utils/errors.js";
+export type { WithWarnings } from "./types/result.js";
+export { ok, withWarnings } from "./types/result.js";

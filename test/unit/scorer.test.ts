@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MarketScorer } from "../../src/router/scorer.js";
-import { TSLA_XYZ, TSLA_FLX, TSLA_CASH } from "../fixtures/markets.js";
+import { TSLA_XYZ, TSLA_FLX, TSLA_CASH, TSLA_LOW_LEV } from "../fixtures/markets.js";
 import type { SimulationResult } from "../../src/router/types.js";
 
 describe("MarketScorer", () => {
@@ -82,5 +82,73 @@ describe("MarketScorer", () => {
     const score = scorer.score(baseSim, TSLA_FLX, "buy", ["USDC"], 3.5);
     expect(score.reason).toContain("USDH");
     expect(score.reason).toContain("3.5");
+  });
+
+  it("handles zero price impact", () => {
+    const zeroBps: SimulationResult = { ...baseSim, priceImpactBps: 0 };
+    const score = scorer.score(zeroBps, TSLA_XYZ, "buy", ["USDC"]);
+    expect(score.priceImpact).toBe(0);
+  });
+
+  it("handles very high price impact (>100 bps)", () => {
+    const highBps: SimulationResult = { ...baseSim, priceImpactBps: 150 };
+    const score = scorer.score(highBps, TSLA_XYZ, "buy", ["USDC"]);
+    expect(score.priceImpact).toBe(150);
+    expect(score.totalScore).toBeGreaterThan(100);
+  });
+
+  it("matches collateral when user has multiple stables including the needed one", () => {
+    const score = scorer.score(baseSim, TSLA_FLX, "buy", ["USDC", "USDH"]);
+    expect(score.collateralMatch).toBe(true);
+    expect(score.swapCostBps).toBeUndefined();
+  });
+
+  it("considers funding neutral (near-zero) as minimal impact", () => {
+    const zeroFunding = { ...TSLA_XYZ, funding: "0.0000001" };
+    const score = scorer.score(baseSim, zeroFunding, "buy", ["USDC"]);
+    // Should be very close to pure price impact score
+    expect(score.totalScore).toBeCloseTo(baseSim.priceImpactBps, 0);
+  });
+
+  describe("leverage penalty", () => {
+    it("penalizes market when requested leverage exceeds maxLeverage", () => {
+      // TSLA_LOW_LEV maxLeverage = 5, request 10x → gap of 5
+      const clamped = scorer.score(baseSim, TSLA_LOW_LEV, "buy", ["USDC"], undefined, 10);
+      const noClamping = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"], undefined, 10);
+
+      expect(clamped.totalScore).toBeGreaterThan(noClamping.totalScore);
+      expect(clamped.leverageClamped).toBe(5);
+      expect(noClamping.leverageClamped).toBeUndefined();
+    });
+
+    it("does not penalize when requested leverage is within maxLeverage", () => {
+      const within = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"], undefined, 8);
+      const noLev = scorer.score(baseSim, TSLA_XYZ, "buy", ["USDC"]);
+
+      expect(within.totalScore).toBe(noLev.totalScore);
+      expect(within.leverageClamped).toBeUndefined();
+    });
+
+    it("does not penalize when no leverage is requested", () => {
+      const noLev = scorer.score(baseSim, TSLA_LOW_LEV, "buy", ["USDC"]);
+      expect(noLev.leverageClamped).toBeUndefined();
+    });
+
+    it("includes leverage clamp in reason message", () => {
+      const score = scorer.score(baseSim, TSLA_LOW_LEV, "buy", ["USDC"], undefined, 10);
+      expect(score.reason).toContain("clamped to 5x");
+      expect(score.reason).toContain("requested 10x");
+    });
+
+    it("combines collateral and leverage penalties", () => {
+      // TSLA_FLX: USDH collateral + maxLeverage 10
+      // Request 15x with wrong collateral → both penalties
+      const score = scorer.score(baseSim, TSLA_LOW_LEV, "buy", ["USDH"], undefined, 10);
+
+      expect(score.collateralMatch).toBe(false);
+      expect(score.leverageClamped).toBe(5);
+      expect(score.reason).toContain("USDC");
+      expect(score.reason).toContain("clamped to 5x");
+    });
   });
 });

@@ -292,7 +292,10 @@ export function createProgram(): Command {
     .command("positions")
     .description("Show all positions (unified view)")
     .action(async () => withClient(program, async (hp, opts) => {
-      const grouped = await hp.getGroupedPositions();
+      const { data: grouped, warnings } = await hp.getGroupedPositions();
+      if (warnings.length > 0) {
+        for (const w of warnings) console.warn(`[warn] ${w}`);
+      }
       if (opts.json) {
         output(Object.fromEntries(grouped), true);
         return;
