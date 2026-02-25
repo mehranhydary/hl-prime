@@ -20,7 +20,8 @@ await hp.long('ETH', 10, { leverage: 10 })
 await hp.shortSplit('TSLA', 100)
 
 // Unified position view
-const positions = await hp.getGroupedPositions()
+const { data: positions, warnings } = await hp.getGroupedPositions()
+if (warnings.length > 0) console.warn(warnings)
 await hp.disconnect()`;
 
 const codeHtml = `<span style="color: #76cfc1;">import</span> &#123; HyperliquidPrime &#125; <span style="color: #76cfc1;">from</span> <span style="color: #FFFFFF;">'hyperliquid-prime'</span>
@@ -44,7 +45,8 @@ const codeHtml = `<span style="color: #76cfc1;">import</span> &#123; Hyperliquid
 <span style="color: #76cfc1;">await</span> hp.shortSplit(<span style="color: #FFFFFF;">'TSLA'</span>, <span style="color: #adfff3;">100</span>)
 
 <span style="color: #969e9c;">// Unified position view</span>
-<span style="color: #76cfc1;">const</span> positions = <span style="color: #76cfc1;">await</span> hp.getGroupedPositions()
+<span style="color: #76cfc1;">const</span> &#123; data: positions, warnings &#125; = <span style="color: #76cfc1;">await</span> hp.getGroupedPositions()
+<span style="color: #76cfc1;">if</span> (warnings.length &gt; <span style="color: #adfff3;">0</span>) console.warn(warnings)
 <span style="color: #76cfc1;">await</span> hp.disconnect()`;
 ---
 

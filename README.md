@@ -95,7 +95,11 @@ console.log(splitQuote.allocations)
 //   { market: flx:TSLA, size: 50, proportion: 0.25 },
 //   { market: km:TSLA, size: 30, proportion: 0.15 },
 // ]
-console.log(splitQuote.collateralPlan.swapsNeeded) // false (resolved at executeSplit time)
+console.log(splitQuote.collateralPlan.swapsNeeded) // false (placeholder at quote time)
+
+// Read-only preview using live balances before executing
+const collateralPreview = await hp.estimateSplitCollateral(splitQuote.splitPlan)
+console.log(collateralPreview.swapsNeeded) // true/false
 
 const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
 console.log(splitReceipt.totalFilledSize) // "200"
@@ -106,7 +110,10 @@ const splitReceipt2 = await hp.longSplit('TSLA', 200)
 const splitReceipt3 = await hp.shortSplit('TSLA', 100)
 
 // Unified position view across all perp markets
-const positions = await hp.getGroupedPositions()
+const { data: positions, warnings } = await hp.getGroupedPositions()
+if (warnings.length > 0) {
+	console.warn(warnings)
+}
 const tslaPositions = positions.get('TSLA')
 // Shows all TSLA positions across all markets in one group
 
@@ -250,6 +257,8 @@ const hp = new HyperliquidPrime({
 })
 ```
 
+`builder.feeBps` must be between `0` and `10` (inclusive).
+
 The builder fee only applies to orders placed through `execute()`, `executeSplit()`, and their convenience wrappers (`long`, `short`, `longSplit`, `shortSplit`). Raw provider calls via `hp.api` are never affected.
 
 CLI flag to disable:
@@ -269,6 +278,7 @@ HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 | `getFundingComparison(asset)`    | Funding rates compared across markets         |
 | `quote(asset, side, size, options?)`       | Routing quote for single best market          |
 | `quoteSplit(asset, side, size, options?)`  | Split quote across multiple markets           |
+| `estimateSplitCollateral(splitPlan, userAddress?)` | Read-only collateral requirement estimate for a split plan |
 
 ### Trading Methods (wallet required)
 
@@ -296,14 +306,34 @@ interface TradeExecutionOptions {
 Notes:
 - `isCross` requires `leverage` (margin mode is only set when leverage is explicitly requested).
 - If `leverage` is omitted, the SDK does not call `setLeverage` and uses exchange/account defaults.
+- Quotes may include `warnings` (e.g. partial market data, leverage clamping, or collateral fallback to USDC).
 
 ### Position & Balance
 
 | Method                  | Description                        |
 | ----------------------- | ---------------------------------- |
-| `getPositions()`        | All positions with market metadata |
-| `getGroupedPositions()` | Positions grouped by base asset    |
+| `getPositions()`        | `WithWarnings<LogicalPosition[]>` |
+| `getGroupedPositions()` | `WithWarnings<Map<string, LogicalPosition[]>>` |
 | `getBalance()`          | Account margin summary             |
+
+`getPositions()` and `getGroupedPositions()` return `{ data, warnings }`. Handle warnings to detect partial/degraded reads.
+
+### Agent, Abstraction & Referral
+
+| Method                                 | Description                                                   |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `approveAgent(agentAddress, agentName?)` | Approve an agent wallet to trade for the account (master signs) |
+| `listAgents()`                         | List approved agent wallets                                   |
+| `setAbstraction(mode)`                 | Set abstraction mode as master (`dexAbstraction`, `unifiedAccount`, `portfolioMargin`, `disabled`) |
+| `agentSetAbstraction(mode)`            | Set abstraction mode as agent (`"i"`, `"u"`, `"p"`)          |
+| `getReferral(user)`                    | Fetch referral state/rewards for any user                     |
+
+### Lifecycle
+
+| Method         | Description                                      |
+| -------------- | ------------------------------------------------ |
+| `connect()`    | Connect provider and discover markets (required) |
+| `disconnect()` | Close provider connections                       |
 
 ### Escape Hatches
 

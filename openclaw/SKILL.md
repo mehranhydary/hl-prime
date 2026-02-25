@@ -68,11 +68,13 @@ const receipt3 = await hp.short('TSLA', 25, { leverage: 3, isCross: false })
 
 // Split across multiple markets for better fills
 const splitQuote = await hp.quoteSplit('TSLA', 'buy', 200, { leverage: 4 })
+const collateralPreview = await hp.estimateSplitCollateral(splitQuote.splitPlan)
 const splitReceipt = await hp.executeSplit(splitQuote.splitPlan)
 // Or one-step: await hp.longSplit('TSLA', 200)
 
 // Unified position view
-const positions = await hp.getGroupedPositions()
+const { data: positions, warnings } = await hp.getGroupedPositions()
+if (warnings.length > 0) console.warn(warnings)
 
 await hp.disconnect()
 ```
@@ -166,6 +168,7 @@ interface HyperliquidPrimeConfig {
 ### Builder Fee
 
 A 1 basis point (0.01%) builder fee is included by default on all SDK-executed orders via Hyperliquid's native builder fee mechanism. The fee is auto-approved on the trader's first order. Set `builder: null` to disable, or provide a custom `{ address, feeBps }` to override.
+`feeBps` must be between `0` and `10` (inclusive).
 
 ## Key Methods
 
@@ -176,6 +179,7 @@ A 1 basis point (0.01%) builder fee is included by default on all SDK-executed o
 - `getFundingComparison(asset)` — Funding rates compared across markets
 - `quote(asset, side, size, options?)` — Routing quote for single best market
 - `quoteSplit(asset, side, size, options?)` — Split quote across multiple markets
+- `estimateSplitCollateral(splitPlan, userAddress?)` — Read-only collateral requirement estimate for split execution
 
 ### Trading (wallet required)
 - `execute(plan)` — Execute a single-market quote
@@ -190,11 +194,19 @@ A 1 basis point (0.01%) builder fee is included by default on all SDK-executed o
 - `leverage?: number` — Positive number, e.g. `5` for 5x.
 - `isCross?: boolean` — Default `true` (cross); set `false` for isolated.
 - `isCross` requires `leverage`. If leverage is omitted, no leverage-setting API call is made.
+- Quotes may include `warnings` (partial market data, leverage clamping, collateral fallback).
 
 ### Position & Balance
-- `getPositions()` — All positions with market metadata
-- `getGroupedPositions()` — Positions grouped by base asset
+- `getPositions()` — Returns `{ data, warnings }` with full positions
+- `getGroupedPositions()` — Returns `{ data, warnings }` grouped by base asset
 - `getBalance()` — Account margin summary
+
+### Agent & Referral
+- `approveAgent(agentAddress, agentName?)` — Approve an agent wallet (master signs)
+- `listAgents()` — List approved agents
+- `setAbstraction(mode)` — Set abstraction as master (`dexAbstraction`, `unifiedAccount`, `portfolioMargin`, `disabled`)
+- `agentSetAbstraction(mode)` — Set abstraction as agent (`"i"`, `"u"`, `"p"`)
+- `getReferral(user)` — Fetch referral state/rewards
 
 ## Repository
 
