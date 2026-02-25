@@ -2,8 +2,9 @@ import { useWallet } from "../hooks/use-wallet";
 import { useNetwork } from "../lib/network-context";
 import { ThemeToggle } from "./ThemeToggle";
 import type { Network } from "@shared/types";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuthSession } from "../hooks/use-auth-session";
+import { lock as lockAccess } from "../lib/access-gate";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -12,9 +13,15 @@ function truncateAddress(addr: string): string {
 const BANNER_HEIGHT = 28; // px
 
 export function Header() {
+  const navigate = useNavigate();
   const { address, isConnected, isConnecting, connect, disconnect } = useWallet();
   const { network, setNetwork } = useNetwork();
   const auth = useAuthSession();
+
+  function handleLock(): void {
+    lockAccess();
+    navigate("/", { replace: true });
+  }
 
   return (
     <>
@@ -45,6 +52,12 @@ export function Header() {
         {/* Controls */}
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
+          <button
+            onClick={handleLock}
+            className="bg-surface-2 hover:bg-surface-3 border border-border px-2.5 py-1 text-[11px] text-text-muted transition-colors"
+          >
+            Lock
+          </button>
           <select
             value={network}
             onChange={(e) => setNetwork(e.target.value as Network)}
@@ -72,7 +85,7 @@ export function Header() {
               )}
               <button
                 onClick={disconnect}
-                className="bg-surface-2 hover:bg-surface-3 border border-border px-2.5 py-1 text-[11px] text-text-muted transition-colors font-mono"
+                className="bg-surface-2 hover:bg-surface-3 border border-border px-2.5 py-1 text-[11px] text-text-muted transition-colors"
               >
                 {truncateAddress(address!)}
               </button>

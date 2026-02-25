@@ -65,7 +65,7 @@ export function DepositModal({ address, onClose }: DepositModalProps) {
               Your Address
             </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-surface-2 border border-border px-3 py-2 text-xs text-text-primary font-mono break-all select-all">
+              <code className="flex-1 bg-surface-2 border border-border px-3 py-2 text-xs text-text-primary break-all select-all">
                 {address}
               </code>
               <button

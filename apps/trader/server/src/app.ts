@@ -5,6 +5,7 @@ import path from "node:path";
 import type { ServerConfig } from "./config.js";
 import { authRoutes, sessionAuth } from "./middleware/auth.js";
 import { memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
+import { passwordGateRoutes, requireAppAccess } from "./middleware/password-gate.js";
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
 import { tradeRoutes } from "./routes/trade.js";
@@ -31,6 +32,11 @@ export function createApp(config: ServerConfig) {
     windowMs: 60_000,
     max: 20,
   }));
+  app.use("/api/access/verify", memoryRateLimit({
+    keyPrefix: "access_verify",
+    windowMs: 60_000,
+    max: 10,
+  }));
   app.use("/api/agent", memoryRateLimit({
     keyPrefix: "agent",
     windowMs: 60_000,
@@ -43,6 +49,8 @@ export function createApp(config: ServerConfig) {
   }));
 
   app.use("/api", healthRoutes(config));
+  app.use("/api/access", passwordGateRoutes(config));
+  app.use("/api", requireAppAccess(config));
   app.use("/api/auth", authRoutes());
 
   if (config.authEnabled) {

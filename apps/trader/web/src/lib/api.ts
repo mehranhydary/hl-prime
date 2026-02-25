@@ -27,6 +27,7 @@ import {
   markAuthRequired,
   signIn,
 } from "./auth.js";
+import { clearAccessToken, getAccessHeaders } from "./access-gate.js";
 
 const BASE = "/api";
 
@@ -77,11 +78,13 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
     throw new ApiError("Sign in required", "AUTH_REQUIRED", 401);
   }
 
+  const accessHeaders = getAccessHeaders();
   const authHeaders = getAuthHeaders();
   const res = await fetch(`${BASE}${url}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...accessHeaders,
       ...authHeaders,
       ...(options?.headers as Record<string, string> | undefined),
     },
@@ -90,6 +93,9 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
   if (res.ok) return data as T;
 
   const { error, code } = parseErrorPayload(data);
+  if (code === "APP_LOCKED") {
+    clearAccessToken();
+  }
   if (code === "AUTH_FAILED") {
     clearAuthSession();
     markAuthRequired();

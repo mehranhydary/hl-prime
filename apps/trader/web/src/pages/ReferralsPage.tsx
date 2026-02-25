@@ -314,7 +314,7 @@ function ReferralTable({ rows }: { rows: ReferralRow[] }) {
             className="px-4 py-3 border-b border-border/50 hover:bg-surface-2/50 transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-text-primary font-mono text-xs">{truncAddr(r.address)}</span>
+              <span className="text-text-primary text-xs">{truncAddr(r.address)}</span>
               <span className="text-text-dim text-[10px]">{formatDate(r.dateJoined)}</span>
             </div>
             <div className="flex items-center gap-4 text-xs">

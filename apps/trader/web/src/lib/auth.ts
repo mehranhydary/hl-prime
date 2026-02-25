@@ -8,6 +8,7 @@
 
 import { AUTH_DOMAIN, AUTH_TYPES, type SessionResponse } from "@shared/auth";
 import { getAddress } from "viem";
+import { getAccessHeaders } from "./access-gate.js";
 
 const STORAGE_KEY = "hl-prime:auth-session:v1";
 const SESSION_AUTH_ENABLED = (import.meta.env.VITE_TRADER_AUTH_ENABLED ?? "true").toLowerCase() !== "false";
@@ -198,7 +199,10 @@ export async function signIn(): Promise<boolean> {
 
     const res = await fetch("/api/auth/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getAccessHeaders(),
+      },
       body: JSON.stringify({ address, timestamp, nonce, signature }),
     });
 

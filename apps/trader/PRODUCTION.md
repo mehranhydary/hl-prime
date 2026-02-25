@@ -5,6 +5,12 @@
 - Mount a Railway Volume and set `TRADER_DATA_DIR` to that mount path.
 - Put the production domain behind Cloudflare Access during restricted beta rollout.
 
+## App password gate
+- Set `TRADER_APP_PASSWORD` to a strong secret before startup (server fails to boot when missing).
+- Landing routes (`/`, `/v2`) remain public.
+- All other routes and APIs require a valid `x-trader-access-token` issued by `POST /api/access/verify`.
+- Token lifetime defaults to 30 days and can be configured with `TRADER_APP_PASSWORD_TTL_DAYS`.
+
 ## Persistence
 - Runtime state sqlite defaults to `${TRADER_DATA_DIR}/runtime-state.db`.
 - Trade intent history defaults to `${TRADER_DATA_DIR}/trade-history.jsonl`.

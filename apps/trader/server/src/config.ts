@@ -6,6 +6,8 @@ export interface ServerConfig {
   host: string;
   dataDir: string;
   storePassphrase: string | null;
+  appPassword: string;
+  appPasswordTtlMs: number;
   defaultNetwork: Network;
   stableTokens: string[];
   defaultBuilderAddress: `0x${string}`;
@@ -84,6 +86,16 @@ export function loadConfig(): ServerConfig {
   const runtimeStateSqlitePath = process.env.TRADER_RUNTIME_STATE_SQLITE_PATH
     ?? path.join(dataDir, "runtime-state.db");
   const passphrase = process.env.TRADER_STORE_PASSPHRASE ?? null;
+  const appPassword = process.env.TRADER_APP_PASSWORD?.trim() ?? "";
+  if (!appPassword) {
+    throw new Error("TRADER_APP_PASSWORD must be set and non-empty.");
+  }
+  const appPasswordTtlDaysRaw = process.env.TRADER_APP_PASSWORD_TTL_DAYS ?? "30";
+  const appPasswordTtlDays = parseInt(appPasswordTtlDaysRaw, 10);
+  if (!Number.isFinite(appPasswordTtlDays) || appPasswordTtlDays <= 0) {
+    throw new Error("TRADER_APP_PASSWORD_TTL_DAYS must be a positive integer.");
+  }
+  const appPasswordTtlMs = appPasswordTtlDays * 24 * 60 * 60 * 1000;
   const requiresPassphrase = signerBackend === "local" || signerLocalFallback;
   if (requiresPassphrase && (!passphrase || passphrase.length < 8)) {
     throw new Error(
@@ -108,6 +120,8 @@ export function loadConfig(): ServerConfig {
     host,
     dataDir,
     storePassphrase: passphrase,
+    appPassword,
+    appPasswordTtlMs,
     defaultNetwork: (process.env.TRADER_DEFAULT_NETWORK as Network) ?? "mainnet",
     stableTokens,
     defaultBuilderAddress: (process.env.TRADER_BUILDER_ADDRESS as `0x${string}`) ??
