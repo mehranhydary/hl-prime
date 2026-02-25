@@ -46,7 +46,7 @@ export function DepositModal({ address, onClose }: DepositModalProps) {
           </svg>
         </button>
 
-        <h2 className="text-lg font-semibold text-text-primary mb-1">Deposit</h2>
+        <h2 className="text-lg font-semibold text-text-primary font-heading mb-1">Deposit</h2>
         <p className="text-text-muted text-xs mb-5">
           Send supported assets on Hyperliquid to your address below.
         </p>

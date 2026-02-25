@@ -72,17 +72,40 @@
   font-display: swap;
 }
 
+/* ─── Pixel Fonts ─── */
+@font-face {
+  font-family: "CSRentoPixel";
+  src: url("/fonts/CSRentoPixel-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ValtinePixel";
+  src: url("/fonts/ValtinePixel-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "CSRodneyPixel";
+  src: url("/fonts/CSRodneyPixel-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ─── Design Tokens (dark mode default) ─── */
 @theme {
-  --color-surface-0: #000000;
-  --color-surface-1: #0a0a0a;
-  --color-surface-2: #111111;
-  --color-surface-3: #1a1a1a;
+  --color-surface-0: #0a1a14;
+  --color-surface-1: #0f2119;
+  --color-surface-2: #142b21;
+  --color-surface-3: #1a3529;
 
-  --color-accent: #8b5cf6;
-  --color-accent-glow: #c4b5fd;
-  --color-accent-muted: rgba(139, 92, 246, 0.15);
-  --color-accent-subtle: rgba(139, 92, 246, 0.08);
+  --color-accent: #50e3b5;
+  --color-accent-glow: #a8f0d4;
+  --color-accent-muted: rgba(80, 227, 181, 0.15);
+  --color-accent-subtle: rgba(80, 227, 181, 0.08);
 
   --color-long: #22c55e;
   --color-long-muted: rgba(34, 197, 94, 0.15);
@@ -91,26 +114,26 @@
   --color-warning: #f59e0b;
   --color-loss: #f97316;
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #d1d5db;
-  --color-text-muted: #9ca3af;
-  --color-text-dim: #4b5563;
+  --color-text-primary: #e8f5f0;
+  --color-text-secondary: #b8d4ca;
+  --color-text-muted: #7a9e90;
+  --color-text-dim: #3d5a4e;
 
-  --color-border: #222222;
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border: #1e3a2d;
+  --color-border-subtle: rgba(168, 240, 212, 0.06);
 }
 
 /* ─── Light Mode Overrides ─── */
 html.light {
-  --color-surface-0: #ffffff;
-  --color-surface-1: #f9fafb;
-  --color-surface-2: #f3f4f6;
-  --color-surface-3: #e5e7eb;
+  --color-surface-0: #f2faf6;
+  --color-surface-1: #e8f5f0;
+  --color-surface-2: #dceee7;
+  --color-surface-3: #c8e4d8;
 
-  --color-accent: #7c3aed;
-  --color-accent-glow: #8b5cf6;
-  --color-accent-muted: rgba(124, 58, 237, 0.10);
-  --color-accent-subtle: rgba(124, 58, 237, 0.05);
+  --color-accent: #2d9e74;
+  --color-accent-glow: #50e3b5;
+  --color-accent-muted: rgba(45, 158, 116, 0.12);
+  --color-accent-subtle: rgba(45, 158, 116, 0.06);
 
   --color-long: #16a34a;
   --color-long-muted: rgba(22, 163, 74, 0.10);
@@ -119,32 +142,51 @@ html.light {
   --color-warning: #d97706;
   --color-loss: #ea580c;
 
-  --color-text-primary: #111827;
-  --color-text-secondary: #374151;
-  --color-text-muted: #6b7280;
-  --color-text-dim: #9ca3af;
+  --color-text-primary: #0a1a14;
+  --color-text-secondary: #1e3a2d;
+  --color-text-muted: #3d5a4e;
+  --color-text-dim: #7a9e90;
 
-  --color-border: #e5e7eb;
-  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-border: #c8e4d8;
+  --color-border-subtle: rgba(10, 26, 20, 0.06);
 }
 
 html {
   background-color: var(--color-surface-0);
   color: var(--color-text-secondary);
-  font-family: "ABCDiatype", system-ui, -apple-system, sans-serif;
+  font-family: "CSRodneyPixel", "ABCDiatype", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   overflow-y: scroll;
+  /* Mobile app: prevent overscroll bounce */
+  overscroll-behavior-y: none;
+}
+
+/* ─── Font utilities ─── */
+.font-heading {
+  font-family: "ValtinePixel", system-ui, sans-serif;
+}
+.font-logo {
+  font-family: "CSRentoPixel", system-ui, sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  /* iOS safe areas */
+  padding: env(safe-area-inset-top) 0 0 0;
+}
+
+/* ─── Mobile App Shell (on wider screens, show phone-width column) ─── */
+@media (min-width: 640px) {
+  body {
+    background: var(--color-surface-1);
+  }
 }
 
 ::selection {
-  background-color: rgba(139, 92, 246, 0.25);
+  background-color: rgba(80, 227, 181, 0.25);
 }
 
 /* ─── Range Slider ─── */
@@ -167,7 +209,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--color-text-primary);
   cursor: pointer;
   border: 2px solid var(--color-surface-0);
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 8px rgba(80, 227, 181, 0.2);
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -177,7 +219,7 @@ input[type="range"]::-moz-range-thumb {
   background: var(--color-text-primary);
   cursor: pointer;
   border: 2px solid var(--color-surface-0);
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 8px rgba(80, 227, 181, 0.2);
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -205,7 +247,7 @@ input[type="number"] {
 }
 .glow-border:hover {
   border-color: var(--color-accent);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.08);
+  box-shadow: 0 0 20px rgba(80, 227, 181, 0.08);
 }
 
 /* ─── Hide TradingView attribution watermark ─── */
@@ -216,7 +258,7 @@ a[href="https://www.tradingview.com/"] {
 /* ─── Landing Page ─── */
 
 .landing-gradient-text {
-  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #50e3b5 0%, #a8f0d4 50%, #50e3b5 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -236,7 +278,7 @@ a[href="https://www.tradingview.com/"] {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  font-family: "ABCDiatype", system-ui, sans-serif;
+  font-family: "CSRodneyPixel", "ABCDiatype", system-ui, sans-serif;
   letter-spacing: 0.02em;
 }
 
@@ -386,11 +428,11 @@ a[href="https://www.tradingview.com/"] {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  filter: grayscale(0.15) contrast(1.05);
+  filter: grayscale(0.15) contrast(1.05) sepia(0.2) hue-rotate(100deg);
   transition: filter 0.4s;
 }
 .landing-hero-image:hover {
-  filter: grayscale(0) contrast(1);
+  filter: grayscale(0) contrast(1) sepia(0.1) hue-rotate(100deg);
 }
 
 /* ── Right sidebar ── */
@@ -630,4 +672,3 @@ a[href="https://www.tradingview.com/"] {
     padding: 24px;
   }
 }
-

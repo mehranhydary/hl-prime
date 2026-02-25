@@ -47,18 +47,18 @@ export function CandleChart({ data, interval, onIntervalChange, onHoverPrice }: 
     if (!containerRef.current) return;
 
     const isDark = theme === "dark";
-    const textColor = isDark ? "#4b5563" : "#9ca3af";
-    const crosshairColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-    const labelBg = isDark ? "#1a1a1a" : "#f3f4f6";
+    const textColor = isDark ? "#3d5a4e" : "#7a9e90";
+    const crosshairColor = isDark ? "rgba(168,240,212,0.06)" : "rgba(10,26,20,0.06)";
+    const labelBg = isDark ? "#1a3529" : "#dceee7";
     const longColor = isDark ? "#22c55e" : "#16a34a";
     const shortColor = isDark ? "#ef4444" : "#dc2626";
-    const accentColor = isDark ? "#8b5cf6" : "#7c3aed";
+    const accentColor = isDark ? "#50e3b5" : "#2d9e74";
 
     const chart = createChart(containerRef.current, {
       layout: {
         background: { color: "transparent" },
         textColor,
-        fontFamily: "ABCDiatype, system-ui, sans-serif",
+        fontFamily: "CSRodneyPixel, ABCDiatype, system-ui, sans-serif",
         fontSize: 10,
       },
       grid: {
@@ -109,8 +109,8 @@ export function CandleChart({ data, interval, onIntervalChange, onHoverPrice }: 
     } else {
       const series = chart.addSeries(AreaSeries, {
         lineColor: accentColor,
-        topColor: isDark ? "rgba(139, 92, 246, 0.28)" : "rgba(124, 58, 237, 0.18)",
-        bottomColor: isDark ? "rgba(139, 92, 246, 0.01)" : "rgba(124, 58, 237, 0.01)",
+        topColor: isDark ? "rgba(80, 227, 181, 0.28)" : "rgba(45, 158, 116, 0.18)",
+        bottomColor: isDark ? "rgba(80, 227, 181, 0.01)" : "rgba(45, 158, 116, 0.01)",
         lineWidth: 2,
         crosshairMarkerBackgroundColor: accentColor,
         crosshairMarkerBorderColor: accentColor,

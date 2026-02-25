@@ -20,22 +20,21 @@ export function Dashboard() {
 
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-5">
-          <span className="text-5xl leading-none text-accent" style={{ fontFamily: "serif" }}>&#961;</span>
-          <h1 className="text-2xl font-semibold text-text-primary">HyperliquidPrime</h1>
-          <p className="text-text-muted text-sm max-w-sm leading-relaxed">
-            Connect your wallet to start trading across Hyperliquid&apos;s native and HIP-3 markets
-            with smart order routing.
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
+          <span className="text-4xl leading-none text-accent font-logo">P</span>
+          <h1 className="text-lg font-semibold text-text-primary font-heading">Connect Wallet</h1>
+          <p className="text-text-muted text-sm leading-relaxed">
+            Connect your wallet to start trading across Hyperliquid&apos;s native and HIP-3 markets.
           </p>
           <button
             onClick={connect}
             disabled={isConnecting}
-            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-8 py-3 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_24px_#8b5cf630]"
+            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
-          {error && <p className="text-short text-sm">{error}</p>}
+          {error && <p className="text-short text-xs">{error}</p>}
         </div>
       </div>
     );
@@ -43,15 +42,15 @@ export function Dashboard() {
 
   if (!auth.isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4 max-w-sm px-4">
-          <h2 className="text-xl font-semibold text-text-primary">Sign in to continue</h2>
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
+          <h2 className="text-lg font-semibold text-text-primary font-heading">Sign in to continue</h2>
           <p className="text-sm text-text-muted">
-            This app requires an authenticated session before protected market and account requests.
+            Sign in with your wallet to access markets and account data.
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0"
+            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -62,7 +61,7 @@ export function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <div className="px-4 py-8">
         <div className="animate-pulse space-y-3">
           <div className="h-8 bg-surface-1 w-48" />
           {Array.from({ length: 8 }).map((_, i) => (
@@ -75,7 +74,7 @@ export function Dashboard() {
 
   if (bootstrapError) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <div className="px-4 py-8">
         <div className="bg-short-muted border border-short/20 p-4 text-sm text-short">
           {bootstrapError.message}
         </div>
@@ -86,7 +85,7 @@ export function Dashboard() {
   const needsSetup = agentStatus && !agentStatus.configured;
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-4 pb-48">
+    <div className="px-4 py-4 pb-24">
       {/* Agent setup banner */}
       {needsSetup && (
         <Link
@@ -233,7 +232,7 @@ export function Dashboard() {
 
       {/* Markets heading */}
       <div className="flex items-center justify-between mb-3 px-1">
-        <h2 className="text-lg font-semibold text-text-primary">Markets</h2>
+        <h2 className="text-lg font-semibold text-text-primary font-heading">Markets</h2>
       </div>
 
       <AssetList assets={bootstrap?.assets ?? []} />

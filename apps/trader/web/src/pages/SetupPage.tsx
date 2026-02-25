@@ -122,18 +122,13 @@ export function SetupPage() {
 
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-5">
-          <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto">
-            <svg className="w-8 h-8 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-semibold text-text-primary">Connect Wallet First</h1>
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
+          <h1 className="text-lg font-semibold text-text-primary font-heading">Connect Wallet</h1>
           <p className="text-text-muted text-sm">Connect your wallet to set up agent delegation.</p>
           <button
             onClick={connect}
-            className="bg-accent hover:bg-accent/90 px-8 py-3 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_24px_#8b5cf620]"
+            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             Connect Wallet
           </button>
@@ -144,15 +139,15 @@ export function SetupPage() {
 
   if (!auth.isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4 max-w-sm px-4">
-          <h1 className="text-xl font-semibold text-text-primary">Sign in required</h1>
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
+          <h1 className="text-lg font-semibold text-text-primary font-heading">Sign in required</h1>
           <p className="text-sm text-text-muted">
-            Agent setup uses protected API routes. Sign in once with your wallet session first.
+            Agent setup requires an authenticated session.
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-8 py-3 text-sm font-semibold text-surface-0"
+            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -164,8 +159,8 @@ export function SetupPage() {
   const currentStepIdx = STEPS.indexOf(step);
 
   return (
-    <div className="max-w-md mx-auto px-4 py-8">
-      <h1 className="text-xl font-semibold text-text-primary mb-2">Agent Wallet Setup</h1>
+    <div className="px-4 py-4 pb-24">
+      <h1 className="text-xl font-semibold text-text-primary font-heading mb-2">Agent Wallet Setup</h1>
       <p className="text-text-muted text-sm mb-6">
         Approve a trading agent that can place orders on your behalf but cannot withdraw funds.
       </p>
@@ -178,7 +173,7 @@ export function SetupPage() {
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                   i === currentStepIdx
-                    ? "bg-accent text-surface-0 shadow-[0_0_12px_#8b5cf630]"
+                    ? "bg-accent text-surface-0 shadow-[0_0_12px_#50e3b530]"
                     : i < currentStepIdx
                     ? "bg-long text-surface-0"
                     : "bg-surface-2 border border-border text-text-muted"
@@ -212,7 +207,7 @@ export function SetupPage() {
           <button
             onClick={() => initMutation.mutate()}
             disabled={initMutation.isPending}
-            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_#8b5cf615]"
+            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_#50e3b515]"
           >
             {initMutation.isPending ? "Generating..." : "Generate Agent Wallet"}
           </button>
@@ -240,7 +235,7 @@ export function SetupPage() {
           </p>
           <button
             onClick={handleApprove}
-            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_20px_#8b5cf615]"
+            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_20px_#50e3b515]"
           >
             Approve Agent
           </button>

@@ -136,17 +136,8 @@ export function LandingPage() {
 				<div className='max-w-6xl mx-auto px-6 h-16 flex items-center justify-between'>
 					<div className='flex items-center gap-6'>
 						<Link to='/' className='flex items-center gap-2'>
-							<span
-								className='text-3xl leading-none text-accent'
-								style={{
-									fontFamily: 'serif',
-									transform: 'translateY(-1px)',
-								}}
-							>
-								&#961;
-							</span>
-							<span className='text-sm font-medium text-text-primary tracking-wide'>
-								Prime
+							<span className='text-3xl leading-none text-accent font-logo'>
+								P
 							</span>
 						</Link>
 						<nav className='hidden sm:flex items-center gap-4 text-xs text-text-muted'>
@@ -189,7 +180,7 @@ export function LandingPage() {
 					className='absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] pointer-events-none'
 					style={{
 						background:
-							'radial-gradient(ellipse at center, rgba(139,92,246,0.08) 0%, transparent 70%)',
+							'radial-gradient(ellipse at center, rgba(80,227,181,0.10) 0%, transparent 70%)',
 					}}
 				/>
 				<div className='relative max-w-3xl mx-auto text-center'>
@@ -197,7 +188,7 @@ export function LandingPage() {
 						<span className='w-1.5 h-1.5 rounded-full bg-long animate-pulse' />
 						Built on Hyperliquid
 					</div>
-					<h1 className='text-5xl sm:text-7xl font-bold leading-[1.05] tracking-tight mb-6'>
+					<h1 className='text-5xl sm:text-7xl font-bold leading-[1.05] tracking-tight mb-6 font-heading'>
 						Trade smarter
 						<br />
 						<span className='landing-gradient-text'>
@@ -234,21 +225,34 @@ export function LandingPage() {
 							<div
 								key={card.title}
 								className='relative overflow-hidden aspect-square flex flex-col justify-end transition-transform hover:scale-[1.01]'
-								style={{
-									backgroundImage: `url(${card.img})`,
-									backgroundSize: 'cover',
-									backgroundPosition: 'center',
-								}}
 							>
+								{/* Background image with green hue shift */}
+								<div
+									className='absolute inset-0 z-0'
+									style={{
+										backgroundImage: `url(${card.img})`,
+										backgroundSize: 'cover',
+										backgroundPosition: 'center',
+										filter: 'saturate(0.6) sepia(0.3) hue-rotate(90deg) brightness(0.9)',
+									}}
+								/>
+								{/* Green tint overlay */}
+								<div
+									className='absolute inset-0 z-[1] pointer-events-none'
+									style={{
+										background: 'rgba(30, 160, 100, 0.45)',
+										mixBlendMode: 'color',
+									}}
+								/>
 								{/* Bottom text with scrim */}
 								<div
 									className='relative z-10 p-6'
 									style={{
 										background:
-											'linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)',
+											'linear-gradient(to top, rgba(10,26,20,0.7) 0%, rgba(10,26,20,0.3) 60%, transparent 100%)',
 									}}
 								>
-									<h3 className='text-xl sm:text-2xl font-bold text-white leading-tight mb-1'>
+									<h3 className='text-xl sm:text-2xl font-bold text-white leading-tight mb-1 font-heading'>
 										{card.title}
 									</h3>
 									<p className='text-sm text-white/80 leading-relaxed max-w-xs'>
@@ -265,7 +269,7 @@ export function LandingPage() {
 			<section className='py-16 px-6 border-y border-border'>
 				<div className='max-w-4xl mx-auto grid grid-cols-3 gap-8 text-center'>
 					<div>
-						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1'>
+						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1 font-heading'>
 							50+
 						</div>
 						<div className='text-xs sm:text-sm text-text-muted uppercase tracking-wider'>
@@ -273,7 +277,7 @@ export function LandingPage() {
 						</div>
 					</div>
 					<div>
-						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1'>
+						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1 font-heading'>
 							100+
 						</div>
 						<div className='text-xs sm:text-sm text-text-muted uppercase tracking-wider'>
@@ -281,7 +285,7 @@ export function LandingPage() {
 						</div>
 					</div>
 					<div>
-						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1'>
+						<div className='text-3xl sm:text-4xl font-bold text-accent mb-1 font-heading'>
 							0
 						</div>
 						<div className='text-xs sm:text-sm text-text-muted uppercase tracking-wider'>
@@ -295,7 +299,7 @@ export function LandingPage() {
 			<section id='compare' className='py-24 px-6'>
 				<div className='max-w-3xl mx-auto'>
 					<div className='text-center mb-12'>
-						<h2 className='text-3xl sm:text-4xl font-bold mb-4'>
+						<h2 className='text-3xl sm:text-4xl font-bold mb-4 font-heading'>
 							Better than CEX
 						</h2>
 						<p className='text-text-muted text-lg'>
@@ -353,7 +357,7 @@ export function LandingPage() {
 			{/* ─── FAQ ─── */}
 			<section id='faq' className='py-24 px-6 border-t border-border'>
 				<div className='max-w-2xl mx-auto'>
-					<h2 className='text-3xl sm:text-4xl font-bold text-center mb-12'>
+					<h2 className='text-3xl sm:text-4xl font-bold text-center mb-12 font-heading'>
 						FAQ
 					</h2>
 					<div>
@@ -367,7 +371,7 @@ export function LandingPage() {
 			{/* ─── CTA ─── */}
 			<section className='py-24 px-6'>
 				<div className='max-w-2xl mx-auto text-center'>
-					<h2 className='text-3xl sm:text-4xl font-bold mb-4'>
+					<h2 className='text-3xl sm:text-4xl font-bold mb-4 font-heading'>
 						Ready to trade?
 					</h2>
 					<p className='text-text-muted text-lg mb-8'>
@@ -387,11 +391,8 @@ export function LandingPage() {
 			<footer className='border-t border-border py-10 px-6'>
 				<div className='max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4'>
 					<div className='flex items-center gap-2'>
-						<span
-							className='text-2xl text-accent'
-							style={{ fontFamily: 'serif' }}
-						>
-							&#961;
+						<span className='text-2xl text-accent font-logo'>
+							P
 						</span>
 						<span className='text-sm text-text-dim'>Prime</span>
 					</div>

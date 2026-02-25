@@ -247,7 +247,7 @@ function MarketCell({ market, iconCoin }: { market: string; iconCoin?: string })
           </span>
         )}
       </span>
-      <span className="truncate">{market}</span>
+      <span className="truncate leading-5">{market}</span>
     </span>
   );
 }
@@ -630,18 +630,18 @@ export function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <div className="px-4 pt-12 pb-24">
         <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
-          <h1 className="text-xl text-text-primary">Portfolio</h1>
+          <h1 className="text-lg font-semibold text-text-primary">Portfolio</h1>
           <p className="text-sm text-text-muted">Connect your wallet to view balances, positions, and history.</p>
           <button
             onClick={connect}
             disabled={isConnecting}
-            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 py-2 text-sm font-semibold text-surface-0"
+            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
-          {error && <div className="text-sm text-short">{error}</div>}
+          {error && <div className="text-xs text-short">{error}</div>}
         </div>
       </div>
     );
@@ -649,15 +649,15 @@ export function PortfolioPage() {
 
   if (!auth.isAuthenticated) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
-        <div className="bg-surface-1 border border-border p-5 text-center space-y-3">
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
           <h2 className="text-lg font-semibold text-text-primary">Sign in required</h2>
           <p className="text-sm text-text-muted">
-            Portfolio routes are protected and require an authenticated session.
+            Portfolio data requires an authenticated session.
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-5 py-2 text-sm font-medium text-surface-0"
+            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -668,7 +668,7 @@ export function PortfolioPage() {
 
   if (isLoading || !viewData || !pagedData || !data) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-4 space-y-4">
+      <div className="px-4 py-4 space-y-4">
         <div className="h-40 bg-surface-1 border border-border animate-pulse" />
         <div className="h-56 bg-surface-1 border border-border animate-pulse" />
         <div className="h-56 bg-surface-1 border border-border animate-pulse" />
@@ -678,7 +678,7 @@ export function PortfolioPage() {
 
   if (portfolioError) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8">
+      <div className="px-4 py-8">
         <div className="bg-short-muted border border-short/20 p-4 text-sm text-short">
           {portfolioError.message}
         </div>
@@ -711,7 +711,7 @@ export function PortfolioPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 pb-32 space-y-6">
+    <div className="px-4 py-4 pb-24 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Portfolio</h1>

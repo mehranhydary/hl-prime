@@ -150,11 +150,11 @@ export function AssetList({ assets }: AssetListProps) {
       </div>
 
       {/* Header row */}
-      <div className="grid grid-cols-[1fr_6rem_5rem_5rem] gap-4 px-3 py-2 text-[11px] text-text-muted uppercase tracking-widest">
+      <div className="grid grid-cols-[minmax(0,1fr)_4.75rem_3.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_5rem_5rem] gap-2 sm:gap-4 px-3 py-2 text-[11px] text-text-muted uppercase tracking-widest">
         <span>Asset</span>
         <span className="text-right">Price</span>
         <span className="text-right">24h</span>
-        <span className="text-right">Volume</span>
+        <span className="hidden sm:block text-right">Volume</span>
       </div>
 
       {/* Asset rows */}
@@ -178,7 +178,7 @@ export function AssetList({ assets }: AssetListProps) {
               )}
               <button
                 onClick={() => navigate(`/trade/${asset.baseAsset}`)}
-                className="w-full grid grid-cols-[1fr_6rem_5rem_5rem] gap-4 px-3 items-center text-left group hover:bg-surface-1 transition-colors border border-transparent hover:border-border"
+                className="w-full cursor-pointer grid grid-cols-[minmax(0,1fr)_4.75rem_3.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_5rem_5rem] gap-2 sm:gap-4 px-3 items-center text-left group hover:bg-surface-1 transition-colors border border-transparent hover:border-border"
                 style={{ height: ROW_HEIGHT }}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -202,14 +202,14 @@ export function AssetList({ assets }: AssetListProps) {
                   </div>
                   <div className="flex flex-col min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-sm text-text-primary truncate">
+                      <span className="font-medium text-sm text-text-primary whitespace-nowrap pr-0.5">
                         {asset.baseAsset}
                       </span>
                       {asset.hasPosition && (
                         <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" title="Has position" />
                       )}
                     </div>
-                    <span className="text-[11px] text-text-muted leading-tight truncate">
+                    <span className="text-[11px] text-text-muted leading-tight truncate pr-1">
                       {getAssetName(asset.baseAsset)}
                     </span>
                   </div>
@@ -220,7 +220,7 @@ export function AssetList({ assets }: AssetListProps) {
                 <span className={`text-right text-sm ${change.cls}`}>
                   {change.text}
                 </span>
-                <span className="text-right text-sm text-text-muted">
+                <span className="hidden sm:block text-right text-sm text-text-muted">
                   {formatVolume(asset.dayNtlVlm)}
                 </span>
               </button>

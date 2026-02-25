@@ -7,6 +7,7 @@ import { SetupPage } from "./pages/SetupPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ReferralsPage } from "./pages/ReferralsPage";
 import { Header } from "./components/Header";
+import { BottomNav } from "./components/BottomNav";
 import { NetworkProvider } from "./lib/network-context";
 import { WalletProvider } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
@@ -14,17 +15,20 @@ import { ThemeProvider } from "./lib/theme-context";
 function AppRoutes() {
   return (
     <Routes>
-      {/* Landing page — no app header */}
+      {/* Landing page — no app chrome */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/v2" element={<LandingPage2 />} />
 
-      {/* App routes — with header */}
+      {/* App routes — mobile shell */}
       <Route
         path="*"
         element={
           <>
             <Header />
-            <main className="min-h-screen bg-surface-0 text-text-primary" style={{ paddingTop: 84 }}>
+            <main
+              className="max-w-lg mx-auto min-h-screen bg-surface-0 text-text-primary"
+              style={{ paddingTop: 76 }}
+            >
               <Routes>
                 <Route path="/markets" element={<Dashboard />} />
                 <Route path="/portfolio" element={<PortfolioPage />} />
@@ -33,6 +37,7 @@ function AppRoutes() {
                 <Route path="/trade/:asset" element={<TradePage />} />
               </Routes>
             </main>
+            <BottomNav />
           </>
         }
       />

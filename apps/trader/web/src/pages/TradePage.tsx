@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
@@ -50,19 +50,34 @@ export function TradePage() {
   const candleCoin = assetData?.primaryCoin ?? asset;
   const { data: candles } = useCandles(candleCoin, candleInterval, network);
 
-  const change = assetData ? formatChange(assetData.price, assetData.prevDayPx) : null;
+  const change = useMemo(() => {
+    if (candles && candles.length > 1) {
+      let earliest = candles[0];
+      let latest = candles[0];
+
+      for (const candle of candles) {
+        if (candle.time < earliest.time) earliest = candle;
+        if (candle.time > latest.time) latest = candle;
+      }
+
+      return formatChange(latest.close, earliest.open);
+    }
+
+    if (!assetData) return null;
+    return formatChange(assetData.price, assetData.prevDayPx);
+  }, [candles, assetData]);
 
   if (address && !auth.isAuthenticated) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-10">
-        <div className="bg-surface-1 border border-border p-5 text-center space-y-3">
+      <div className="px-4 pt-12 pb-24">
+        <div className="bg-surface-1 border border-border p-6 text-center space-y-4">
           <h2 className="text-lg font-semibold text-text-primary">Sign in required</h2>
           <p className="text-sm text-text-muted">
-            Create a session signature first, then you can request quotes and execute trades.
+            Sign in to request quotes and execute trades.
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-5 py-2 text-sm font-medium text-surface-0"
+            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -72,7 +87,7 @@ export function TradePage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-4 pb-48">
+    <div className="px-4 py-4 pb-24">
       {/* Asset header — always reserves height for icon + price */}
       <div className="mb-4">
         <button
