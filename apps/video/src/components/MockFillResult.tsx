@@ -85,7 +85,7 @@ export const MockFillResult: React.FC<Props> = ({
           }}
         >
           <img
-            src={leg.coinIconUrl}
+            src={leg.deployerIconUrl || leg.coinIconUrl}
             alt={leg.coin}
             style={{ width: 16, height: 16, objectFit: "cover" }}
           />

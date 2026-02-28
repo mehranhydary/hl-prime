@@ -14,6 +14,7 @@ export const colors = {
   short: "#ef4444",
   shortMuted: "rgba(239, 68, 68, 0.15)",
   warning: "#f59e0b",
+  gold: "#FFD700",
 
   textPrimary: "#e8f5f0",
   textSecondary: "#b8d4ca",
@@ -26,6 +27,6 @@ export const colors = {
 
 export const fonts = {
   body: '"CSRodneyPixel", "ABCDiatype", system-ui, sans-serif',
-  heading: '"ValtinePixel", system-ui, sans-serif',
-  logo: '"CSRentoPixel", system-ui, sans-serif',
+  heading: '"CSRodneyPixel", "ABCDiatype", system-ui, sans-serif',
+  logo: '"FaintEraScript", system-ui, sans-serif',
 };

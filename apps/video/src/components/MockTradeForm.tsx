@@ -5,8 +5,10 @@ import { MOCK_TRADE } from "../lib/mock-data";
 interface Props {
   /** Number of amount digits visible (0-4 for "5000") */
   visibleDigits?: number;
-  /** Current leverage value (1-50) */
+  /** Current leverage value (1-maxLeverage) */
   leverageValue?: number;
+  /** Maximum leverage for this asset (default 20) */
+  maxLeverage?: number;
   /** Whether the long tab is active */
   longActive?: boolean;
   /** Show the quote request button or the execute button */
@@ -15,23 +17,30 @@ interface Props {
   buttonText?: string;
   /** Button state */
   buttonScale?: number;
+  /** Hide the action button (when scene renders its own animated button) */
+  hideButton?: boolean;
 }
 
 export const MockTradeForm: React.FC<Props> = ({
   visibleDigits = 4,
   leverageValue = 10,
+  maxLeverage = 20,
   longActive = true,
   showExecute = false,
   buttonText,
   buttonScale = 1,
+  hideButton = false,
 }) => {
   const amountStr = MOCK_TRADE.amount.slice(0, visibleDigits);
-  const leveragePercent = ((leverageValue - 1) / 49) * 100;
+  const leveragePercent = ((leverageValue - 1) / (maxLeverage - 1)) * 100;
   const side = longActive ? "long" : "short";
   const sideColor = side === "long" ? colors.long : colors.short;
+  const hasAmount = visibleDigits > 0;
   const defaultButtonText = showExecute
     ? `Long ${MOCK_TRADE.asset}`
-    : "Get Quote";
+    : hasAmount
+      ? "Get Quote"
+      : "Enter amount";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -131,11 +140,11 @@ export const MockTradeForm: React.FC<Props> = ({
           style={{
             fontSize: 24,
             fontWeight: 700,
-            color: visibleDigits > 0 ? colors.textPrimary : colors.textDim,
+            color: hasAmount ? colors.textPrimary : colors.textDim,
             fontFamily: fonts.body,
           }}
         >
-          {visibleDigits > 0 ? amountStr : "0.00"}
+          {hasAmount ? amountStr : "0.00"}
         </div>
         <div
           style={{
@@ -145,9 +154,13 @@ export const MockTradeForm: React.FC<Props> = ({
             fontSize: 11,
             color: colors.textSecondary,
             fontFamily: fonts.body,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
           }}
         >
           USD
+          <span style={{ fontSize: 9, lineHeight: 1 }}>↕</span>
         </div>
       </div>
 
@@ -234,24 +247,118 @@ export const MockTradeForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Action button */}
+      {/* Quote section (collapsed) */}
       <div
         style={{
-          backgroundColor: sideColor,
-          padding: "14px 0",
+          border: `1px solid ${colors.border}`,
           borderRadius: 4,
-          textAlign: "center",
-          fontSize: 15,
-          fontWeight: 700,
-          color: "white",
-          fontFamily: fonts.body,
-          boxShadow: `0 0 20px ${sideColor}20`,
-          transform: `scale(${buttonScale})`,
-          opacity: visibleDigits === 0 ? 0.3 : 1,
+          padding: "10px 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
-        {buttonText || defaultButtonText}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: colors.textPrimary,
+              fontFamily: fonts.body,
+            }}
+          >
+            Quote
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              color: colors.textDim,
+              fontFamily: fonts.body,
+            }}
+          >
+            {hasAmount ? "" : "Enter amount above"}
+          </span>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2">
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
+
+      {/* Max Slippage */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderBottom: `1px solid ${colors.border}`,
+          paddingBottom: 10,
+        }}
+      >
+        <span style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.body }}>
+          Max Slippage
+        </span>
+        <span style={{ fontSize: 12, color: colors.textPrimary, fontFamily: fonts.body }}>
+          5%
+        </span>
+      </div>
+
+      {/* Mode toggle */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.body }}>
+          Mode
+        </span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: colors.textPrimary,
+              fontFamily: fonts.body,
+              padding: "2px 8px",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 3,
+            }}
+          >
+            Safe
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              color: colors.textMuted,
+              fontFamily: fonts.body,
+              padding: "2px 8px",
+            }}
+          >
+            Quick
+          </span>
+        </div>
+      </div>
+
+      {/* Action button */}
+      {!hideButton && (
+        <div
+          style={{
+            backgroundColor: hasAmount ? sideColor : colors.long,
+            padding: "14px 0",
+            borderRadius: 4,
+            textAlign: "center",
+            fontSize: 15,
+            fontWeight: 700,
+            color: "white",
+            fontFamily: fonts.body,
+            boxShadow: hasAmount ? `0 0 20px ${sideColor}20` : "none",
+            transform: `scale(${buttonScale})`,
+            opacity: hasAmount ? 1 : 0.5,
+          }}
+        >
+          {buttonText || defaultButtonText}
+        </div>
+      )}
     </div>
   );
 };

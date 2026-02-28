@@ -1,4 +1,5 @@
 import React from "react";
+import { colors } from "../styles/tokens";
 
 interface Props {
   /** Width of the device frame in px (default 280) */
@@ -23,7 +24,7 @@ export const IPhoneFrame: React.FC<Props> = ({
   const height = width * aspectRatio;
 
   const bezel = width * 0.025; // thin bezels
-  const cornerRadius = width * 0.175; // ~50px at 280w
+  const cornerRadius = width * 0.08; // super-sharp corners
   const screenCornerRadius = cornerRadius - bezel;
 
   // Dynamic Island dimensions
@@ -147,7 +148,7 @@ export const IPhoneFrame: React.FC<Props> = ({
           right: bezel,
           bottom: bezel,
           borderRadius: screenCornerRadius,
-          backgroundColor: "#000",
+          backgroundColor: colors.surface0,
           overflow: "hidden",
           zIndex: 1,
         }}

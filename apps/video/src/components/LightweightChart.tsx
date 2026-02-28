@@ -21,6 +21,8 @@ interface Props {
   drawStartFrame?: number;
   drawDuration?: number;
   mode?: "area" | "candle";
+  /** Minimum visible data points (so chart doesn't start empty) */
+  minPoints?: number;
 }
 
 export const LightweightChart: React.FC<Props> = ({
@@ -31,6 +33,7 @@ export const LightweightChart: React.FC<Props> = ({
   drawStartFrame = 0,
   drawDuration = 60,
   mode = "area",
+  minPoints = 1,
 }) => {
   const frame = useCurrentFrame();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +48,7 @@ export const LightweightChart: React.FC<Props> = ({
     1,
     Math.max(0, (frame - drawStartFrame) / Math.max(drawDuration, 1)),
   );
-  const visibleCount = Math.max(1, Math.round(progress * totalPoints));
+  const visibleCount = Math.max(minPoints, Math.round(progress * totalPoints));
 
   useEffect(() => {
     if (!containerRef.current) return;

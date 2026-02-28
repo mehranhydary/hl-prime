@@ -375,8 +375,7 @@ export function LandingPage() {
 						Ready to trade?
 					</h2>
 					<p className='text-text-muted text-lg mb-8'>
-						Connect your wallet, set up an agent, and start trading
-						across every Hyperliquid market.
+						Connect your wallet and start trading on Hyperliquid.
 					</p>
 					<Link
 						to='/markets'

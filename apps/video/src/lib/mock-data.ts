@@ -50,6 +50,7 @@ export interface MockQuote {
   estimatedAvgPrice: string;
   impactBps: string;
   fundingRate: string;
+  builderFee?: string;
 }
 
 export interface MockFillLeg {
@@ -58,6 +59,7 @@ export interface MockFillLeg {
   price: string;
   status: "filled";
   coinIconUrl: string;
+  deployerIconUrl?: string;
 }
 
 export interface MockFill {
@@ -119,11 +121,11 @@ function makeAsset(
 
 export const MOCK_ASSETS: MockAsset[] = [
   makeAsset("xyz:TSLA", "TSLA", "Tesla", "1.8B", "xyz"),
-  makeAsset("xyz:NVDA", "NVDA", "NVIDIA", "2.4B", "xyz"),
   makeAsset("xyz:GOLD", "GOLD", "Gold", "890M", "xyz"),
-  makeAsset("xyz:SILVER", "SILVER", "Silver", "342M", "xyz"),
   makeAsset("BTC", "BTC", "Bitcoin", "2.1B"),
   makeAsset("ETH", "ETH", "Ethereum", "1.4B"),
+  makeAsset("xyz:NVDA", "NVDA", "NVIDIA", "2.4B", "xyz"),
+  makeAsset("xyz:SILVER", "SILVER", "Silver", "342M", "xyz"),
   makeAsset("SOL", "SOL", "Solana", "892M"),
   makeAsset("xyz:AAPL", "AAPL", "Apple", "1.1B", "xyz"),
 ];
@@ -140,93 +142,200 @@ export const MOCK_POSITIONS: MockPosition[] = [
 export const MOCK_BALANCE = "$24,350.00";
 export const MOCK_ADDRESS = "0x7A3f...8e21";
 
-// ─── Trade (TSLA Long — showcases HIP-3 multi-venue routing) ───
+// ─── Trade (NVDA Long — showcases HIP-3 multi-venue routing) ───
 
-const tslaPrice = fmtPrice(latestPrice("xyz:TSLA"));
-const tslaChange = priceChange24h("xyz:TSLA");
-const tslaSize = (10000 / latestPrice("xyz:TSLA")).toFixed(2);
+const nvdaPrice = fmtPrice(latestPrice("xyz:NVDA"));
+const nvdaPriceNum = latestPrice("xyz:NVDA");
+const nvdaChange = priceChange24h("xyz:NVDA");
+// $5,000 amount × 20x leverage = $100,000 notional
+const nvdaNotional = 100000;
+const nvdaSize = (nvdaNotional / nvdaPriceNum).toFixed(6);
+const nvdaSizeShort = (nvdaNotional / nvdaPriceNum).toFixed(2);
 
 export const MOCK_TRADE = {
-  asset: "TSLA",
-  coin: "xyz:TSLA" as ChartAssetKey,
-  assetName: "Tesla",
+  asset: "NVDA",
+  coin: "xyz:NVDA" as ChartAssetKey,
+  assetName: "NVIDIA",
   side: "long" as const,
-  amount: "10000",
-  leverage: 5,
-  currentPrice: tslaPrice,
-  priceChange: fmtChange(tslaChange.change),
+  amount: "5000",
+  leverage: 20,
+  currentPrice: nvdaPrice,
+  priceChange: fmtChange(nvdaChange.change),
   fundingRate: "0.0018%",
   marketsCount: "4",
   collaterals: "USDC, USDH, USDT",
-  conversionAmount: `~${tslaSize} TSLA`,
-  iconUrl: hlTokenIcon("xyz:TSLA"),
+  conversionAmount: `≈ ${nvdaSizeShort} NVDA`,
+  iconUrl: hlTokenIcon("xyz:NVDA"),
 };
 
-// ─── Quote (split across xyz:TSLA + cash:TSLA — multi-venue) ───
+// ─── Quote (multi-venue: 4 legs, 2 active — matches real HL Prime UI) ───
+
+const kmSize = (parseFloat(nvdaSize) * 0.142).toFixed(6);
+const cashSize = (parseFloat(nvdaSize) * 0.858).toFixed(6);
 
 export const MOCK_QUOTE: MockQuote = {
-  baseSize: tslaSize,
-  usdNotional: "~$10,000.00",
+  baseSize: nvdaSize,
+  usdNotional: `~$${(nvdaNotional - 33).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
   legs: [
     {
-      coin: "xyz:TSLA",
+      coin: "xyz:NVDA",
       deployer: "xyz",
-      proportion: 0.65,
-      size: (parseFloat(tslaSize) * 0.65).toFixed(2),
-      price: `$${tslaPrice}`,
+      proportion: 0,
+      size: "0",
+      price: `$${nvdaPrice}`,
       collateral: "USDC",
-      coinIconUrl: hlTokenIcon("xyz:TSLA"),
+      coinIconUrl: hlTokenIcon("xyz:NVDA"),
       collateralIconUrl: collateralIcon("usdc"),
       deployerIconUrl: deployerIcon("xyz"),
     },
     {
-      coin: "cash:TSLA",
+      coin: "flx:NVDA",
+      deployer: "flx",
+      proportion: 0,
+      size: "0",
+      price: `$${nvdaPrice}`,
+      collateral: "USDC",
+      coinIconUrl: hlTokenIcon("flx:NVDA"),
+      collateralIconUrl: collateralIcon("usdc"),
+      deployerIconUrl: deployerIcon("flx"),
+    },
+    {
+      coin: "km:NVDA",
+      deployer: "km",
+      proportion: 0.142,
+      size: kmSize,
+      price: `$${nvdaPrice}`,
+      collateral: "USDH",
+      coinIconUrl: hlTokenIcon("km:NVDA"),
+      collateralIconUrl: collateralIcon("usdh"),
+      deployerIconUrl: deployerIcon("km"),
+    },
+    {
+      coin: "cash:NVDA",
       deployer: "cash",
-      proportion: 0.35,
-      size: (parseFloat(tslaSize) * 0.35).toFixed(2),
-      price: `$${tslaPrice}`,
+      proportion: 0.858,
+      size: cashSize,
+      price: `$${nvdaPrice}`,
       collateral: "USDT",
-      coinIconUrl: hlTokenIcon("cash:TSLA"),
+      coinIconUrl: hlTokenIcon("cash:NVDA"),
       collateralIconUrl: collateralIcon("usdt"),
       deployerIconUrl: deployerIcon("cash"),
     },
   ],
-  leverage: "5x",
-  marginRequired: "$2,000.00",
-  estimatedAvgPrice: `$${tslaPrice}`,
-  impactBps: "0.8 bps",
+  leverage: "20x",
+  marginRequired: "$250.00",
+  estimatedAvgPrice: `$${nvdaPrice}`,
+  impactBps: "0.73 bps",
   fundingRate: "0.0018%",
+  builderFee: "1 bps",
 };
 
 // ─── Fill ───
 
 export const MOCK_FILL: MockFill = {
-  totalSize: tslaSize,
-  avgPrice: `$${tslaPrice}`,
+  totalSize: nvdaSize,
+  avgPrice: `$${nvdaPrice}`,
   legs: [
-    { coin: "xyz:TSLA", size: (parseFloat(tslaSize) * 0.65).toFixed(2), price: `$${tslaPrice}`, status: "filled", coinIconUrl: hlTokenIcon("xyz:TSLA") },
-    { coin: "cash:TSLA", size: (parseFloat(tslaSize) * 0.35).toFixed(2), price: `$${tslaPrice}`, status: "filled", coinIconUrl: hlTokenIcon("cash:TSLA") },
+    { coin: "km:NVDA", size: kmSize, price: `$${nvdaPrice}`, status: "filled", coinIconUrl: hlTokenIcon("km:NVDA"), deployerIconUrl: deployerIcon("km") },
+    { coin: "cash:NVDA", size: cashSize, price: `$${nvdaPrice}`, status: "filled", coinIconUrl: hlTokenIcon("cash:NVDA"), deployerIconUrl: deployerIcon("cash") },
   ],
 };
 
-// ─── README Key Points (for text card scenes) ───
+// ─── Collateral Prep (swaps needed before execution) ───
 
-export const KEY_POINTS = [
+export interface MockCollateralSwap {
+  fromToken: string;
+  toToken: string;
+  amount: string;
+  need: string;
+  have: string;
+  impactBps: string;
+  fromIconUrl: string;
+  toIconUrl: string;
+}
+
+export const MOCK_COLLATERAL_PREP: MockCollateralSwap[] = [
   {
-    heading: "What Hyperliquid Prime Does",
-    bullets: [
-      "Discovers all perp markets per asset \u2014 native + HIP-3",
-      "Aggregates orderbooks across collateral types",
-      "Routes to the single best market by price impact, funding & collateral",
-      "Splits large orders across venues for better fills",
-    ],
+    fromToken: "USDH",
+    toToken: "USDT",
+    amount: "~$432.94",
+    need: "$432.94",
+    have: "$0.00",
+    impactBps: "0.5 bps est",
+    fromIconUrl: collateralIcon("usdh"),
+    toIconUrl: collateralIcon("usdt"),
   },
   {
+    fromToken: "USDC",
+    toToken: "USDH",
+    amount: "~$70.50",
+    need: "$71.74",
+    have: "$1.24",
+    impactBps: "0.3 bps est",
+    fromIconUrl: collateralIcon("usdc"),
+    toIconUrl: collateralIcon("usdh"),
+  },
+];
+
+export const MOCK_SWAP = {
+  fromToken: "USDC",
+  toToken: "USDT",
+  amount: "$175.00",
+  fromIconUrl: collateralIcon("usdc"),
+  toIconUrl: collateralIcon("usdt"),
+  reason: "cash:NVDA requires USDT collateral",
+};
+
+// ─── Scene Captions (side text for phone scenes) ───
+
+export const SCENE_CAPTIONS = {
+  dashboard: {
+    heading: "What Prime Does",
+    bullets: [
+      "Discover every perp market",
+      "Aggregate all liquidity",
+      "Route to the best price",
+    ],
+  },
+  tradePage: {
+    heading: "Trading",
+    bullets: [
+      "Real-time price charts",
+      "4 venues with live liquidity",
+    ],
+  },
+  fillForm: {
     heading: "Smart Order Routing",
     bullets: [
-      "Compares liquidity across xyz, cash, flx, km, and native markets",
-      "Automatically swaps collateral (USDC \u2192 USDH) when needed",
-      "Single quote-then-execute flow",
+      "Compare across all venues",
+      "Auto collateral swaps",
+      "Quote, then execute",
     ],
   },
+  quotePhase: {
+    heading: "Generating Quote",
+    bullets: [
+      "Scanning 4 venues...",
+      "Optimizing split ratio",
+      "Best execution found",
+    ],
+  },
+  swapPhase: {
+    heading: "Collateral Swap",
+    bullets: [
+      "Converting USD to the right collateral for each position",
+    ],
+  },
+  fillPhase: {
+    heading: "Order Filled!",
+    bullets: [
+      "Easily create orders on Trade.xyz, Dreamcash, and more with a handful of clicks.",
+    ],
+  },
+};
+
+// Keep KEY_POINTS for backward compat
+export const KEY_POINTS = [
+  SCENE_CAPTIONS.dashboard,
+  SCENE_CAPTIONS.fillForm,
 ];

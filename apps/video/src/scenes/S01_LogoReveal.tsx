@@ -2,9 +2,11 @@ import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate } from "remotion";
 import { colors, fonts } from "../styles/tokens";
 import { typewriter, glowPulse, fadeIn } from "../lib/animations";
+import { hlTokenIcon } from "../lib/mock-data";
 
 const APP_NAME = "Prime";
 const SUBTITLE = "on Hyperliquid";
+const HYPE_LOGO = hlTokenIcon("HYPE");
 
 export const S01_LogoReveal: React.FC = () => {
   const frame = useCurrentFrame();
@@ -50,7 +52,7 @@ export const S01_LogoReveal: React.FC = () => {
       <div
         style={{
           fontFamily: fonts.logo,
-          fontSize: 180,
+          fontSize: 360,
           color: colors.accent,
           transform: `scale(${logoScale})`,
           textShadow: `0 0 ${40 * finalGlow}px rgba(80, 227, 181, ${0.6 * finalGlow}), 0 0 ${80 * finalGlow}px rgba(80, 227, 181, ${0.3 * finalGlow})`,
@@ -60,41 +62,55 @@ export const S01_LogoReveal: React.FC = () => {
         P
       </div>
 
-      {/* App name */}
+      {/* App name + subtitle on one line */}
       <div
         style={{
-          fontFamily: fonts.heading,
-          fontSize: 56,
-          color: colors.textPrimary,
-          letterSpacing: "0.05em",
-          opacity: nameOpacity,
-          minHeight: 64,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          minHeight: 120,
         }}
       >
-        {nameText}
-        {visibleChars < APP_NAME.length && visibleChars > 0 && (
-          <span
-            style={{
-              opacity: Math.sin(frame * 0.3) > 0 ? 1 : 0,
-              color: colors.accent,
-            }}
-          >
-            |
-          </span>
-        )}
-      </div>
-
-      {/* Subtitle */}
-      <div
-        style={{
-          fontFamily: fonts.body,
-          fontSize: 22,
-          color: colors.textMuted,
-          letterSpacing: "0.08em",
-          opacity: subtitleOpacity,
-        }}
-      >
-        {SUBTITLE}
+        <div
+          style={{
+            fontFamily: fonts.heading,
+            fontSize: 112,
+            color: colors.textPrimary,
+            letterSpacing: "0.05em",
+            opacity: nameOpacity,
+          }}
+        >
+          {nameText}
+          {visibleChars < APP_NAME.length && visibleChars > 0 && (
+            <span
+              style={{
+                opacity: Math.sin(frame * 0.3) > 0 ? 1 : 0,
+                color: colors.accent,
+              }}
+            >
+              |
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            fontFamily: fonts.body,
+            fontSize: 44,
+            color: colors.textMuted,
+            letterSpacing: "0.08em",
+            opacity: subtitleOpacity,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          {SUBTITLE}
+          <img
+            src={HYPE_LOGO}
+            alt="HYPE"
+            style={{ width: 40, height: 40, borderRadius: "50%" }}
+          />
+        </div>
       </div>
     </AbsoluteFill>
   );

@@ -4,7 +4,7 @@ import { Video } from "./Video";
 
 const fontFaces = [
   { family: "CSRentoPixel", file: "CSRentoPixel-Regular.otf", weight: 400 },
-  { family: "ValtinePixel", file: "ValtinePixel-Regular.otf", weight: 400 },
+  { family: "FaintEraScript", file: "FaintEraScript.otf", weight: 400 },
   { family: "CSRodneyPixel", file: "CSRodneyPixel-Regular.otf", weight: 400 },
   { family: "ABCDiatype", file: "ABCDiatype-Regular-Trial.otf", weight: 400 },
   { family: "ABCDiatype", file: "ABCDiatype-Medium-Trial.otf", weight: 500 },
@@ -28,7 +28,7 @@ export const RemotionRoot: React.FC = () => (
     <Composition
       id="PrimeIntro"
       component={Video}
-      durationInFrames={1245}
+      durationInFrames={1330}
       fps={30}
       width={1920}
       height={1080}

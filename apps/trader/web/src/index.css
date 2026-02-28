@@ -74,15 +74,8 @@
 
 /* ─── Pixel Fonts ─── */
 @font-face {
-  font-family: "CSRentoPixel";
-  src: url("/fonts/CSRentoPixel-Regular.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "ValtinePixel";
-  src: url("/fonts/ValtinePixel-Regular.otf") format("opentype");
+  font-family: "FaintEraScript";
+  src: url("/fonts/FaintEraScript.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -165,10 +158,10 @@ html {
 
 /* ─── Font utilities ─── */
 .font-heading {
-  font-family: "ValtinePixel", system-ui, sans-serif;
+  font-family: "CSRodneyPixel", "ABCDiatype", system-ui, sans-serif;
 }
 .font-logo {
-  font-family: "CSRentoPixel", system-ui, sans-serif;
+  font-family: "FaintEraScript", system-ui, sans-serif;
 }
 
 body {
