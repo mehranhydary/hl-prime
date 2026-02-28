@@ -13,9 +13,9 @@ function makeProvider(overrides: Partial<HLProvider> = {}): HLProvider {
     allPerpMetas: vi.fn(),
     spotMeta: vi.fn(async () => ({
       tokens: [
-        { name: "USDC", index: 0, szDecimals: 8, weiDecimals: 8, tokenId: "0x0", isCanonical: true },
-        { name: "USDH", index: 1, szDecimals: 8, weiDecimals: 8, tokenId: "0x1", isCanonical: true },
-        { name: "USDT0", index: 2, szDecimals: 8, weiDecimals: 8, tokenId: "0x2", isCanonical: true },
+        { name: "USDC", index: 0, szDecimals: 2, weiDecimals: 8, tokenId: "0x0", isCanonical: true },
+        { name: "USDH", index: 1, szDecimals: 2, weiDecimals: 8, tokenId: "0x1", isCanonical: true },
+        { name: "USDT0", index: 2, szDecimals: 2, weiDecimals: 8, tokenId: "0x2", isCanonical: true },
       ],
       universe: [
         { name: "USDC/USDH", tokens: [0, 1], index: 10, isCanonical: true },
@@ -204,7 +204,26 @@ describe("CollateralManager", () => {
   });
 
   it("preloads spot metadata once in prepare() across multiple requirements", async () => {
-    const provider = makeProvider();
+    let spotCallCount = 0;
+    const provider = makeProvider({
+      spotClearinghouseState: vi.fn(async () => {
+        spotCallCount++;
+        // Second call is the post-swap verification — return sufficient balances
+        if (spotCallCount > 1) {
+          return {
+            balances: [
+              { coin: "USDH", hold: "0", total: "100", entryNtl: "100", token: 1 },
+              { coin: "USDT0", hold: "0", total: "80", entryNtl: "80", token: 2 },
+            ],
+          };
+        }
+        return {
+          balances: [
+            { coin: "USDH", hold: "0", total: "20", entryNtl: "20", token: 1 },
+          ],
+        };
+      }),
+    });
     const manager = new CollateralManager(provider, createLogger({ level: "silent" }));
 
     const receipt = await manager.prepare(

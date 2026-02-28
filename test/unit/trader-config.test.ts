@@ -9,6 +9,7 @@ describe("loadConfig", () => {
     // Set minimum required env
     process.env.TRADER_STORE_PASSPHRASE = "test-passphrase-1234";
     process.env.TRADER_ALLOWED_ORIGINS = "http://localhost:3000";
+    process.env.TRADER_APP_PASSWORD = "test-app-password";
   });
 
   afterEach(() => {
