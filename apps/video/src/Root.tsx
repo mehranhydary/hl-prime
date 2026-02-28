@@ -6,9 +6,9 @@ const fontFaces = [
   { family: "CSRentoPixel", file: "CSRentoPixel-Regular.otf", weight: 400 },
   { family: "FaintEraScript", file: "FaintEraScript.otf", weight: 400 },
   { family: "CSRodneyPixel", file: "CSRodneyPixel-Regular.otf", weight: 400 },
-  { family: "ABCDiatype", file: "ABCDiatype-Regular-Trial.otf", weight: 400 },
-  { family: "ABCDiatype", file: "ABCDiatype-Medium-Trial.otf", weight: 500 },
-  { family: "ABCDiatype", file: "ABCDiatype-Bold-Trial.otf", weight: 700 },
+  { family: "ABCDiatype", file: "ABCDiatype-Regular.otf", weight: 400 },
+  { family: "ABCDiatype", file: "ABCDiatype-Medium.otf", weight: 500 },
+  { family: "ABCDiatype", file: "ABCDiatype-Bold.otf", weight: 700 },
 ];
 
 const fontCss = fontFaces
