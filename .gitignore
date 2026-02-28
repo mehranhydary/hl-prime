@@ -7,3 +7,4 @@ dist/
 *.log
 .data/
 .DS_Store
+*.mp4
