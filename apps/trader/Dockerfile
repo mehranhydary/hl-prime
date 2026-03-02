@@ -62,6 +62,7 @@ COPY --from=builder /app/apps/trader/dist/ dist/
 RUN mkdir -p /data && chown trader:trader /data
 
 ENV NODE_ENV=production
+ENV TRADER_DATA_DIR=/data
 EXPOSE 4400
 
 USER trader
