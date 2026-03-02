@@ -8,3 +8,6 @@ dist/
 .data/
 .DS_Store
 *.mp4
+
+# Private docs (deployment runbooks, internal design notes)
+docs/
