@@ -1,0 +1,41 @@
+# Dependencies (rebuilt in Docker)
+node_modules
+apps/*/node_modules
+
+# Build outputs (rebuilt in Docker)
+dist
+apps/*/dist
+apps/*/server/dist
+
+# Local data
+.data
+apps/*/.data
+*.db
+
+# Environment (set via Railway env vars)
+.env
+apps/*/.env
+
+# Dev/test artifacts
+test
+docs
+coverage
+.nyc_output
+
+# Git
+.git
+.gitignore
+
+# Media
+*.mp4
+*.mov
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
