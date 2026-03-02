@@ -310,6 +310,17 @@ function PositionsTable({
   return (
     <div className="overflow-x-auto border border-border bg-surface-1">
       <table className="w-full text-sm min-w-[860px] table-fixed">
+        <colgroup>
+          <col className="w-[22%]" />
+          <col className="w-[7%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[7%]" />
+          <col className="w-[8%]" />
+        </colgroup>
         <thead className="text-xs text-text-muted border-b border-border bg-surface-2">
           <tr>
             <th className="text-left px-3 py-2 font-medium">Market</th>
@@ -329,7 +340,7 @@ function PositionsTable({
             const iconCoin = iconCoinByKey.get(row.key);
             return (
               <tr key={row.key} className="border-b border-border/60 last:border-b-0">
-                <td className="px-3 py-2 text-text-primary max-w-[220px]">
+                <td className="px-3 py-2 text-text-primary truncate">
                   <MarketCell market={row.market} iconCoin={iconCoin} />
                 </td>
                 <td className="px-3 py-2"><SideTag side={row.side} /></td>

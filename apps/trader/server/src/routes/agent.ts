@@ -99,6 +99,10 @@ export function agentRoutes(config: ServerConfig): Router {
 
       pendingStore.remove(pendingAgentId);
 
+      // Evict any cached HP client so the next trade creates a fresh one
+      // that will re-check the builder fee approval on-chain.
+      service.evictClient(masterAddress, network);
+
       const response: AgentCompleteResponse = {
         success: true,
         agentAddress: pending.agentAddress,

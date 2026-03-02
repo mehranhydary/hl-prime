@@ -37,6 +37,8 @@ export interface AgentStatusResponse {
 export interface UnifiedBalance {
   totalUsd: number;
   perpAccountValueUsd: number;
+  /** Deposited USDC in perps (totalRawUsd) — excludes unrealized PNL. */
+  perpRawUsd: number;
   spotStableUsd: number;
   spotStableBreakdown: { coin: string; amount: number; usd: number }[];
   stableTokenSet: string[];

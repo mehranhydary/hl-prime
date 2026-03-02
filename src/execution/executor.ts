@@ -95,6 +95,7 @@ export class Executor {
         }
 
         this.builderEnabledForOrders = false;
+        this.approvalChecked = true;
         if (!this.builderManualApprovalWarned) {
           this.logger.warn(
             {
@@ -110,7 +111,6 @@ export class Executor {
           );
           this.builderManualApprovalWarned = true;
         }
-        // Keep checking on future orders so builder fee can auto-enable after external approval.
         return;
       }
 
@@ -148,6 +148,16 @@ export class Executor {
       );
       // Do NOT set approvalChecked = true so we retry on the next order attempt
     }
+  }
+
+  /**
+   * Reset the cached builder approval state so the next trade re-checks on-chain.
+   * Call after the master wallet approves the builder fee (e.g. after setup flow).
+   */
+  resetBuilderApprovalCheck(): void {
+    this.approvalChecked = false;
+    this.builderEnabledForOrders = false;
+    this.builderManualApprovalWarned = false;
   }
 
   /**

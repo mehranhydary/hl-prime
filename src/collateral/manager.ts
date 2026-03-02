@@ -554,17 +554,6 @@ export class CollateralManager {
       const isAgentSession = Boolean(
         signerAddress && signerAddress.toLowerCase() !== userAddress.toLowerCase(),
       );
-      if (isAgentSession && plan.swapsNeeded) {
-        return {
-          success: false,
-          swapsExecuted,
-          abstractionWasEnabled,
-          error:
-            "Collateral transfers/swaps require master-wallet signing. " +
-            "Current session uses an agent signer, so usdClassTransfer cannot move balances for the user.",
-        };
-      }
-
       const spotMeta = await this.provider.spotMeta();
       const tokenByIndex = new Map<number, SpotTokenMeta>();
       for (const token of spotMeta.tokens as SpotTokenMeta[]) {
@@ -716,6 +705,18 @@ export class CollateralManager {
               swapsExecuted,
               abstractionWasEnabled,
               error: message,
+            };
+          }
+
+          if (isAgentSession) {
+            return {
+              success: false,
+              swapsExecuted,
+              abstractionWasEnabled,
+              error:
+                `Spot swap for ${req.token} failed (insufficient spot USDC) and ` +
+                "usdClassTransfer requires master-wallet signing. " +
+                "Transfer USDC from Perp to Spot manually or use the master wallet.",
             };
           }
 

@@ -9,6 +9,7 @@ import { MockMarketInfoBar } from "../components/MockMarketInfoBar";
 import { MockTradeForm } from "../components/MockTradeForm";
 import { MOCK_TRADE, SCENE_CAPTIONS } from "../lib/mock-data";
 import { SideCaption } from "../components/SideCaption";
+import { PrimeLogo } from "../components/PrimeLogo";
 import { AnimatedCursor, type CursorKeyframe } from "../components/AnimatedCursor";
 
 // Cursor positions in phone coords (393×852).
@@ -186,6 +187,7 @@ export const S04_FillFormZoom: React.FC = () => {
         startFrame={10}
         bulletsStartFrame={30}
       />
+      <PrimeLogo fadeInStart={10} />
     </>
   );
 };

@@ -15,6 +15,7 @@ import { MockFillResult } from "../components/MockFillResult";
 import { Confetti } from "../components/Confetti";
 import { MOCK_TRADE, SCENE_CAPTIONS } from "../lib/mock-data";
 import { AnimatedCursor, type CursorKeyframe } from "../components/AnimatedCursor";
+import { PrimeLogo } from "../components/PrimeLogo";
 
 // Cursor positions in phone coords.
 // Slowed down — more time to read each phase's caption text.
@@ -318,6 +319,7 @@ export const S05_QuoteExecute: React.FC = () => {
           bulletGap={25}
         />
       )}
+      <PrimeLogo fadeInStart={10} />
     </>
   );
 };

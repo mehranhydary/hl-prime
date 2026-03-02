@@ -329,9 +329,33 @@ describe("Executor", () => {
       await executor.execute(makePlan(), USER);
 
       expect(provider.approveBuilderFee).not.toHaveBeenCalled();
-      // 1 initial check + 2 poll retries per execute call = 3 per call, 6 total
-      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(6);
+      // 1 initial check + 2 poll retries on first execute = 3; second execute skips (approvalChecked)
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(3);
       expect(provider.placeOrder).toHaveBeenCalledTimes(2);
+    });
+
+    it("re-checks builder approval after resetBuilderApprovalCheck()", async () => {
+      const provider = makeProvider({
+        maxBuilderFee: vi.fn()
+          .mockResolvedValueOnce(0)   // first trade: initial check
+          .mockResolvedValueOnce(0)   // first trade: poll 1
+          .mockResolvedValueOnce(0)   // first trade: poll 2
+          .mockResolvedValueOnce(10), // after reset: now approved
+        getSignerAddress: vi.fn().mockReturnValue("0x8988ee386c52f415452598a8c671f4876a17fce1"),
+      });
+      const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
+
+      // First trade: not approved, caches result
+      await executor.execute(makePlan(), USER);
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(3);
+
+      // Reset after setup approves the fee
+      executor.resetBuilderApprovalCheck();
+
+      // Second trade: re-checks and finds approval
+      await executor.execute(makePlan(), USER);
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(4);
+      expect(provider.approveBuilderFee).not.toHaveBeenCalled();
     });
   });
 

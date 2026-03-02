@@ -313,9 +313,42 @@ describe("CollateralManager", () => {
     expect(provider.setDexAbstraction).not.toHaveBeenCalled();
   });
 
-  it("fails fast when swaps are needed in agent sessions", async () => {
+  it("agent sessions can perform spot swaps without usdClassTransfer", async () => {
     const provider = makeProvider({
       getSignerAddress: vi.fn().mockReturnValue("0x8988ee386c52f415452598a8c671f4876a17fce1"),
+      spotClearinghouseState: vi.fn()
+        .mockResolvedValueOnce({ balances: [{ coin: "USDH", hold: "0", total: "20", entryNtl: "20", token: 1 }] })
+        .mockResolvedValueOnce({ balances: [{ coin: "USDH", hold: "0", total: "120", entryNtl: "120", token: 1 }] }),
+    });
+    const manager = new CollateralManager(provider, createLogger({ level: "silent" }));
+
+    const receipt = await manager.prepare(
+      {
+        requirements: [{
+          token: "USDH",
+          amountNeeded: 100,
+          currentBalance: 0,
+          shortfall: 100,
+          swapFrom: "USDC",
+          estimatedSwapCostBps: 50,
+        }],
+        totalSwapCostBps: 50,
+        swapsNeeded: true,
+        abstractionEnabled: true,
+      },
+      "0x8c1938750caf4b1f9f97174a6228eae705148d5e",
+    );
+
+    expect(receipt.error).toBeUndefined();
+    expect(receipt.success).toBe(true);
+    expect(provider.placeOrder).toHaveBeenCalled();
+    expect(provider.usdClassTransfer).not.toHaveBeenCalled();
+  });
+
+  it("agent sessions block usdClassTransfer fallback with specific error", async () => {
+    const provider = makeProvider({
+      getSignerAddress: vi.fn().mockReturnValue("0x8988ee386c52f415452598a8c671f4876a17fce1"),
+      placeOrder: vi.fn(async () => { throw new Error("Not enough balance available"); }),
     });
     const manager = new CollateralManager(provider, createLogger({ level: "silent" }));
 
@@ -339,6 +372,5 @@ describe("CollateralManager", () => {
     expect(receipt.success).toBe(false);
     expect(receipt.error).toContain("master-wallet signing");
     expect(provider.usdClassTransfer).not.toHaveBeenCalled();
-    expect(provider.placeOrder).not.toHaveBeenCalled();
   });
 });

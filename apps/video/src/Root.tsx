@@ -4,7 +4,7 @@ import { Video } from "./Video";
 
 const fontFaces = [
   { family: "CSRentoPixel", file: "CSRentoPixel-Regular.otf", weight: 400 },
-  { family: "FaintEraScript", file: "FaintEraScript.otf", weight: 400 },
+  { family: "NerillaPixel", file: "NerillaPixel-Regular.otf", weight: 400 },
   { family: "CSRodneyPixel", file: "CSRodneyPixel-Regular.otf", weight: 400 },
   { family: "ABCDiatype", file: "ABCDiatype-Regular.otf", weight: 400 },
   { family: "ABCDiatype", file: "ABCDiatype-Medium.otf", weight: 500 },

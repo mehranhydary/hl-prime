@@ -14,6 +14,11 @@ export async function getUnifiedBalance(
   ]);
 
   const perpAccountValueUsd = parseFloat(perpState.marginSummary.accountValue);
+  // totalRawUsd is the USDC balance after realized PNL — it can go negative
+  // when realized losses exceed deposits (even if unrealized gains keep the
+  // account healthy).  accountValue (= totalRawUsd + unrealizedPnl) reflects
+  // the true perps equity the user sees.
+  const perpRawUsd = parseFloat(perpState.marginSummary.totalRawUsd);
 
   const spotStableBreakdown: UnifiedBalance["spotStableBreakdown"] = [];
   let spotStableUsd = 0;
@@ -31,8 +36,12 @@ export async function getUnifiedBalance(
   }
 
   return {
+    // Use accountValue (total equity including unrealized PNL) for the headline
+    // balance.  totalRawUsd can go deeply negative when realized losses exceed
+    // deposits, even though the account is healthy due to unrealized gains.
     totalUsd: perpAccountValueUsd + spotStableUsd,
     perpAccountValueUsd,
+    perpRawUsd,
     spotStableUsd,
     spotStableBreakdown,
     stableTokenSet: stableTokens,

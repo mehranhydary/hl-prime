@@ -11,6 +11,7 @@ import { LightweightChart } from "../components/LightweightChart";
 import { MockMarketInfoBar } from "../components/MockMarketInfoBar";
 import { MockTradeForm } from "../components/MockTradeForm";
 import { SideCaption } from "../components/SideCaption";
+import { PrimeLogo } from "../components/PrimeLogo";
 import { MOCK_POSITIONS, MOCK_ASSETS, MOCK_TRADE, SCENE_CAPTIONS } from "../lib/mock-data";
 
 const CLAMP = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
@@ -219,6 +220,7 @@ export const S03_TradePageZoom: React.FC = () => {
       startFrame={40}
       bulletsStartFrame={70}
     />
+    <PrimeLogo fadeInStart={20} />
     </>
   );
 };

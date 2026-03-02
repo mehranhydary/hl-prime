@@ -28,5 +28,5 @@ export const colors = {
 export const fonts = {
   body: '"CSRodneyPixel", "ABCDiatype", system-ui, sans-serif',
   heading: '"CSRodneyPixel", "ABCDiatype", system-ui, sans-serif',
-  logo: '"FaintEraScript", system-ui, sans-serif',
+  logo: '"NerillaPixel", system-ui, sans-serif',
 };

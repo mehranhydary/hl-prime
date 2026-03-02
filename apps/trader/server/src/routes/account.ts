@@ -713,7 +713,8 @@ export function accountRoutes(config: ServerConfig): Router {
       const fundingRaw = fundingResult.status === "fulfilled" ? fundingResult.value as FundingLike[] : [];
 
       const stableSet = new Set(config.stableTokens.map((t) => t.toUpperCase()));
-      const perpsUsd = Math.max(toNumber(clearinghouseState?.marginSummary?.accountValue), 0);
+      const perpsUsd = toNumber(clearinghouseState?.marginSummary?.accountValue);
+      const perpsRawUsd = toNumber(clearinghouseState?.marginSummary?.totalRawUsd);
       const spotStableRows = (spotState?.balances ?? [])
         .filter((b: any) => stableSet.has(String(b.coin).toUpperCase()))
         .map((b: any) => ({
@@ -897,9 +898,11 @@ export function accountRoutes(config: ServerConfig): Router {
         })
         .sort((a, b) => b.statusTimestamp - a.statusTimestamp);
 
-      // Group balances by asset (perps USD is USDC-denominated)
+      // Group balances by asset — use accountValue (total perps equity) so
+      // the balance table reflects what the user actually has.  totalRawUsd
+      // can go negative when realized losses exceed deposits even though
+      // unrealized gains keep the account healthy.
       const balanceByAsset = new Map<string, number>();
-      // Perps "USD" → normalize to "USDC"
       balanceByAsset.set("USDC", (balanceByAsset.get("USDC") ?? 0) + perpsUsd);
       // Spot stablecoins
       for (const row of spotStableRows) {
@@ -941,7 +944,7 @@ export function accountRoutes(config: ServerConfig): Router {
           accountEquityUsd,
           spotUsd,
           perpsUsd,
-          perpsBalanceUsd: perpsUsd,
+          perpsBalanceUsd: perpsRawUsd,
           unrealizedPnlUsd,
           crossMarginRatio: perpsUsd > 0 ? maintenanceMarginUsd / perpsUsd : 0,
           maintenanceMarginUsd,

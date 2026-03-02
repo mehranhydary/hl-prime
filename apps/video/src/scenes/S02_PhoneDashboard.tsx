@@ -11,6 +11,7 @@ import { MockPositionRow } from "../components/MockPositionRow";
 import { MockAssetRow } from "../components/MockAssetRow";
 import { MOCK_POSITIONS, MOCK_ASSETS, SCENE_CAPTIONS } from "../lib/mock-data";
 import { AnimatedCursor, type CursorKeyframe } from "../components/AnimatedCursor";
+import { PrimeLogo } from "../components/PrimeLogo";
 
 // Cursor drifts around dashboard; zoom into NVDA area (index 4), then click
 // NVDA row center ≈ y=610 after scroll (search bar + 4 rows above it)
@@ -244,6 +245,7 @@ export const S02_PhoneDashboard: React.FC = () => {
         startFrame={30}
         bulletsStartFrame={60}
       />
+      <PrimeLogo fadeInStart={30} />
     </>
   );
 };

@@ -295,6 +295,10 @@ export class HyperliquidPrime {
   async close(baseAsset: string): Promise<ExecutionReceipt[]> {
     this.ensureConnected();
     const user = this.ensureWallet();
+    // Invalidate cached clearinghouse state so we fetch fresh positions.
+    // Without this, the 30-second cache can serve stale data that doesn't
+    // include positions opened externally (e.g. on the Hyperliquid UI).
+    this.provider.invalidateBalanceCaches?.();
     const requestedVariants = assetVariants(baseAsset);
     const { data: allPositions } = await this.positions.getPositions(user);
     const toClose = allPositions.filter(
@@ -394,6 +398,14 @@ export class HyperliquidPrime {
   async getReferral(user: string): Promise<ReferralResponse> {
     this.ensureConnected();
     return this.provider.referral(user);
+  }
+
+  /**
+   * Reset the cached builder-fee approval state so the next trade re-checks on-chain.
+   * Call after the master wallet approves the builder fee (e.g. after setup flow completes).
+   */
+  resetBuilderApprovalCheck(): void {
+    this.executor.resetBuilderApprovalCheck();
   }
 
   // === Escape Hatches ===

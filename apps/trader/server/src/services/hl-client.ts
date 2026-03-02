@@ -25,11 +25,15 @@ function normalizeAddress(value: string): `0x${string}` {
   return value.toLowerCase() as `0x${string}`;
 }
 
+/** How often to re-discover markets so prices, funding, and volume stay fresh. */
+const MARKET_REFRESH_MS = 30_000;
+
 export class HLClientService {
   private clients = new Map<string, ManagedClient>();
   private connecting = new Map<string, Promise<ManagedClient>>();
   private publicClients = new Map<string, HyperliquidPrime>();
   private publicConnecting = new Map<string, Promise<HyperliquidPrime>>();
+  private refreshTimers = new Map<string, ReturnType<typeof setInterval>>();
   private signerStore: SignerStore;
   private localSignerStore: AgentStore | null;
   private localSignerStoreAvailable: boolean;
@@ -68,10 +72,27 @@ export class HLClientService {
     try {
       const hp = await promise;
       this.publicClients.set(network, hp);
+      this.startMarketRefresh(network, hp);
       return hp;
     } finally {
       this.publicConnecting.delete(network);
     }
+  }
+
+  /**
+   * Periodically re-discover markets so that markPrice, prevDayPx, funding,
+   * and volume stay fresh instead of being frozen at server-start values.
+   */
+  private startMarketRefresh(network: string, hp: HyperliquidPrime): void {
+    if (this.refreshTimers.has(network)) return;
+    const timer = setInterval(async () => {
+      try {
+        await hp.markets.discover();
+      } catch (err) {
+        console.warn(`[hl-client] market refresh failed (${network}):`, err);
+      }
+    }, MARKET_REFRESH_MS);
+    this.refreshTimers.set(network, timer);
   }
 
   /** Authenticated client for trading (requires agent key). */
@@ -96,6 +117,16 @@ export class HLClientService {
     }
   }
 
+  /** Remove a cached authenticated client so the next getClient() creates a fresh one. */
+  async evictClient(masterAddress: string, network: Network): Promise<void> {
+    const key = clientId({ masterAddress, network });
+    const existing = this.clients.get(key);
+    if (existing) {
+      await existing.hp.disconnect().catch(() => {});
+      this.clients.delete(key);
+    }
+  }
+
   async hasClient(masterAddress: string, network: Network): Promise<boolean> {
     const key = clientId({ masterAddress, network });
     if (this.clients.has(key)) return true;
@@ -103,6 +134,10 @@ export class HLClientService {
   }
 
   async disconnectAll(): Promise<void> {
+    for (const timer of this.refreshTimers.values()) {
+      clearInterval(timer);
+    }
+    this.refreshTimers.clear();
     for (const [, managed] of this.clients) {
       await managed.hp.disconnect().catch(() => {});
     }

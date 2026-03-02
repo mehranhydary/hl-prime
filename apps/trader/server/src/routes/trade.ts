@@ -1685,7 +1685,13 @@ export function tradeRoutes(config: ServerConfig): Router {
       let signer = await resolveSigner(service, masterAddress, resolvedNetwork);
       timing.mark("resolveSigner");
 
-      // Fallback: try agent address as position owner
+      // Fallback 1: if we targeted a sub-account but found nothing, retry on master
+      if (receipts.length === 0 && effectiveAddress.toLowerCase() !== masterAddress.toLowerCase()) {
+        receipts = await hp.close(asset);
+        timing.mark("closeMasterFallback");
+      }
+
+      // Fallback 2: try agent address as position owner
       if (receipts.length === 0 && stored?.agentPrivateKey && stored.agentAddress) {
         const fallbackHp = new HyperliquidPrime({
           privateKey: stored.agentPrivateKey,
