@@ -1,4 +1,4 @@
-import { displayCoin, deployerIconUrl } from "../lib/display";
+import { displayCoin, deployerIconUrl, showIconFallback } from "../lib/display";
 import type { DedupedAsset } from "@shared/types";
 
 interface MarketInfoProps {
@@ -67,8 +67,7 @@ function DeployerIcons({ deployers }: { deployers: string[] }) {
                 className="w-5 h-5 object-cover"
                 onError={(e) => {
                   const el = e.currentTarget;
-                  el.style.display = "none";
-                  el.parentElement!.innerHTML = `<span class="text-[7px] font-bold text-text-muted">${d.slice(0, 2)}</span>`;
+                  showIconFallback(el, d, "text-[7px] font-bold text-text-muted");
                 }}
               />
             ) : (

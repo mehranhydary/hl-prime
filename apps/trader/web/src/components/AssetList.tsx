@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { tokenIconUrl, tokenIconFallbackUrl } from "../lib/display";
+import { tokenIconUrl, tokenIconFallbackUrl, showIconFallback } from "../lib/display";
 import type { DedupedAsset } from "@shared/types";
 
 interface AssetListProps {
@@ -195,8 +195,7 @@ export function AssetList({ assets }: AssetListProps) {
                           el.src = fallback;
                           return;
                         }
-                        el.style.display = "none";
-                        el.parentElement!.innerHTML = `<span class="text-xs font-bold text-text-muted">${asset.baseAsset.slice(0, 2)}</span>`;
+                        showIconFallback(el, asset.baseAsset, "text-xs font-bold text-text-muted");
                       }}
                     />
                   </div>

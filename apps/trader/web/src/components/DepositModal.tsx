@@ -8,19 +8,19 @@ interface DepositModalProps {
 }
 
 export function DepositModal({ address, onClose }: DepositModalProps) {
-	const [qrSvg, setQrSvg] = useState<string | null>(null)
+	const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
 	const [copied, setCopied] = useState(false)
 	const { theme } = useTheme()
 
 	useEffect(() => {
-		QRCode.toString(address, {
-			type: 'svg',
+		QRCode.toDataURL(address, {
 			margin: 2,
+			width: 400,
 			color: {
 				dark: theme === 'dark' ? '#e2e8f0' : '#111827',
 				light: '#00000000',
 			},
-		}).then(setQrSvg)
+		}).then(setQrDataUrl)
 	}, [address, theme])
 
 	const copyAddress = async () => {
@@ -70,11 +70,12 @@ export function DepositModal({ address, onClose }: DepositModalProps) {
 				</p>
 
 				<div className='flex flex-col items-center gap-4'>
-					{/* QR Code (SVG for crisp rendering at any resolution) */}
-					{qrSvg ? (
-						<div
+					{/* QR Code */}
+					{qrDataUrl ? (
+						<img
+							src={qrDataUrl}
+							alt='Deposit QR code'
 							className='w-[200px] h-[200px]'
-							dangerouslySetInnerHTML={{ __html: qrSvg }}
 						/>
 					) : (
 						<div className='w-[200px] h-[200px] animate-pulse bg-surface-3' />

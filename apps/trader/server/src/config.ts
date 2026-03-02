@@ -52,6 +52,23 @@ function parseBooleanEnv(value: string | undefined, defaultValue: boolean): bool
   return defaultValue;
 }
 
+function isProductionRuntime(): boolean {
+  const nodeEnv = (process.env.NODE_ENV ?? "").trim().toLowerCase();
+  if (nodeEnv === "production") return true;
+
+  // Railway exposes deployment metadata envs in hosted runtime environments.
+  return Boolean(
+    process.env.RAILWAY_PROJECT_ID
+      || process.env.RAILWAY_ENVIRONMENT
+      || process.env.RAILWAY_ENVIRONMENT_NAME,
+  );
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
 export function loadConfig(): ServerConfig {
   const dataDir = process.env.TRADER_DATA_DIR
     ? path.resolve(process.env.TRADER_DATA_DIR)
@@ -76,6 +93,7 @@ export function loadConfig(): ServerConfig {
     : [];
   const devInsecure = parseBooleanEnv(process.env.TRADER_DEV_INSECURE, false);
   const authEnabled = parseBooleanEnv(process.env.TRADER_AUTH_ENABLED, true);
+  const productionRuntime = isProductionRuntime();
   const signerBackend = (process.env.TRADER_SIGNER_BACKEND ?? "local").trim().toLowerCase() === "privy"
     ? "privy"
     : "local";
@@ -90,10 +108,13 @@ export function loadConfig(): ServerConfig {
   if (!appPassword) {
     throw new Error("TRADER_APP_PASSWORD must be set and non-empty.");
   }
-  const appPasswordTtlDaysRaw = process.env.TRADER_APP_PASSWORD_TTL_DAYS ?? "30";
+  const appPasswordTtlDaysRaw = process.env.TRADER_APP_PASSWORD_TTL_DAYS ?? "7";
   const appPasswordTtlDays = parseInt(appPasswordTtlDaysRaw, 10);
   if (!Number.isFinite(appPasswordTtlDays) || appPasswordTtlDays <= 0) {
     throw new Error("TRADER_APP_PASSWORD_TTL_DAYS must be a positive integer.");
+  }
+  if (appPasswordTtlDays > 30) {
+    throw new Error("TRADER_APP_PASSWORD_TTL_DAYS must be <= 30.");
   }
   const appPasswordTtlMs = appPasswordTtlDays * 24 * 60 * 60 * 1000;
   const requiresPassphrase = signerBackend === "local" || signerLocalFallback;
@@ -109,11 +130,31 @@ export function loadConfig(): ServerConfig {
       "TRADER_ALLOWED_ORIGINS must be set unless TRADER_DEV_INSECURE=true",
     );
   }
+  if (!devInsecure && allowedOrigins.some((origin) => origin === "*")) {
+    throw new Error(
+      "TRADER_ALLOWED_ORIGINS cannot include '*' unless TRADER_DEV_INSECURE=true",
+    );
+  }
+  if (productionRuntime && devInsecure) {
+    throw new Error(
+      "TRADER_DEV_INSECURE=true is not allowed in production runtime (NODE_ENV=production/Railway).",
+    );
+  }
+  if (productionRuntime && !authEnabled) {
+    throw new Error(
+      "TRADER_AUTH_ENABLED=false is not allowed in production runtime (NODE_ENV=production/Railway).",
+    );
+  }
 
   const portRaw = process.env.TRADER_PORT ?? process.env.PORT ?? "4400";
   const parsedPort = parseInt(portRaw, 10);
   const host = process.env.TRADER_HOST
     ?? ((process.env.NODE_ENV ?? "").toLowerCase() === "production" ? "0.0.0.0" : "127.0.0.1");
+  if (productionRuntime && isLoopbackHost(host)) {
+    throw new Error(
+      `TRADER_HOST=${host} is not allowed in production runtime (bind 0.0.0.0 on Railway).`,
+    );
+  }
 
   return {
     port: Number.isFinite(parsedPort) ? parsedPort : 4400,

@@ -15,7 +15,9 @@ export function PasswordGatePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const redirectState = location.state as AccessRedirectState | null;
-  const destination = redirectState?.from ?? "/markets";
+  const fromQuery = new URLSearchParams(location.search).get("from");
+  const destination = redirectState?.from
+    ?? (typeof fromQuery === "string" && fromQuery.startsWith("/") ? fromQuery : "/markets");
 
   if (access.isUnlocked) {
     return <Navigate to={destination} replace />;

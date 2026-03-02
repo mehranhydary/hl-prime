@@ -1,8 +1,6 @@
-const STORAGE_KEY = "hl-prime:app-access:v1";
-const ACCESS_HEADER = "x-trader-access-token";
+const STORAGE_KEY = "hl-prime:app-access:v2";
 
 interface StoredAccess {
-  token: string;
   expiresAt: number;
 }
 
@@ -24,7 +22,6 @@ export interface UnlockResult {
 
 type AccessListener = (snapshot: AccessSnapshot) => void;
 
-let accessToken: string | null = null;
 let accessExpiresAt = 0;
 const listeners = new Set<AccessListener>();
 
@@ -34,21 +31,20 @@ function clearStoredAccess(): void {
   } catch {}
 }
 
-function persistAccess(token: string, expiresAt: number): void {
+function persistAccess(expiresAt: number): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, expiresAt } satisfies StoredAccess));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ expiresAt } satisfies StoredAccess));
   } catch {}
 }
 
 function clearAccessState(emitChange = true): void {
-  accessToken = null;
   accessExpiresAt = 0;
   clearStoredAccess();
   if (emitChange) emit();
 }
 
 function isAccessValid(): boolean {
-  return Boolean(accessToken) && accessExpiresAt > Date.now() + 60_000;
+  return accessExpiresAt > Date.now() + 60_000;
 }
 
 function snapshot(): AccessSnapshot {
@@ -72,7 +68,7 @@ function loadStoredAccess(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const stored = JSON.parse(raw) as Partial<StoredAccess>;
-    if (typeof stored.token !== "string" || typeof stored.expiresAt !== "number" || !Number.isFinite(stored.expiresAt)) {
+    if (typeof stored.expiresAt !== "number" || !Number.isFinite(stored.expiresAt)) {
       clearStoredAccess();
       return;
     }
@@ -80,7 +76,6 @@ function loadStoredAccess(): void {
       clearStoredAccess();
       return;
     }
-    accessToken = stored.token;
     accessExpiresAt = stored.expiresAt;
   } catch {
     clearStoredAccess();
@@ -117,11 +112,10 @@ export function getAccessSnapshot(): AccessSnapshot {
 }
 
 export function getAccessHeaders(): Record<string, string> {
-  if (!isAccessValid()) {
-    if (accessToken) clearAccessState();
-    return {};
+  if (!isAccessValid() && accessExpiresAt > 0) {
+    clearAccessState();
   }
-  return { [ACCESS_HEADER]: accessToken as string };
+  return {};
 }
 
 export function clearAccessToken(): void {
@@ -130,6 +124,10 @@ export function clearAccessToken(): void {
 
 export function lock(): void {
   clearAccessState();
+  void fetch("/api/access/logout", {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => {});
 }
 
 export async function unlock(password: string): Promise<UnlockResult> {
@@ -140,6 +138,7 @@ export async function unlock(password: string): Promise<UnlockResult> {
   try {
     const res = await fetch("/api/access/verify", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     });
@@ -155,13 +154,12 @@ export async function unlock(password: string): Promise<UnlockResult> {
     }
 
     const payload = data as Partial<StoredAccess>;
-    if (typeof payload.token !== "string" || typeof payload.expiresAt !== "number" || !Number.isFinite(payload.expiresAt)) {
+    if (typeof payload.expiresAt !== "number" || !Number.isFinite(payload.expiresAt)) {
       return { ok: false, error: "Invalid unlock response", code: "REQUEST_FAILED" };
     }
 
-    accessToken = payload.token;
     accessExpiresAt = payload.expiresAt;
-    persistAccess(payload.token, payload.expiresAt);
+    persistAccess(payload.expiresAt);
     emit();
     return { ok: true };
   } catch {

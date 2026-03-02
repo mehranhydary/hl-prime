@@ -8,7 +8,7 @@ import { useCandles } from "../hooks/use-candles";
 import { TradeForm } from "../components/TradeForm";
 import { CandleChart } from "../components/CandleChart";
 import { MarketInfo } from "../components/MarketInfo";
-import { displayCoin, tokenIconUrl, tokenIconFallbackUrl } from "../lib/display";
+import { displayCoin, tokenIconUrl, tokenIconFallbackUrl, showIconFallback } from "../lib/display";
 import type { CandleInterval } from "@shared/types";
 
 function formatPrice(price: number): string {
@@ -114,8 +114,7 @@ export function TradePage() {
                     el.src = fallback;
                     return;
                   }
-                  el.style.display = "none";
-                  el.parentElement!.innerHTML = `<span class="text-sm font-bold text-text-muted">${(asset ?? "").slice(0, 2)}</span>`;
+                  showIconFallback(el, asset ?? "", "text-sm font-bold text-text-muted");
                 }}
               />
             ) : (

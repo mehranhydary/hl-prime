@@ -7,7 +7,7 @@ import { useAuthSession } from "../hooks/use-auth-session";
 import { AssetList } from "../components/AssetList";
 import { DepositModal } from "../components/DepositModal";
 import { Link } from "react-router-dom";
-import { tokenIconUrl, tokenIconFallbackUrl, deployerIconUrl } from "../lib/display";
+import { tokenIconUrl, tokenIconFallbackUrl, deployerIconUrl, showIconFallback } from "../lib/display";
 import type { GroupedPosition } from "@shared/types";
 
 export function Dashboard() {
@@ -174,8 +174,7 @@ export function Dashboard() {
                               el.src = fallback;
                               return;
                             }
-                            el.style.display = "none";
-                            el.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-text-muted">${pos.baseAsset.slice(0, 2)}</span>`;
+                            showIconFallback(el, pos.baseAsset, "text-[10px] font-bold text-text-muted");
                           }}
                         />
                       </div>

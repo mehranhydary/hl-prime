@@ -5,7 +5,7 @@ import path from "node:path";
 import type { ServerConfig } from "./config.js";
 import { authRoutes, sessionAuth } from "./middleware/auth.js";
 import { memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
-import { passwordGateRoutes, requireAppAccess } from "./middleware/password-gate.js";
+import { passwordGateRoutes, requireAppAccess, requireWebAppAccess } from "./middleware/password-gate.js";
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
 import { tradeRoutes } from "./routes/trade.js";
@@ -14,10 +14,22 @@ import { marketRoutes } from "./routes/market.js";
 import { referralRoutes } from "./routes/referral.js";
 import { getRuntimeStateStore } from "./services/runtime-state.js";
 
+const PUBLIC_WEB_PATHS = new Set(["/", "/v2", "/unlock"]);
+
+function normalizeWebPath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
 export function createApp(config: ServerConfig) {
   getRuntimeStateStore(config);
   const app = express();
-  app.set("trust proxy", 1);
+  // Trust only local/private proxy hops to prevent spoofed forwarded IP headers.
+  // This works with common PaaS ingress (including Railway) while avoiding
+  // trusting arbitrary internet clients as proxies.
+  app.set("trust proxy", "loopback, linklocal, uniquelocal");
 
   app.use(requestLogger());
   app.use(securityHeaders(config.devInsecure));
@@ -29,6 +41,11 @@ export function createApp(config: ServerConfig) {
 
   app.use("/api/auth/session", memoryRateLimit({
     keyPrefix: "auth_session",
+    windowMs: 60_000,
+    max: 20,
+  }));
+  app.use("/api/auth/challenge", memoryRateLimit({
+    keyPrefix: "auth_challenge",
     windowMs: 60_000,
     max: 20,
   }));
@@ -51,7 +68,7 @@ export function createApp(config: ServerConfig) {
   app.use("/api", healthRoutes(config));
   app.use("/api/access", passwordGateRoutes(config));
   app.use("/api", requireAppAccess(config));
-  app.use("/api/auth", authRoutes());
+  app.use("/api/auth", authRoutes(config));
 
   if (config.authEnabled) {
     app.use("/api", sessionAuth());
@@ -67,9 +84,23 @@ export function createApp(config: ServerConfig) {
   const webDist = path.join(process.cwd(), "dist", "web");
   const webIndex = path.join(webDist, "index.html");
   if (fs.existsSync(webIndex)) {
-    app.use(express.static(webDist));
-    app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
-      res.sendFile(webIndex);
+    const gateWebRoutes = requireWebAppAccess(config);
+    app.get("/index.html", (_req, res) => {
+      res.redirect(302, "/");
+    });
+
+    app.use(express.static(webDist, { index: false }));
+
+    app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
+      const reqPath = normalizeWebPath(req.path);
+      if (PUBLIC_WEB_PATHS.has(reqPath)) {
+        res.sendFile(webIndex);
+        return;
+      }
+
+      gateWebRoutes(req, res, () => {
+        res.sendFile(webIndex);
+      });
     });
   }
 

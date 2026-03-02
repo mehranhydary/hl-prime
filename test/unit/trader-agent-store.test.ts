@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { AgentStore, PendingAgentStore } from "../../apps/trader/server/src/services/agent-store.js";
+import { __resetRuntimeStateStoreForTests } from "../../apps/trader/server/src/services/runtime-state.js";
 
 describe("AgentStore", () => {
   let tmpDir: string;
@@ -109,6 +110,16 @@ describe("AgentStore", () => {
 });
 
 describe("PendingAgentStore", () => {
+  beforeEach(() => {
+    __resetRuntimeStateStoreForTests();
+    process.env.TRADER_RUNTIME_STATE_BACKEND = "memory";
+  });
+
+  afterEach(() => {
+    delete process.env.TRADER_RUNTIME_STATE_BACKEND;
+    __resetRuntimeStateStoreForTests();
+  });
+
   it("adds and retrieves pending agent", () => {
     const store = new PendingAgentStore();
     const pending = {

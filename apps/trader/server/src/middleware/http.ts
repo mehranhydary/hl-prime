@@ -11,14 +11,30 @@ interface HitState {
   resetAt: number;
 }
 
+function contentSecurityPolicy(insecure = false): string {
+  // Keep styles inline-compatible for existing React style attrs.
+  const styleSrc = "'self' 'unsafe-inline'";
+  const imgSrc = "'self' data: https://app.hyperliquid.xyz";
+  const connectSrc = insecure ? "'self' ws: wss:" : "'self'";
+
+  return [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self'",
+    `style-src ${styleSrc}`,
+    "font-src 'self'",
+    `img-src ${imgSrc}`,
+    `connect-src ${connectSrc}`,
+  ].join("; ");
+}
+
 function clientKey(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const ip = Array.isArray(forwarded)
-    ? forwarded[0]
-    : typeof forwarded === "string"
-      ? forwarded.split(",")[0]?.trim()
-      : req.ip;
-  return ip || "unknown";
+  // Never trust raw forwarding headers here; Express resolves req.ip using
+  // the configured trusted proxy policy in app.ts.
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 export function securityHeaders(insecure = false) {
@@ -27,6 +43,7 @@ export function securityHeaders(insecure = false) {
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    res.setHeader("Content-Security-Policy", contentSecurityPolicy(insecure));
     if (!insecure) {
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
@@ -95,4 +112,3 @@ export function memoryRateLimit(options: RateLimitOptions) {
     next();
   };
 }
-

@@ -10,6 +10,7 @@ import {
   tokenIconUrl,
   tokenIconFallbackUrl,
   getDeployer,
+  showIconFallback,
 } from "../lib/display";
 import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest } from "@shared/types";
 import { useNavigate } from "react-router-dom";
@@ -476,8 +477,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
                               className="w-5 h-5 object-cover"
                               onError={(e) => {
                                 const el = e.currentTarget;
-                                el.style.display = "none";
-                                el.parentElement!.innerHTML = `<span class="text-[7px] font-bold text-text-muted">${(deployer ?? "").slice(0, 2)}</span>`;
+                                showIconFallback(el, deployer ?? "", "text-[7px] font-bold text-text-muted");
                               }}
                             />
                           ) : (
@@ -492,8 +492,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
                                   el.src = fallback;
                                   return;
                                 }
-                                el.style.display = "none";
-                                el.parentElement!.innerHTML = `<span class="text-[7px] font-bold text-text-muted">${leg.coin.slice(0, 2)}</span>`;
+                                showIconFallback(el, leg.coin, "text-[7px] font-bold text-text-muted");
                               }}
                             />
                           )}

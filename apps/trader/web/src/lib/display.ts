@@ -52,3 +52,14 @@ export function deployerIconUrl(coin: string): string | null {
   }
   return null;
 }
+
+/** Replace a failed <img> with a text-initials fallback using safe DOM APIs (no innerHTML). */
+export function showIconFallback(img: HTMLImageElement, text: string, className: string): void {
+  const parent = img.parentElement;
+  if (!parent) return;
+  img.style.display = "none";
+  const span = document.createElement("span");
+  span.className = className;
+  span.textContent = text.slice(0, 2);
+  parent.appendChild(span);
+}

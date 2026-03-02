@@ -14,6 +14,7 @@ import {
   tokenIconFallbackUrl,
   deployerIconUrl,
   getDeployer,
+  showIconFallback,
 } from "../lib/display";
 import type {
   PortfolioBalanceRow,
@@ -229,8 +230,7 @@ function MarketCell({ market, iconCoin }: { market: string; iconCoin?: string })
                 el.src = fallback;
                 return;
               }
-              el.style.display = "none";
-              el.parentElement!.innerHTML = `<span class="text-[9px] font-bold text-text-muted">${market.slice(0, 2)}</span>`;
+              showIconFallback(el, market, "text-[9px] font-bold text-text-muted");
             }}
           />
         </span>

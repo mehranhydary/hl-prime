@@ -15,7 +15,7 @@ describe("loadConfig", () => {
   afterEach(() => {
     // Restore original env
     for (const key of Object.keys(process.env)) {
-      if (key.startsWith("TRADER_")) {
+      if (key.startsWith("TRADER_") || key.startsWith("RAILWAY_")) {
         delete process.env[key];
       }
     }
@@ -31,6 +31,7 @@ describe("loadConfig", () => {
     expect(config.stableTokens).toEqual(["USDC", "USDH", "USDE", "USDT0"]);
     expect(config.defaultBuilderFeeBps).toBe(1);
     expect(config.agentExpiryDays).toBe(30);
+    expect(config.appPasswordTtlMs).toBe(7 * 24 * 60 * 60 * 1000);
     expect(config.authEnabled).toBe(true);
     expect(config.enableTimingLogs).toBe(true);
     expect(config.devInsecure).toBe(false);
@@ -86,6 +87,16 @@ describe("loadConfig", () => {
     expect(loadConfig().agentExpiryDays).toBe(7);
   });
 
+  it("reads custom app password TTL days", () => {
+    process.env.TRADER_APP_PASSWORD_TTL_DAYS = "14";
+    expect(loadConfig().appPasswordTtlMs).toBe(14 * 24 * 60 * 60 * 1000);
+  });
+
+  it("rejects app password TTL above 30 days", () => {
+    process.env.TRADER_APP_PASSWORD_TTL_DAYS = "31";
+    expect(() => loadConfig()).toThrow("TRADER_APP_PASSWORD_TTL_DAYS must be <= 30.");
+  });
+
   it("reads collateral debug flag", () => {
     process.env.TRADER_COLLATERAL_INPUT_DEBUG = "true";
     expect(loadConfig().enableCollateralInputDebug).toBe(true);
@@ -122,6 +133,11 @@ describe("loadConfig", () => {
     expect(config.devInsecure).toBe(true);
   });
 
+  it("rejects wildcard allowed origins in secure mode", () => {
+    process.env.TRADER_ALLOWED_ORIGINS = "*";
+    expect(() => loadConfig()).toThrow("TRADER_ALLOWED_ORIGINS cannot include '*'");
+  });
+
   it("reads runtime state backend and sqlite path", () => {
     process.env.TRADER_RUNTIME_STATE_BACKEND = "memory";
     process.env.TRADER_RUNTIME_STATE_SQLITE_PATH = "/tmp/hl-prime-runtime.db";
@@ -150,6 +166,34 @@ describe("loadConfig", () => {
     process.env.TRADER_SIGNER_BACKEND = "privy";
     process.env.TRADER_SIGNER_LOCAL_FALLBACK = "true";
     expect(() => loadConfig()).toThrow("TRADER_STORE_PASSPHRASE");
+  });
+
+  describe("production runtime guardrails", () => {
+    it("rejects dev insecure mode when NODE_ENV=production", () => {
+      process.env.NODE_ENV = "production";
+      process.env.TRADER_DEV_INSECURE = "true";
+      delete process.env.TRADER_ALLOWED_ORIGINS;
+      expect(() => loadConfig()).toThrow("TRADER_DEV_INSECURE=true is not allowed");
+    });
+
+    it("rejects auth disabled when NODE_ENV=production", () => {
+      process.env.NODE_ENV = "production";
+      process.env.TRADER_AUTH_ENABLED = "false";
+      expect(() => loadConfig()).toThrow("TRADER_AUTH_ENABLED=false is not allowed");
+    });
+
+    it("treats Railway runtime metadata as production for guardrails", () => {
+      delete process.env.NODE_ENV;
+      process.env.RAILWAY_PROJECT_ID = "project_123";
+      process.env.TRADER_AUTH_ENABLED = "false";
+      expect(() => loadConfig()).toThrow("TRADER_AUTH_ENABLED=false is not allowed");
+    });
+
+    it("rejects loopback host binding in production runtime", () => {
+      process.env.NODE_ENV = "production";
+      process.env.TRADER_HOST = "127.0.0.1";
+      expect(() => loadConfig()).toThrow("TRADER_HOST=127.0.0.1 is not allowed");
+    });
   });
 
   describe("boolean env parsing", () => {

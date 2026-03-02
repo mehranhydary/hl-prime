@@ -1,12 +1,18 @@
 /**
  * Frontend session-based auth.
  *
- * getAuthHeaders() NEVER triggers MetaMask — it only returns a cached token.
+ * getAuthHeaders() NEVER triggers MetaMask.
  * Session creation must be triggered explicitly via signIn().
- * Cached tokens persist in localStorage across page refreshes.
+ * Only non-sensitive session metadata persists in localStorage.
  */
 
-import { AUTH_DOMAIN, AUTH_TYPES, type SessionResponse } from "@shared/auth";
+import {
+  AUTH_AUDIENCE,
+  AUTH_DOMAIN,
+  AUTH_TYPES,
+  type SessionChallengeResponse,
+  type SessionResponse,
+} from "@shared/auth";
 import { getAddress } from "viem";
 import { getAccessHeaders } from "./access-gate.js";
 
@@ -15,7 +21,6 @@ const SESSION_AUTH_ENABLED = (import.meta.env.VITE_TRADER_AUTH_ENABLED ?? "true"
 
 interface StoredSession {
   address: string;
-  token: string;
   expiresAt: number;
 }
 
@@ -28,7 +33,6 @@ export interface AuthSnapshot {
 
 type AuthListener = (snapshot: AuthSnapshot) => void;
 
-let sessionToken: string | null = null;
 let sessionExpiresAt = 0;
 let currentAddress: `0x${string}` | null = null;
 let authRequired = false;
@@ -42,6 +46,7 @@ function loadStoredSession(address: string): StoredSession | null {
     if (!raw) return null;
     const stored = JSON.parse(raw) as StoredSession;
     if (stored.address.toLowerCase() !== address.toLowerCase()) return null;
+    if (!Number.isFinite(stored.expiresAt)) return null;
     if (stored.expiresAt <= Date.now() + 60_000) return null;
     return stored;
   } catch {
@@ -49,14 +54,14 @@ function loadStoredSession(address: string): StoredSession | null {
   }
 }
 
-function persistSession(address: string, token: string, expiresAt: number): void {
+function persistSession(address: string, expiresAt: number): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ address, token, expiresAt } satisfies StoredSession));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ address, expiresAt } satisfies StoredSession));
   } catch {}
 }
 
 function isSessionValid(): boolean {
-  return Boolean(sessionToken) && sessionExpiresAt > Date.now() + 60_000;
+  return Boolean(currentAddress) && sessionExpiresAt > Date.now() + 60_000;
 }
 
 function snapshot(): AuthSnapshot {
@@ -93,7 +98,6 @@ export function configureAuth(address: `0x${string}` | null): void {
   currentAddress = address;
 
   if (!SESSION_AUTH_ENABLED) {
-    sessionToken = null;
     sessionExpiresAt = 0;
     authRequired = false;
     emit();
@@ -103,7 +107,6 @@ export function configureAuth(address: `0x${string}` | null): void {
   if (address) {
     const stored = loadStoredSession(address);
     if (stored) {
-      sessionToken = stored.token;
       sessionExpiresAt = stored.expiresAt;
       authRequired = false;
       emit();
@@ -111,7 +114,6 @@ export function configureAuth(address: `0x${string}` | null): void {
     }
   }
 
-  sessionToken = null;
   sessionExpiresAt = 0;
   authRequired = Boolean(address);
   emit();
@@ -122,9 +124,7 @@ export function configureAuth(address: `0x${string}` | null): void {
  * Returns empty object when unauthenticated — server decides whether to allow or reject.
  */
 export function getAuthHeaders(): Record<string, string> {
-  if (!SESSION_AUTH_ENABLED) return {};
-  if (!isSessionValid()) return {};
-  return { Authorization: `Bearer ${sessionToken}` };
+  return {};
 }
 
 export function hasActiveSession(): boolean {
@@ -139,7 +139,6 @@ export function markAuthRequired(): void {
 }
 
 export function clearAuthSession(): void {
-  sessionToken = null;
   sessionExpiresAt = 0;
   authRequired = SESSION_AUTH_ENABLED ? Boolean(currentAddress) : false;
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
@@ -165,21 +164,54 @@ export async function signIn(): Promise<boolean> {
   } catch {
     return false;
   }
-  const timestamp = Date.now();
-  const nonce = crypto.randomUUID();
-
-  const serializableData = {
-    types: AUTH_TYPES,
-    domain: AUTH_DOMAIN,
-    primaryType: "Auth" as const,
-    message: {
-      address,
-      timestamp,
-      nonce,
-    },
-  };
-
   try {
+    const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
+    if (typeof chainIdHex !== "string") throw new Error("Wallet returned invalid chainId");
+    const chainId = parseInt(chainIdHex, 16);
+    if (!Number.isInteger(chainId)) throw new Error("Unable to parse wallet chainId");
+
+    const challengeRes = await fetch("/api/auth/challenge", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAccessHeaders(),
+      },
+      body: JSON.stringify({ address, chainId }),
+    });
+    if (!challengeRes.ok) {
+      const data = await challengeRes.json().catch(() => ({}));
+      console.error("[auth] Challenge creation rejected:", (data as Record<string, string>).error);
+      return false;
+    }
+
+    const challenge = (await challengeRes.json()) as SessionChallengeResponse;
+    if (
+      typeof challenge.nonce !== "string"
+      || typeof challenge.issuedAt !== "number"
+      || typeof challenge.chainId !== "number"
+      || typeof challenge.audience !== "string"
+      || challenge.address.toLowerCase() !== address.toLowerCase()
+      || challenge.audience !== AUTH_AUDIENCE
+    ) {
+      throw new Error("Challenge response malformed");
+    }
+
+    const serializableData = {
+      types: AUTH_TYPES,
+      domain: {
+        ...AUTH_DOMAIN,
+        chainId: challenge.chainId,
+      },
+      primaryType: "Auth" as const,
+      message: {
+        address,
+        nonce: challenge.nonce,
+        issuedAt: challenge.issuedAt,
+        audience: challenge.audience,
+      },
+    };
+
     const serializedData = JSON.stringify(serializableData);
     let signature = await window.ethereum.request({
       method: "eth_signTypedData_v4",
@@ -199,11 +231,17 @@ export async function signIn(): Promise<boolean> {
 
     const res = await fetch("/api/auth/session", {
       method: "POST",
+      credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
         ...getAccessHeaders(),
       },
-      body: JSON.stringify({ address, timestamp, nonce, signature }),
+      body: JSON.stringify({
+        address,
+        chainId: challenge.chainId,
+        nonce: challenge.nonce,
+        signature,
+      }),
     });
 
     if (!res.ok) {
@@ -212,11 +250,13 @@ export async function signIn(): Promise<boolean> {
       return false;
     }
 
-    const data = (await res.json()) as SessionResponse;
-    sessionToken = data.token;
+    const data = (await res.json()) as Partial<SessionResponse>;
+    if (typeof data.expiresAt !== "number" || !Number.isFinite(data.expiresAt)) {
+      throw new Error("Invalid session response");
+    }
     sessionExpiresAt = data.expiresAt;
     authRequired = false;
-    persistSession(address, data.token, data.expiresAt);
+    persistSession(address, data.expiresAt);
     emit();
     return true;
   } catch (err) {
@@ -230,4 +270,11 @@ export async function signIn(): Promise<boolean> {
 /** Clear the current session. */
 export function signOut(): void {
   clearAuthSession();
+  void fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      ...getAccessHeaders(),
+    },
+  }).catch(() => {});
 }
