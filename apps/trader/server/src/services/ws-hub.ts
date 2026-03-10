@@ -54,7 +54,8 @@ export class WebSocketHub {
         return;
       }
 
-      if (!this.validateAuth(request)) {
+      const requestedAddress = url.searchParams.get("address");
+      if (!this.validateAuth(request, requestedAddress)) {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
         socket.destroy();
         return;
@@ -87,15 +88,27 @@ export class WebSocketHub {
     return this.config.allowedOrigins.some((allowed) => origin === allowed);
   }
 
-  private validateAuth(request: IncomingMessage): boolean {
-    if (!this.config.authEnabled) return true;
-
+  private readSession(request: IncomingMessage): { address: string; expiresAt: number } | null {
     const cookies = parseCookieHeader(request.headers.cookie);
     const token = cookies[SESSION_TOKEN_COOKIE];
-    if (!token) return false;
+    if (!token) return null;
 
     const session = getRuntimeStateStore().getSession(token);
-    if (!session || session.expiresAt <= Date.now()) return false;
+    if (!session || session.expiresAt <= Date.now()) return null;
+    return {
+      address: session.address,
+      expiresAt: session.expiresAt,
+    };
+  }
+
+  private validateAuth(request: IncomingMessage, requestedAddress: string | null = null): boolean {
+    if (!this.config.authEnabled) return true;
+
+    const session = this.readSession(request);
+    if (!session) return false;
+    if (requestedAddress && session.address.toLowerCase() !== requestedAddress.toLowerCase()) {
+      return false;
+    }
 
     return true;
   }
@@ -109,6 +122,15 @@ export class WebSocketHub {
       this.sendMessage(ws, { type: "error", message: "Invalid or missing address parameter" });
       ws.close(1008, "Invalid address");
       return;
+    }
+
+    if (this.config.authEnabled) {
+      const session = this.readSession(request);
+      if (!session || session.address.toLowerCase() !== address.toLowerCase()) {
+        this.sendMessage(ws, { type: "error", message: "Unauthorized address access" });
+        ws.close(1008, "Unauthorized");
+        return;
+      }
     }
 
     const ip = request.socket.remoteAddress ?? "unknown";

@@ -14,6 +14,8 @@ export interface ServerConfig {
   defaultBuilderFeeBps: number;
   agentExpiryDays: number;
   enableCollateralInputDebug: boolean;
+  /** Enable diagnostic debug routes (disabled by default). */
+  enableDebugRoutes: boolean;
   enableTimingLogs: boolean;
   /** Allowed CORS origins. Empty array = permissive (dev mode). */
   allowedOrigins: string[];
@@ -69,6 +71,8 @@ function isLoopbackHost(host: string): boolean {
   return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
 }
 
+const MIN_APP_PASSWORD_LENGTH = 16;
+
 export function loadConfig(): ServerConfig {
   const dataDir = process.env.TRADER_DATA_DIR
     ? path.resolve(process.env.TRADER_DATA_DIR)
@@ -80,6 +84,10 @@ export function loadConfig(): ServerConfig {
     : ["USDC", "USDH", "USDE", "USDT0"];
   const enableCollateralInputDebug = parseBooleanEnv(
     process.env.TRADER_COLLATERAL_INPUT_DEBUG,
+    false,
+  );
+  const enableDebugRoutes = parseBooleanEnv(
+    process.env.TRADER_ENABLE_DEBUG_ROUTES,
     false,
   );
   const enableTimingLogs = parseBooleanEnv(
@@ -107,6 +115,9 @@ export function loadConfig(): ServerConfig {
   const appPassword = process.env.TRADER_APP_PASSWORD?.trim() ?? "";
   if (!appPassword) {
     throw new Error("TRADER_APP_PASSWORD must be set and non-empty.");
+  }
+  if (appPassword.length < MIN_APP_PASSWORD_LENGTH) {
+    throw new Error(`TRADER_APP_PASSWORD must be at least ${MIN_APP_PASSWORD_LENGTH} characters.`);
   }
   const appPasswordTtlDaysRaw = process.env.TRADER_APP_PASSWORD_TTL_DAYS ?? "7";
   const appPasswordTtlDays = parseInt(appPasswordTtlDaysRaw, 10);
@@ -161,6 +172,11 @@ export function loadConfig(): ServerConfig {
       "TRADER_AUTH_ENABLED=false is not allowed in production runtime (NODE_ENV=production/Railway).",
     );
   }
+  if (productionRuntime && enableDebugRoutes) {
+    throw new Error(
+      "TRADER_ENABLE_DEBUG_ROUTES=true is not allowed in production runtime (NODE_ENV=production/Railway).",
+    );
+  }
 
   const portRaw = process.env.TRADER_PORT ?? process.env.PORT ?? "4400";
   const parsedPort = parseInt(portRaw, 10);
@@ -186,6 +202,7 @@ export function loadConfig(): ServerConfig {
     defaultBuilderFeeBps: parseInt(process.env.TRADER_BUILDER_FEE_BPS ?? "1", 10),
     agentExpiryDays: parseInt(process.env.TRADER_AGENT_EXPIRY_DAYS ?? "30", 10),
     enableCollateralInputDebug,
+    enableDebugRoutes,
     enableTimingLogs,
     allowedOrigins,
     authEnabled,

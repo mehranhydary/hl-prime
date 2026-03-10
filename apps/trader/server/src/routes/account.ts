@@ -519,103 +519,105 @@ function aggregateOrderHistory(rows: PortfolioOrderHistoryRow[]): PortfolioOrder
 export function accountRoutes(config: ServerConfig): Router {
   const router = Router();
 
-  // GET /api/account/debug-prices?masterAddress=0x...&network=mainnet
-  // Diagnostic endpoint — shows raw API data and price resolution steps.
-  router.get("/debug-prices", async (req, res) => {
-    try {
-      const masterAddress = requireAddress(req.query.masterAddress, "masterAddress");
-      const network = parseNetwork(req.query.network, config.defaultNetwork);
+  if (config.enableDebugRoutes) {
+    // GET /api/account/debug-prices?masterAddress=0x...&network=mainnet
+    // Diagnostic endpoint — shows raw API data and price resolution steps.
+    router.get("/debug-prices", async (req, res) => {
+      try {
+        const masterAddress = requireAddress(req.query.masterAddress, "masterAddress");
+        const network = parseNetwork(req.query.network, config.defaultNetwork);
 
-      const service = getClientService(config);
-      const publicHp = await service.getPublicClient(network);
-      const [allMids, spotMeta, spotState, clearingState] = await Promise.all([
-        publicHp.api.allMids(),
-        publicHp.api.spotMeta().catch(() => null),
-        publicHp.api.spotClearinghouseState(masterAddress),
-        publicHp.api.clearinghouseState(masterAddress),
-      ]);
+        const service = getClientService(config);
+        const publicHp = await service.getPublicClient(network);
+        const [allMids, spotMeta, spotState, clearingState] = await Promise.all([
+          publicHp.api.allMids(),
+          publicHp.api.spotMeta().catch(() => null),
+          publicHp.api.spotClearinghouseState(masterAddress),
+          publicHp.api.clearinghouseState(masterAddress),
+        ]);
 
-      // Show a few sample allMids entries (perp and spot)
-      const samplePerps: Record<string, string> = {};
-      const sampleSpot: Record<string, string> = {};
-      for (const [key, value] of Object.entries(allMids)) {
-        if (key.startsWith("@")) {
-          if (Object.keys(sampleSpot).length < 20) sampleSpot[key] = String(value);
-        } else {
-          if (Object.keys(samplePerps).length < 20) samplePerps[key] = String(value);
+        // Show a few sample allMids entries (perp and spot)
+        const samplePerps: Record<string, string> = {};
+        const sampleSpot: Record<string, string> = {};
+        for (const [key, value] of Object.entries(allMids)) {
+          if (key.startsWith("@")) {
+            if (Object.keys(sampleSpot).length < 20) sampleSpot[key] = String(value);
+          } else {
+            if (Object.keys(samplePerps).length < 20) samplePerps[key] = String(value);
+          }
         }
+
+        // Build spotPriceMap and track resolution path
+        const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
+        const priceMapEntries: Record<string, number> = {};
+        for (const [k, v] of spotPriceMap) priceMapEntries[k] = v;
+
+        // Spot balances and how they'd be priced
+        const stableSet = new Set(config.stableTokens.map((t) => t.toUpperCase()));
+        const balancePricing = (spotState?.balances ?? []).map((b: any) => {
+          const coin = String(b.coin).toUpperCase();
+          const amount = toNumber(b.total);
+          const isStable = stableSet.has(coin);
+          const resolvedPrice = isStable ? 1 : (spotPriceMap.get(coin) ?? 0);
+          const directAllMids = allMids[b.coin] ?? allMids[coin] ?? null;
+          return {
+            rawCoin: b.coin,
+            normalizedCoin: coin,
+            rawTotal: b.total,
+            amount,
+            isStable,
+            directAllMidsLookup: directAllMids,
+            spotPriceMapLookup: spotPriceMap.get(coin) ?? null,
+            resolvedPrice,
+            usdValue: amount * resolvedPrice,
+          };
+        });
+
+        const perpRawUsd = toNumber(clearingState?.marginSummary?.totalRawUsd);
+        const accountValue = toNumber(clearingState?.marginSummary?.accountValue);
+        let unrealizedPnl = 0;
+        for (const ap of clearingState?.assetPositions ?? []) {
+          unrealizedPnl += toNumber(ap?.position?.unrealizedPnl);
+        }
+        const spotTotalUsd = balancePricing.reduce((s: number, b: any) => s + b.usdValue, 0);
+
+        res.json({
+          masterAddress,
+          stableTokens: config.stableTokens,
+          allMidsKeyCount: Object.keys(allMids).length,
+          samplePerpMids: samplePerps,
+          sampleSpotMids: sampleSpot,
+          spotMetaAvailable: !!spotMeta,
+          spotMetaTokenCount: spotMeta?.tokens?.length ?? 0,
+          spotMetaUniverseCount: spotMeta?.universe?.length ?? 0,
+          spotPriceMapSize: spotPriceMap.size,
+          spotPriceMapEntries: priceMapEntries,
+          clearingState: {
+            accountValue,
+            totalRawUsd: perpRawUsd,
+            totalMarginUsed: toNumber(clearingState?.marginSummary?.totalMarginUsed),
+            withdrawable: toNumber(clearingState?.withdrawable),
+            positionCount: clearingState?.assetPositions?.length ?? 0,
+            unrealizedPnl,
+          },
+          balancePricing,
+          computed: {
+            perpRawUsd,
+            unrealizedPnl,
+            spotTotalUsd,
+            totalUsd: perpRawUsd + unrealizedPnl + spotTotalUsd,
+            formula: "perpRawUsd + unrealizedPnl + spotTotalUsd",
+          },
+        });
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          res.status(400).json({ error: err.message, code: "BAD_REQUEST" });
+          return;
+        }
+        res.status(500).json({ error: "Debug prices failed.", code: "DEBUG_PRICES_FAILED" });
       }
-
-      // Build spotPriceMap and track resolution path
-      const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
-      const priceMapEntries: Record<string, number> = {};
-      for (const [k, v] of spotPriceMap) priceMapEntries[k] = v;
-
-      // Spot balances and how they'd be priced
-      const stableSet = new Set(config.stableTokens.map((t) => t.toUpperCase()));
-      const balancePricing = (spotState?.balances ?? []).map((b: any) => {
-        const coin = String(b.coin).toUpperCase();
-        const amount = toNumber(b.total);
-        const isStable = stableSet.has(coin);
-        const resolvedPrice = isStable ? 1 : (spotPriceMap.get(coin) ?? 0);
-        const directAllMids = allMids[b.coin] ?? allMids[coin] ?? null;
-        return {
-          rawCoin: b.coin,
-          normalizedCoin: coin,
-          rawTotal: b.total,
-          amount,
-          isStable,
-          directAllMidsLookup: directAllMids,
-          spotPriceMapLookup: spotPriceMap.get(coin) ?? null,
-          resolvedPrice,
-          usdValue: amount * resolvedPrice,
-        };
-      });
-
-      const perpRawUsd = toNumber(clearingState?.marginSummary?.totalRawUsd);
-      const accountValue = toNumber(clearingState?.marginSummary?.accountValue);
-      let unrealizedPnl = 0;
-      for (const ap of clearingState?.assetPositions ?? []) {
-        unrealizedPnl += toNumber(ap?.position?.unrealizedPnl);
-      }
-      const spotTotalUsd = balancePricing.reduce((s: number, b: any) => s + b.usdValue, 0);
-
-      res.json({
-        masterAddress,
-        stableTokens: config.stableTokens,
-        allMidsKeyCount: Object.keys(allMids).length,
-        samplePerpMids: samplePerps,
-        sampleSpotMids: sampleSpot,
-        spotMetaAvailable: !!spotMeta,
-        spotMetaTokenCount: spotMeta?.tokens?.length ?? 0,
-        spotMetaUniverseCount: spotMeta?.universe?.length ?? 0,
-        spotPriceMapSize: spotPriceMap.size,
-        spotPriceMapEntries: priceMapEntries,
-        clearingState: {
-          accountValue,
-          totalRawUsd: perpRawUsd,
-          totalMarginUsed: toNumber(clearingState?.marginSummary?.totalMarginUsed),
-          withdrawable: toNumber(clearingState?.withdrawable),
-          positionCount: clearingState?.assetPositions?.length ?? 0,
-          unrealizedPnl,
-        },
-        balancePricing,
-        computed: {
-          perpRawUsd,
-          unrealizedPnl,
-          spotTotalUsd,
-          totalUsd: perpRawUsd + unrealizedPnl + spotTotalUsd,
-          formula: "perpRawUsd + unrealizedPnl + spotTotalUsd",
-        },
-      });
-    } catch (err) {
-      if (err instanceof ValidationError) {
-        res.status(400).json({ error: err.message, code: "BAD_REQUEST" });
-        return;
-      }
-      res.status(500).json({ error: "Debug prices failed.", code: "DEBUG_PRICES_FAILED" });
-    }
-  });
+    });
+  }
 
   // GET /api/account/bootstrap?masterAddress=0x...&network=mainnet
   // Returns market data and wallet-level read-only balance/positions.

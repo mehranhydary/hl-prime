@@ -107,9 +107,19 @@ describe("loadConfig", () => {
     expect(loadConfig().enableTimingLogs).toBe(false);
   });
 
+  it("reads debug routes flag", () => {
+    process.env.TRADER_ENABLE_DEBUG_ROUTES = "true";
+    expect(loadConfig().enableDebugRoutes).toBe(true);
+  });
+
   it("reads auth enabled flag", () => {
     process.env.TRADER_AUTH_ENABLED = "true";
     expect(loadConfig().authEnabled).toBe(true);
+  });
+
+  it("rejects app password shorter than 16 characters", () => {
+    process.env.TRADER_APP_PASSWORD = "short-password";
+    expect(() => loadConfig()).toThrow("TRADER_APP_PASSWORD must be at least 16 characters.");
   });
 
   it("reads allowed origins", () => {
@@ -203,6 +213,12 @@ describe("loadConfig", () => {
       process.env.NODE_ENV = "production";
       process.env.TRADER_HOST = "127.0.0.1";
       expect(() => loadConfig()).toThrow("TRADER_HOST=127.0.0.1 is not allowed");
+    });
+
+    it("rejects debug routes when NODE_ENV=production", () => {
+      process.env.NODE_ENV = "production";
+      process.env.TRADER_ENABLE_DEBUG_ROUTES = "true";
+      expect(() => loadConfig()).toThrow("TRADER_ENABLE_DEBUG_ROUTES=true is not allowed");
     });
   });
 

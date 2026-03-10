@@ -13,9 +13,36 @@ function createProvider(books: Record<string, L2Book>): HLProvider & {
   placeOrder: ReturnType<typeof vi.fn>;
   batchOrders: ReturnType<typeof vi.fn>;
 } {
-  const placeOrder = vi.fn(async () => ({
-    statuses: [{ filled: { oid: 101, totalSz: "5", avgPx: "431.55" } }],
-  }));
+  const spotBalances = new Map<string, number>([
+    ["USDH", 10000],
+    ["USDC", 0],
+  ]);
+  const placeOrder = vi.fn(async (order: { assetIndex: number; isBuy: boolean; size: string; price: string }) => {
+    // Spot swap path used by CollateralManager in executeSplit tests.
+    if (order.assetIndex >= 10000) {
+      const size = parseFloat(order.size);
+      const price = parseFloat(order.price);
+      const safeSize = Number.isFinite(size) && size > 0 ? size : 0;
+      const safePrice = Number.isFinite(price) && price > 0 ? price : 1;
+      if (order.isBuy) {
+        // For pair USDC/USDH: buy USDC with USDH.
+        spotBalances.set("USDC", (spotBalances.get("USDC") ?? 0) + safeSize);
+        spotBalances.set("USDH", Math.max(0, (spotBalances.get("USDH") ?? 0) - safeSize * safePrice));
+      } else {
+        // For pair USDC/USDH: sell USDC for USDH.
+        spotBalances.set("USDC", Math.max(0, (spotBalances.get("USDC") ?? 0) - safeSize));
+        spotBalances.set("USDH", (spotBalances.get("USDH") ?? 0) + safeSize * safePrice);
+      }
+
+      return {
+        statuses: [{ filled: { oid: 300, totalSz: order.size, avgPx: order.price } }],
+      };
+    }
+
+    return {
+      statuses: [{ filled: { oid: 101, totalSz: "5", avgPx: "431.55" } }],
+    };
+  });
   const batchOrders = vi.fn(async ({ length }: { length: number }) => ({
     statuses: Array.from({ length }).map((_, i) => ({
       filled: { oid: 200 + i, totalSz: "4", avgPx: "431.70" },
@@ -62,7 +89,10 @@ function createProvider(books: Record<string, L2Book>): HLProvider & {
       crossMaintenanceMarginUsed: "0",
     })),
     spotClearinghouseState: vi.fn(async () => ({
-      balances: [{ coin: "USDH", hold: "0", total: "10000", entryNtl: "10000", token: 1 }],
+      balances: [
+        { coin: "USDH", hold: "0", total: String(spotBalances.get("USDH") ?? 0), entryNtl: "10000", token: 1 },
+        { coin: "USDC", hold: "0", total: String(spotBalances.get("USDC") ?? 0), entryNtl: "0", token: 0 },
+      ],
     })),
     openOrders: vi.fn(async () => []),
     userFills: vi.fn(async () => []),
@@ -95,6 +125,14 @@ describe("Routing+execution contract (deterministic)", () => {
     provider = createProvider({
       "xyz:TSLA": TSLA_BOOK_DEEP,
       "flx:TSLA": TSLA_HIP3_BOOK,
+      "USDC/USDH": {
+        coin: "USDC/USDH",
+        time: Date.now(),
+        levels: [
+          [{ px: "1.00", sz: "100000", n: 1 }],
+          [{ px: "1.00", sz: "100000", n: 1 }],
+        ],
+      },
       USDH: {
         coin: "USDH",
         time: Date.now(),

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextFunction, Request, Response } from "express";
 import { sessionAuth, __createSessionTokenForTests, __resetSessionsForTests } from "../../apps/trader/server/src/middleware/auth.js";
 import { loadConfig } from "../../apps/trader/server/src/config.js";
@@ -34,6 +34,12 @@ function createRequest(
     query,
   } as unknown as Request;
 }
+
+beforeEach(() => {
+  vi.stubEnv("TRADER_RUNTIME_STATE_BACKEND", "memory");
+  vi.stubEnv("TRADER_APP_PASSWORD", "test-app-password-1234");
+  vi.stubEnv("TRADER_STORE_PASSPHRASE", "test-passphrase-1234");
+});
 
 afterEach(() => {
   __resetSessionsForTests();
@@ -88,7 +94,6 @@ describe("Trader auth authorization integration", () => {
   });
 
   it("supports explicit insecure dev mode config with auth disabled", () => {
-    vi.stubEnv("TRADER_STORE_PASSPHRASE", "test-passphrase-1234");
     vi.stubEnv("TRADER_DEV_INSECURE", "true");
     vi.stubEnv("TRADER_AUTH_ENABLED", "false");
     vi.stubEnv("TRADER_ALLOWED_ORIGINS", "");
