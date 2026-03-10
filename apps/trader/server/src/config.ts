@@ -135,6 +135,22 @@ export function loadConfig(): ServerConfig {
       "TRADER_ALLOWED_ORIGINS cannot include '*' unless TRADER_DEV_INSECURE=true",
     );
   }
+  const BOGUS_ORIGIN_PATTERNS = new Set(["true", "false", "1", "0", "yes", "no"]);
+  for (const origin of allowedOrigins) {
+    const lower = origin.toLowerCase();
+    if (BOGUS_ORIGIN_PATTERNS.has(lower)) {
+      throw new Error(
+        `TRADER_ALLOWED_ORIGINS contains '${origin}' which looks like a boolean, not a URL. ` +
+        "Set it to comma-separated origins like 'https://app.example.com'.",
+      );
+    }
+    if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+      throw new Error(
+        `TRADER_ALLOWED_ORIGINS contains '${origin}' which is not a valid origin URL. ` +
+        "Each origin must start with http:// or https://.",
+      );
+    }
+  }
   if (productionRuntime && devInsecure) {
     throw new Error(
       "TRADER_DEV_INSECURE=true is not allowed in production runtime (NODE_ENV=production/Railway).",

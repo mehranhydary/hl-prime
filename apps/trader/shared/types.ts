@@ -36,6 +36,8 @@ export interface AgentStatusResponse {
 
 export interface UnifiedBalance {
   totalUsd: number;
+  /** Amount available for new trades / withdrawal (from clearinghouse). */
+  availableUsd: number;
   perpAccountValueUsd: number;
   /** Deposited USDC in perps (totalRawUsd) — excludes unrealized PNL. */
   perpRawUsd: number;
@@ -90,7 +92,6 @@ export interface PortfolioEquitySummary {
   accountEquityUsd: number;
   spotUsd: number;
   perpsUsd: number;
-  perpsBalanceUsd: number;
   unrealizedPnlUsd: number;
   crossMarginRatio: number;
   maintenanceMarginUsd: number;

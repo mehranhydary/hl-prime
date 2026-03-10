@@ -46,13 +46,27 @@ export function CandleChart({ data, interval, onIntervalChange, onHoverPrice }: 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const isDark = theme === "dark";
-    const textColor = isDark ? "#3d5a4e" : "#7a9e90";
-    const crosshairColor = isDark ? "rgba(168,240,212,0.06)" : "rgba(10,26,20,0.06)";
-    const labelBg = isDark ? "#1a3529" : "#dceee7";
-    const longColor = isDark ? "#22c55e" : "#16a34a";
-    const shortColor = isDark ? "#ef4444" : "#dc2626";
-    const accentColor = isDark ? "#50e3b5" : "#2d9e74";
+    const themeColors = {
+      green: {
+        text: "#3d5a4e", crosshair: "rgba(168,240,212,0.06)", labelBg: "#1a3529",
+        long: "#22c55e", short: "#ef4444", accent: "#50e3b5",
+      },
+      dark: {
+        text: "#3a3a42", crosshair: "rgba(255,255,255,0.06)", labelBg: "#222226",
+        long: "#22c55e", short: "#ef4444", accent: "#50e3b5",
+      },
+      light: {
+        text: "#7a9e90", crosshair: "rgba(10,26,20,0.06)", labelBg: "#dceee7",
+        long: "#16a34a", short: "#dc2626", accent: "#2d9e74",
+      },
+    } as const;
+    const colors = themeColors[theme];
+    const textColor = colors.text;
+    const crosshairColor = colors.crosshair;
+    const labelBg = colors.labelBg;
+    const longColor = colors.long;
+    const shortColor = colors.short;
+    const accentColor = colors.accent;
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -109,8 +123,8 @@ export function CandleChart({ data, interval, onIntervalChange, onHoverPrice }: 
     } else {
       const series = chart.addSeries(AreaSeries, {
         lineColor: accentColor,
-        topColor: isDark ? "rgba(80, 227, 181, 0.28)" : "rgba(45, 158, 116, 0.18)",
-        bottomColor: isDark ? "rgba(80, 227, 181, 0.01)" : "rgba(45, 158, 116, 0.01)",
+        topColor: theme === "light" ? "rgba(45, 158, 116, 0.18)" : "rgba(80, 227, 181, 0.28)",
+        bottomColor: theme === "light" ? "rgba(45, 158, 116, 0.01)" : "rgba(80, 227, 181, 0.01)",
         lineWidth: 2,
         crosshairMarkerBackgroundColor: accentColor,
         crosshairMarkerBorderColor: accentColor,

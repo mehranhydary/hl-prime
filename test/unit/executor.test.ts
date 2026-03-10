@@ -329,8 +329,9 @@ describe("Executor", () => {
       await executor.execute(makePlan(), USER);
 
       expect(provider.approveBuilderFee).not.toHaveBeenCalled();
-      // 1 initial check + 2 poll retries on first execute = 3; second execute skips (approvalChecked)
-      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(3);
+      // Agent sessions do NOT cache negative results, so each execute re-checks:
+      // Each execute = 1 initial check + 4 poll retries = 5 calls; 2 executes = 10
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(10);
       expect(provider.placeOrder).toHaveBeenCalledTimes(2);
     });
 
@@ -340,21 +341,24 @@ describe("Executor", () => {
           .mockResolvedValueOnce(0)   // first trade: initial check
           .mockResolvedValueOnce(0)   // first trade: poll 1
           .mockResolvedValueOnce(0)   // first trade: poll 2
-          .mockResolvedValueOnce(10), // after reset: now approved
+          .mockResolvedValueOnce(0)   // first trade: poll 3
+          .mockResolvedValueOnce(0)   // first trade: poll 4
+          .mockResolvedValueOnce(10), // second trade: now approved
         getSignerAddress: vi.fn().mockReturnValue("0x8988ee386c52f415452598a8c671f4876a17fce1"),
       });
       const executor = new Executor(provider, logger, { address: BUILDER_ADDR, feeBps: 1 });
 
-      // First trade: not approved, caches result
+      // First trade: not approved (agent sessions don't cache negative result)
       await executor.execute(makePlan(), USER);
-      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(3);
+      // 1 initial check + 4 poll retries = 5
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(5);
 
       // Reset after setup approves the fee
       executor.resetBuilderApprovalCheck();
 
-      // Second trade: re-checks and finds approval
+      // Second trade: re-checks and finds approval on initial check
       await executor.execute(makePlan(), USER);
-      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(4);
+      expect(provider.maxBuilderFee).toHaveBeenCalledTimes(6);
       expect(provider.approveBuilderFee).not.toHaveBeenCalled();
     });
   });

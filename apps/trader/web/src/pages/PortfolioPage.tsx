@@ -800,11 +800,12 @@ export function PortfolioPage() {
 
       <div className="bg-surface-1 border border-border p-4">
         <div className="text-xl text-text-primary mb-2">Account Equity</div>
+        <LabelValue label="Total" value={formatUsd(data.summary.accountEquityUsd)} accent />
         <LabelValue label="Spot" value={formatUsd(data.summary.spotUsd)} />
         <LabelValue label="Perps" value={formatUsd(data.summary.perpsUsd)} />
 
         <div className="text-xl text-text-primary mt-4 mb-2">Perps Overview</div>
-        <LabelValue label="Balance" value={formatUsd(data.summary.perpsBalanceUsd)} />
+        <LabelValue label="Account Value" value={formatUsd(data.summary.perpsUsd)} />
         <LabelValue label="Unrealized PNL" value={formatUsd(data.summary.unrealizedPnlUsd)} />
         <LabelValue label="Cross Margin Ratio" value={formatPct(data.summary.crossMarginRatio)} accent />
         <LabelValue label="Maintenance Margin" value={formatUsd(data.summary.maintenanceMarginUsd)} />

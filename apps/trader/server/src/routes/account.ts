@@ -215,6 +215,53 @@ function buildSpotPairLookup(spotMeta: any): Map<string, CoinMeta> {
   return map;
 }
 
+/**
+ * Build a comprehensive token→USD price map from allMids + spotMeta.
+ *
+ * allMids keys for perps are coin symbols ("BTC", "ETH", "HYPE") and
+ * for spot pairs are "@{pairIndex}".  Spot token names from
+ * spotClearinghouseState may only match via the @-prefixed index,
+ * so we resolve through spotMeta when a direct name lookup misses.
+ */
+function buildSpotPriceMap(
+  allMids: Record<string, string>,
+  spotMeta?: any,
+): Map<string, number> {
+  const map = new Map<string, number>();
+
+  // 1. Add all perp mid prices (case-insensitive key)
+  for (const [key, value] of Object.entries(allMids)) {
+    if (key.startsWith("@")) continue;
+    const price = parseFloat(String(value));
+    if (Number.isFinite(price) && price > 0) {
+      map.set(key.toUpperCase(), price);
+    }
+  }
+
+  // 2. Resolve spot pair @index prices for tokens not found above
+  if (spotMeta?.tokens && spotMeta?.universe) {
+    const tokenByIndex = new Map<number, string>();
+    for (const token of spotMeta.tokens) {
+      tokenByIndex.set(Number(token.index), String(token.name).toUpperCase());
+    }
+    for (const pair of spotMeta.universe) {
+      const pairTokens = Array.isArray(pair.tokens) ? pair.tokens : [];
+      if (pairTokens.length < 2) continue;
+      const baseName = tokenByIndex.get(Number(pairTokens[0]));
+      if (!baseName || map.has(baseName)) continue; // already priced from perps
+      const pairMid = allMids[`@${pair.index}`];
+      if (pairMid) {
+        const price = parseFloat(String(pairMid));
+        if (Number.isFinite(price) && price > 0) {
+          map.set(baseName, price);
+        }
+      }
+    }
+  }
+
+  return map;
+}
+
 interface AccountCandidate {
   user: string;
   clearinghouseState: any;
@@ -472,6 +519,104 @@ function aggregateOrderHistory(rows: PortfolioOrderHistoryRow[]): PortfolioOrder
 export function accountRoutes(config: ServerConfig): Router {
   const router = Router();
 
+  // GET /api/account/debug-prices?masterAddress=0x...&network=mainnet
+  // Diagnostic endpoint — shows raw API data and price resolution steps.
+  router.get("/debug-prices", async (req, res) => {
+    try {
+      const masterAddress = requireAddress(req.query.masterAddress, "masterAddress");
+      const network = parseNetwork(req.query.network, config.defaultNetwork);
+
+      const service = getClientService(config);
+      const publicHp = await service.getPublicClient(network);
+      const [allMids, spotMeta, spotState, clearingState] = await Promise.all([
+        publicHp.api.allMids(),
+        publicHp.api.spotMeta().catch(() => null),
+        publicHp.api.spotClearinghouseState(masterAddress),
+        publicHp.api.clearinghouseState(masterAddress),
+      ]);
+
+      // Show a few sample allMids entries (perp and spot)
+      const samplePerps: Record<string, string> = {};
+      const sampleSpot: Record<string, string> = {};
+      for (const [key, value] of Object.entries(allMids)) {
+        if (key.startsWith("@")) {
+          if (Object.keys(sampleSpot).length < 20) sampleSpot[key] = String(value);
+        } else {
+          if (Object.keys(samplePerps).length < 20) samplePerps[key] = String(value);
+        }
+      }
+
+      // Build spotPriceMap and track resolution path
+      const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
+      const priceMapEntries: Record<string, number> = {};
+      for (const [k, v] of spotPriceMap) priceMapEntries[k] = v;
+
+      // Spot balances and how they'd be priced
+      const stableSet = new Set(config.stableTokens.map((t) => t.toUpperCase()));
+      const balancePricing = (spotState?.balances ?? []).map((b: any) => {
+        const coin = String(b.coin).toUpperCase();
+        const amount = toNumber(b.total);
+        const isStable = stableSet.has(coin);
+        const resolvedPrice = isStable ? 1 : (spotPriceMap.get(coin) ?? 0);
+        const directAllMids = allMids[b.coin] ?? allMids[coin] ?? null;
+        return {
+          rawCoin: b.coin,
+          normalizedCoin: coin,
+          rawTotal: b.total,
+          amount,
+          isStable,
+          directAllMidsLookup: directAllMids,
+          spotPriceMapLookup: spotPriceMap.get(coin) ?? null,
+          resolvedPrice,
+          usdValue: amount * resolvedPrice,
+        };
+      });
+
+      const perpRawUsd = toNumber(clearingState?.marginSummary?.totalRawUsd);
+      const accountValue = toNumber(clearingState?.marginSummary?.accountValue);
+      let unrealizedPnl = 0;
+      for (const ap of clearingState?.assetPositions ?? []) {
+        unrealizedPnl += toNumber(ap?.position?.unrealizedPnl);
+      }
+      const spotTotalUsd = balancePricing.reduce((s: number, b: any) => s + b.usdValue, 0);
+
+      res.json({
+        masterAddress,
+        stableTokens: config.stableTokens,
+        allMidsKeyCount: Object.keys(allMids).length,
+        samplePerpMids: samplePerps,
+        sampleSpotMids: sampleSpot,
+        spotMetaAvailable: !!spotMeta,
+        spotMetaTokenCount: spotMeta?.tokens?.length ?? 0,
+        spotMetaUniverseCount: spotMeta?.universe?.length ?? 0,
+        spotPriceMapSize: spotPriceMap.size,
+        spotPriceMapEntries: priceMapEntries,
+        clearingState: {
+          accountValue,
+          totalRawUsd: perpRawUsd,
+          totalMarginUsed: toNumber(clearingState?.marginSummary?.totalMarginUsed),
+          withdrawable: toNumber(clearingState?.withdrawable),
+          positionCount: clearingState?.assetPositions?.length ?? 0,
+          unrealizedPnl,
+        },
+        balancePricing,
+        computed: {
+          perpRawUsd,
+          unrealizedPnl,
+          spotTotalUsd,
+          totalUsd: perpRawUsd + unrealizedPnl + spotTotalUsd,
+          formula: "perpRawUsd + unrealizedPnl + spotTotalUsd",
+        },
+      });
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        res.status(400).json({ error: err.message, code: "BAD_REQUEST" });
+        return;
+      }
+      res.status(500).json({ error: "Debug prices failed.", code: "DEBUG_PRICES_FAILED" });
+    }
+  });
+
   // GET /api/account/bootstrap?masterAddress=0x...&network=mainnet
   // Returns market data and wallet-level read-only balance/positions.
   router.get("/bootstrap", async (req, res) => {
@@ -481,7 +626,11 @@ export function accountRoutes(config: ServerConfig): Router {
 
       const service = getClientService(config);
       const publicHp = await service.getPublicClient(network);
-      const allMids = await publicHp.api.allMids();
+      const [allMids, spotMeta] = await Promise.all([
+        publicHp.api.allMids(),
+        publicHp.api.spotMeta().catch(() => null),
+      ]);
+      const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
 
       const agentConfigured = await service.hasClient(masterAddress, network);
       const infoClient = (publicHp.api as any).info as any;
@@ -529,7 +678,7 @@ export function accountRoutes(config: ServerConfig): Router {
 
       let balance: BootstrapResponse["balance"] = null;
       try {
-        balance = await getUnifiedBalance(publicHp, primaryUserAddress, config.stableTokens);
+        balance = await getUnifiedBalance(publicHp, primaryUserAddress, config.stableTokens, spotPriceMap);
       } catch (err) {
         console.warn("Failed to fetch bootstrap balance state:", err);
       }
@@ -608,9 +757,9 @@ export function accountRoutes(config: ServerConfig): Router {
         });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
+      console.error("[account/bootstrap] Bootstrap failed:", err instanceof Error ? err.message : String(err));
       res.status(500).json({
-        error: message,
+        error: "Account bootstrap failed. Please try again.",
         code: "BOOTSTRAP_FAILED",
       });
     }
@@ -657,9 +806,9 @@ export function accountRoutes(config: ServerConfig): Router {
       const masterClearinghouseState = masterClearingResult.status === "fulfilled"
         ? masterClearingResult.value
         : null;
-      const spotPairLookup = buildSpotPairLookup(
-        spotMetaResult.status === "fulfilled" ? spotMetaResult.value : null,
-      );
+      const resolvedSpotMeta = spotMetaResult.status === "fulfilled" ? spotMetaResult.value : null;
+      const spotPairLookup = buildSpotPairLookup(resolvedSpotMeta);
+      const portfolioSpotPriceMap = buildSpotPriceMap(allMids, resolvedSpotMeta);
       const subAccountCandidates = parseSubAccountCandidates(
         subAccountsResult.status === "fulfilled" ? subAccountsResult.value : null,
       );
@@ -713,19 +862,27 @@ export function accountRoutes(config: ServerConfig): Router {
       const fundingRaw = fundingResult.status === "fulfilled" ? fundingResult.value as FundingLike[] : [];
 
       const stableSet = new Set(config.stableTokens.map((t) => t.toUpperCase()));
-      const perpsUsd = toNumber(clearinghouseState?.marginSummary?.accountValue);
-      const perpsRawUsd = toNumber(clearinghouseState?.marginSummary?.totalRawUsd);
-      const spotStableRows = (spotState?.balances ?? [])
-        .filter((b: any) => stableSet.has(String(b.coin).toUpperCase()))
-        .map((b: any) => ({
-          coin: String(b.coin).toUpperCase(),
-          amount: Math.max(toNumber(b.total), 0),
-        }))
-        .filter((b: any) => b.amount > 0.0001)
-        .sort((a: any, b: any) => b.amount - a.amount);
+      const perpsAccountValue = toNumber(clearinghouseState?.marginSummary?.accountValue);
 
-      const spotUsd = spotStableRows.reduce((sum: number, b: any) => sum + b.amount, 0);
-      const accountEquityUsd = perpsUsd + spotUsd;
+      // Value ALL spot tokens at mark price (stables at 1:1, others via spotPriceMap).
+      // spotPriceMap resolves prices from both perp allMids keys AND spot pair @index
+      // keys, which is critical because some tokens (e.g. HYPE) may only be reachable
+      // through the spot pair index when allMids keys don't match spot token names.
+      const spotAllRows = (spotState?.balances ?? [])
+        .map((b: any) => {
+          const coin = String(b.coin).toUpperCase();
+          const amount = toNumber(b.total);
+          if (amount <= 0.0001) return null;
+          const isStable = stableSet.has(coin);
+          const markPrice = isStable ? 1 : (portfolioSpotPriceMap.get(coin) ?? 0);
+          const usdValue = amount * markPrice;
+          if (usdValue <= 0.0001) return null;
+          return { coin, amount, usdValue, isStable };
+        })
+        .filter((r: any): r is { coin: string; amount: number; usdValue: number; isStable: boolean } => r !== null)
+        .sort((a: any, b: any) => b.usdValue - a.usdValue);
+
+      const spotTotalUsd = spotAllRows.reduce((sum: number, b: any) => sum + b.usdValue, 0);
 
       // Fetch native + HIP-3 deployer positions
       const hip3DexNames = getHip3DexNames(allGroups);
@@ -898,36 +1055,34 @@ export function accountRoutes(config: ServerConfig): Router {
         })
         .sort((a, b) => b.statusTimestamp - a.statusTimestamp);
 
-      // Group balances by asset — use accountValue (total perps equity) so
-      // the balance table reflects what the user actually has.  totalRawUsd
-      // can go negative when realized losses exceed deposits even though
-      // unrealized gains keep the account healthy.
-      const balanceByAsset = new Map<string, number>();
-      balanceByAsset.set("USDC", (balanceByAsset.get("USDC") ?? 0) + perpsUsd);
-      // Spot stablecoins
-      for (const row of spotStableRows) {
-        const coin = String(row.coin);
-        const normalized = coin === "USD" ? "USDC" : coin;
-        balanceByAsset.set(normalized, (balanceByAsset.get(normalized) ?? 0) + row.amount);
+      // Balance breakdown: only stablecoins (USDC, USDE, USDH, USDT).
+      // Non-stable spot tokens (HYPE, ETH, etc.) are NOT shown here.
+      const stableRows = spotAllRows.filter((r: any) => r.isStable);
+      const balanceAmountByAsset = new Map<string, number>();
+      const balanceUsdByAsset = new Map<string, number>();
+      for (const row of stableRows) {
+        const normalized = row.coin === "USD" ? "USDC" : row.coin;
+        balanceAmountByAsset.set(normalized, (balanceAmountByAsset.get(normalized) ?? 0) + row.amount);
+        balanceUsdByAsset.set(normalized, (balanceUsdByAsset.get(normalized) ?? 0) + row.usdValue);
       }
 
-      const balancesBreakdown: PortfolioBalanceRow[] = [...balanceByAsset.entries()]
-        .map(([asset, amount]) => ({
+      const balancesBreakdown: PortfolioBalanceRow[] = [...balanceUsdByAsset.entries()]
+        .map(([asset, usdValue]) => ({
           key: `balance:${asset}`,
-          source: "perps" as const,
+          source: "spot" as const,
           asset,
-          amount,
-          usdValue: amount,
+          amount: balanceAmountByAsset.get(asset) ?? 0,
+          usdValue,
         }))
         .sort((a, b) => b.usdValue - a.usdValue);
 
-      const totalUsd = [...balanceByAsset.values()].reduce((s, v) => s + v, 0);
+      const stableTotalUsd = [...balanceUsdByAsset.values()].reduce((s, v) => s + v, 0);
       const balancesAggregate: PortfolioBalanceRow[] = [{
         key: "balance:total",
-        source: "perps",
+        source: "spot",
         asset: "USD",
-        amount: totalUsd,
-        usdValue: totalUsd,
+        amount: stableTotalUsd,
+        usdValue: stableTotalUsd,
       }];
 
       const unrealizedPnlUsd = positionsBreakdown.reduce((sum, p) => sum + p.unrealizedPnlUsd, 0);
@@ -937,18 +1092,20 @@ export function accountRoutes(config: ServerConfig): Router {
       );
       const crossTotalNtlPos = Math.abs(toNumber(clearinghouseState?.crossMarginSummary?.totalNtlPos));
 
+      // Total = Spot + Perps (accountValue from clearinghouse)
+      const portfolioValueUsd = spotTotalUsd + perpsAccountValue;
+
       const response: PortfolioResponse = {
         agentConfigured,
         requestedAt: now,
         summary: {
-          accountEquityUsd,
-          spotUsd,
-          perpsUsd,
-          perpsBalanceUsd: perpsRawUsd,
+          accountEquityUsd: portfolioValueUsd,
+          spotUsd: spotTotalUsd,
+          perpsUsd: perpsAccountValue,
           unrealizedPnlUsd,
-          crossMarginRatio: perpsUsd > 0 ? maintenanceMarginUsd / perpsUsd : 0,
+          crossMarginRatio: portfolioValueUsd > 0 ? maintenanceMarginUsd / portfolioValueUsd : 0,
           maintenanceMarginUsd,
-          crossAccountLeverage: perpsUsd > 0 ? crossTotalNtlPos / perpsUsd : 0,
+          crossAccountLeverage: portfolioValueUsd > 0 ? crossTotalNtlPos / portfolioValueUsd : 0,
         },
         balances: {
           aggregate: balancesAggregate,
@@ -985,9 +1142,9 @@ export function accountRoutes(config: ServerConfig): Router {
         });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
+      console.error("[account/portfolio] Portfolio failed:", err instanceof Error ? err.message : String(err));
       res.status(500).json({
-        error: message,
+        error: "Portfolio data unavailable. Please try again.",
         code: "PORTFOLIO_FAILED",
       });
     }

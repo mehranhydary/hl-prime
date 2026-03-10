@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,17 +42,20 @@ export function createApp(config: ServerConfig) {
   app.use("/api/auth/session", memoryRateLimit({
     keyPrefix: "auth_session",
     windowMs: 60_000,
-    max: 20,
+    max: 10,
+    backoff: true,
   }));
   app.use("/api/auth/challenge", memoryRateLimit({
     keyPrefix: "auth_challenge",
     windowMs: 60_000,
-    max: 20,
+    max: 10,
+    backoff: true,
   }));
   app.use("/api/access/verify", memoryRateLimit({
     keyPrefix: "access_verify",
-    windowMs: 60_000,
-    max: 10,
+    windowMs: 5 * 60_000,
+    max: 5,
+    backoff: true,
   }));
   app.use("/api/agent", memoryRateLimit({
     keyPrefix: "agent",
@@ -103,6 +106,15 @@ export function createApp(config: ServerConfig) {
       });
     });
   }
+
+  // Global catch-all error handler — prevents unhandled errors from leaking
+  // stack traces or internal details to the client.
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction): void => {
+    console.error("[unhandled]", err.message ?? String(err));
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error.", code: "INTERNAL_ERROR" });
+    }
+  });
 
   return app;
 }

@@ -182,7 +182,6 @@ export function AssetList({ assets }: AssetListProps) {
                 style={{ height: ROW_HEIGHT }}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  {/* Coin icon */}
                   <div className="w-8 h-8 shrink-0 rounded-full bg-surface-2 flex items-center justify-center overflow-hidden">
                     <img
                       src={tokenIconUrl(asset.primaryCoin)}

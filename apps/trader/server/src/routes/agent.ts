@@ -60,10 +60,10 @@ export function agentRoutes(config: ServerConfig): Router {
 
       res.json(response);
     } catch (err) {
+      console.error("[agent/init]", err instanceof Error ? err.message : String(err));
       res.status(500).json({
         error: "Failed to initialize agent",
         code: "AGENT_INIT_FAILED",
-        details: err instanceof Error ? err.message : String(err),
       });
     }
   });
@@ -117,10 +117,10 @@ export function agentRoutes(config: ServerConfig): Router {
         });
         return;
       }
+      console.error("[agent/complete]", err instanceof Error ? err.message : String(err));
       res.status(500).json({
         error: "Failed to complete agent setup",
         code: "AGENT_COMPLETE_FAILED",
-        details: err instanceof Error ? err.message : String(err),
       });
     }
   });
@@ -154,10 +154,10 @@ export function agentRoutes(config: ServerConfig): Router {
         });
         return;
       }
+      console.error("[agent/status]", err instanceof Error ? err.message : String(err));
       res.status(500).json({
         error: "Failed to check agent status",
         code: "AGENT_STATUS_FAILED",
-        details: err instanceof Error ? err.message : String(err),
       });
     }
   });

@@ -9,10 +9,11 @@ import { SetupPage } from "./pages/SetupPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ReferralsPage } from "./pages/ReferralsPage";
 import { useAccessGate } from "./hooks/use-access-gate";
+import { useRealtimeUpdates } from "./hooks/use-realtime";
 import { Header } from "./components/Header";
 import { BottomNav } from "./components/BottomNav";
-import { NetworkProvider } from "./lib/network-context";
-import { WalletProvider } from "./hooks/use-wallet";
+import { NetworkProvider, useNetwork } from "./lib/network-context";
+import { WalletProvider, useWallet } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
 
 function RequireAccess({ children }: { children: ReactElement }) {
@@ -24,9 +25,17 @@ function RequireAccess({ children }: { children: ReactElement }) {
   return <Navigate to="/unlock" replace state={{ from }} />;
 }
 
+function RealtimeUpdates() {
+  const { address } = useWallet();
+  const { network } = useNetwork();
+  useRealtimeUpdates(address, network);
+  return null;
+}
+
 function AppShell() {
   return (
     <>
+      <RealtimeUpdates />
       <Header />
       <main
         className="max-w-lg mx-auto min-h-screen bg-surface-0 text-text-primary"

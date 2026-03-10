@@ -47,6 +47,8 @@ export interface RuntimeStateStore {
 
   putQuote<T>(id: string, quote: T, ttlMs: number): void;
   getQuote<T>(id: string): T | null;
+  /** Atomic get-and-delete: returns the quote and removes it in one step. */
+  takeQuote<T>(id: string): T | null;
   deleteQuote(id: string): void;
   cleanupQuotes(now?: number): void;
 
@@ -203,6 +205,14 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
       this.quotes.delete(id);
       return null;
     }
+    return found.payload as T;
+  }
+
+  takeQuote<T>(id: string): T | null {
+    const found = this.quotes.get(id);
+    if (!found) return null;
+    this.quotes.delete(id);
+    if (found.expiresAt <= Date.now()) return null;
     return found.payload as T;
   }
 
@@ -436,6 +446,20 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
       return null;
     }
     return JSON.parse(row.payload) as T;
+  }
+
+  takeQuote<T>(id: string): T | null {
+    const tx = this.db.transaction((qid: string, now: number): T | null => {
+      const row = this.db.prepare(`
+        SELECT payload, expires_at as expiresAt
+        FROM quotes WHERE id = ?
+      `).get(qid) as { payload: string; expiresAt: number } | undefined;
+      if (!row) return null;
+      this.db.prepare("DELETE FROM quotes WHERE id = ?").run(qid);
+      if (row.expiresAt <= now) return null;
+      return JSON.parse(row.payload) as T;
+    });
+    return tx(id, Date.now());
   }
 
   deleteQuote(id: string): void {

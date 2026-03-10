@@ -4,7 +4,9 @@ import { getUnifiedBalance } from "../../apps/trader/server/src/services/balance
 function mockHp(overrides: {
   accountValue?: string;
   totalRawUsd?: string;
+  withdrawable?: string;
   balances?: { coin: string; total: string }[];
+  assetPositions?: { position: { unrealizedPnl: string } }[];
 } = {}) {
   return {
     api: {
@@ -15,8 +17,9 @@ function mockHp(overrides: {
           totalRawUsd: overrides.totalRawUsd ?? "10000",
           totalMarginUsed: "2500",
         },
-        assetPositions: [],
+        assetPositions: overrides.assetPositions ?? [],
         crossMaintenanceMarginUsed: "0",
+        withdrawable: overrides.withdrawable ?? "3000",
       }),
       spotClearinghouseState: vi.fn().mockResolvedValue({
         balances: overrides.balances ?? [
@@ -30,20 +33,58 @@ function mockHp(overrides: {
   } as any;
 }
 
+/** Helper: build a Map<string, number> from a plain object. */
+function priceMap(obj: Record<string, number>): Map<string, number> {
+  return new Map(Object.entries(obj));
+}
+
 describe("getUnifiedBalance", () => {
   const stableTokens = ["USDC", "USDH", "USDE", "USDT0"];
   const masterAddress = "0xabcdef1234567890";
 
-  it("calculates total USD from perp + spot stables", async () => {
+  it("calculates total USD as spot + perps accountValue", async () => {
     const hp = mockHp();
+    // totalUsd = spotTotalUsd + perpAccountValueUsd
+    //          = 6000.25 + 10000.50 = 16000.75
     const balance = await getUnifiedBalance(hp, masterAddress, stableTokens);
 
     expect(balance.perpAccountValueUsd).toBe(10000.50);
-    // perpRawUsd is totalRawUsd (deposited USDC, no PNL) — must not equal accountValue
     expect(balance.perpRawUsd).toBe(10000);
-    expect(balance.spotStableUsd).toBeCloseTo(6000.25, 1); // 5000.25 USDC + 1000 USDH (USDE 0.0001 below threshold)
-    // totalUsd uses accountValue (total equity) so negative totalRawUsd doesn't break it
+    // availableUsd = spotStableUsd (stablecoin balances total)
+    expect(balance.availableUsd).toBeCloseTo(6000.25, 1);
+    expect(balance.spotStableUsd).toBeCloseTo(6000.25, 1);
+    // No spotPriceMap passed → ETH valued at 0, only stables counted in spot
     expect(balance.totalUsd).toBeCloseTo(16000.75, 1);
+  });
+
+  it("values non-stable spot tokens via spotPriceMap when provided", async () => {
+    const hp = mockHp();
+    const balance = await getUnifiedBalance(hp, masterAddress, stableTokens, priceMap({ ETH: 3000 }));
+
+    // spotTotal = 5000.25 + 1000 + 2.5*3000 = 13500.25
+    // totalUsd = spotTotal + accountValue = 13500.25 + 10000.50 = 23500.75
+    expect(balance.totalUsd).toBeCloseTo(23500.75, 1);
+    // stableUsd doesn't include non-stables
+    expect(balance.spotStableUsd).toBeCloseTo(6000.25, 1);
+  });
+
+  it("handles unified/portfolio-margin mode (negative totalRawUsd)", async () => {
+    // Simulates unified mode: perps borrowed heavily from spot.
+    // accountValue already reflects the perps equity.
+    const hp = mockHp({
+      accountValue: "850",
+      totalRawUsd: "-7500",
+      balances: [
+        { coin: "USDC", total: "1200" },
+        { coin: "HYPE", total: "300" },
+      ],
+    });
+    const balance = await getUnifiedBalance(hp, masterAddress, stableTokens, priceMap({ HYPE: 25 }));
+
+    // spotTotal = 1200 + 300*25 = 8700
+    // totalUsd = spotTotal + accountValue = 8700 + 850 = 9550
+    expect(balance.totalUsd).toBeCloseTo(9550, 0);
+    expect(balance.spotStableUsd).toBeCloseTo(1200, 0);
   });
 
   it("includes stablecoin breakdown", async () => {
@@ -57,7 +98,7 @@ describe("getUnifiedBalance", () => {
     expect(usdc!.usd).toBe(5000.25); // 1:1 USD
   });
 
-  it("excludes non-stablecoin balances", async () => {
+  it("excludes non-stablecoin balances from breakdown", async () => {
     const hp = mockHp();
     const balance = await getUnifiedBalance(hp, masterAddress, stableTokens);
 
@@ -79,7 +120,8 @@ describe("getUnifiedBalance", () => {
 
     expect(balance.spotStableUsd).toBe(0);
     expect(balance.spotStableBreakdown).toHaveLength(0);
-    expect(balance.totalUsd).toBe(10000.50); // perpAccountValueUsd only (no spot stables)
+    // totalUsd = 0 spot + accountValue = 10000.50
+    expect(balance.totalUsd).toBe(10000.50);
   });
 
   it("handles zero perp account value", async () => {

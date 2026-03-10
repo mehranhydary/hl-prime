@@ -44,12 +44,22 @@ export function tokenIconFallbackUrl(coin: string): string | null {
   return base !== coin ? `https://app.hyperliquid.xyz/coins/${base}.svg` : null;
 }
 
-/** URL for a deployer's local icon (returns null for native coins or unknown deployers) */
+/** Hyperliquid brand icon URL (HYPE token icon doubles as the HL logo). */
+const HL_ICON_URL = "https://app.hyperliquid.xyz/coins/HYPE.svg";
+
+/** URL for a deployer's local icon (returns null for unknown deployers) */
 export function deployerIconUrl(coin: string): string | null {
   const deployer = getDeployer(coin);
   if (deployer && KNOWN_DEPLOYERS.has(deployer)) {
     return `/perp-dexes/${deployer}.png`;
   }
+  return null;
+}
+
+/** URL for a deployer icon by name — supports "HL" for native markets. */
+export function deployerIconByName(name: string): string | null {
+  if (name === "HL") return HL_ICON_URL;
+  if (KNOWN_DEPLOYERS.has(name)) return `/perp-dexes/${name}.png`;
   return null;
 }
 

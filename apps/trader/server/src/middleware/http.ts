@@ -4,11 +4,15 @@ interface RateLimitOptions {
   windowMs: number;
   max: number;
   keyPrefix: string;
+  /** Enable exponential backoff: each breach doubles the window (up to 4x). */
+  backoff?: boolean;
 }
 
 interface HitState {
   count: number;
   resetAt: number;
+  /** Number of consecutive windows where the limit was exceeded. */
+  breaches: number;
 }
 
 function contentSecurityPolicy(insecure = false): string {
@@ -77,6 +81,13 @@ export function requestLogger() {
   };
 }
 
+/**
+ * In-memory rate limiter — state is per-process. In a multi-process or
+ * clustered deployment each worker maintains its own counters, so effective
+ * limits are multiplied by the number of workers. For single-process
+ * deployments (the current architecture) this is a non-issue. If horizontal
+ * scaling is needed, swap to a shared store (e.g. Redis) for rate-limit state.
+ */
 export function memoryRateLimit(options: RateLimitOptions) {
   const hits = new Map<string, HitState>();
 
@@ -93,13 +104,21 @@ export function memoryRateLimit(options: RateLimitOptions) {
     const key = `${options.keyPrefix}:${clientKey(req)}`;
     const state = hits.get(key);
     if (!state || state.resetAt <= now) {
-      hits.set(key, { count: 1, resetAt: now + options.windowMs });
+      // When a window expires, carry forward breach count if previously breached.
+      const prevBreaches = state?.breaches ?? 0;
+      hits.set(key, { count: 1, resetAt: now + options.windowMs, breaches: prevBreaches > 0 ? prevBreaches - 1 : 0 });
       next();
       return;
     }
 
     state.count += 1;
     if (state.count > options.max) {
+      if (options.backoff) {
+        state.breaches = Math.min((state.breaches ?? 0) + 1, 4);
+        // Double the remaining lockout per breach, up to 4x window.
+        const multiplier = Math.pow(2, state.breaches - 1);
+        state.resetAt = Math.max(state.resetAt, now + options.windowMs * multiplier);
+      }
       const retryAfterSec = Math.max(1, Math.ceil((state.resetAt - now) / 1000));
       res.setHeader("Retry-After", String(retryAfterSec));
       res.status(429).json({

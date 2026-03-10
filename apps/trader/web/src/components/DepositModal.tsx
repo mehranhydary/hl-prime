@@ -17,7 +17,7 @@ export function DepositModal({ address, onClose }: DepositModalProps) {
 			margin: 2,
 			width: 400,
 			color: {
-				dark: theme === 'dark' ? '#e2e8f0' : '#111827',
+				dark: theme !== 'light' ? '#e2e8f0' : '#111827',
 				light: '#00000000',
 			},
 		}).then(setQrDataUrl)

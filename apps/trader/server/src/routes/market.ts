@@ -46,8 +46,8 @@ export function marketRoutes(config: ServerConfig): Router {
         res.status(400).json({ error: err.message, code: "BAD_REQUEST" });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: message, code: "CANDLE_FETCH_FAILED" });
+      console.error("[market/candles] Candle fetch failed:", err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: "Candle data unavailable.", code: "CANDLE_FETCH_FAILED" });
     }
   });
 

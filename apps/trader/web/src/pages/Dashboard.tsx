@@ -119,7 +119,7 @@ export function Dashboard() {
             <div>
               <div className="text-xs text-text-muted uppercase tracking-wider">Available Balance</div>
               <div className="text-lg font-bold text-text-primary">
-                ${bootstrap.balance.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${bootstrap.balance.availableUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
           </div>

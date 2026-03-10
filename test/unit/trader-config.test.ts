@@ -138,6 +138,16 @@ describe("loadConfig", () => {
     expect(() => loadConfig()).toThrow("TRADER_ALLOWED_ORIGINS cannot include '*'");
   });
 
+  it("rejects boolean-like origin values", () => {
+    process.env.TRADER_ALLOWED_ORIGINS = "true";
+    expect(() => loadConfig()).toThrow("looks like a boolean");
+  });
+
+  it("rejects origins without http(s) scheme", () => {
+    process.env.TRADER_ALLOWED_ORIGINS = "app.example.com";
+    expect(() => loadConfig()).toThrow("not a valid origin URL");
+  });
+
   it("reads runtime state backend and sqlite path", () => {
     process.env.TRADER_RUNTIME_STATE_BACKEND = "memory";
     process.env.TRADER_RUNTIME_STATE_SQLITE_PATH = "/tmp/hl-prime-runtime.db";

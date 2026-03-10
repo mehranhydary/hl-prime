@@ -1,4 +1,4 @@
-import { displayCoin, deployerIconUrl, showIconFallback } from "../lib/display";
+import { displayCoin, deployerIconByName, showIconFallback } from "../lib/display";
 import type { DedupedAsset } from "@shared/types";
 
 interface MarketInfoProps {
@@ -53,12 +53,12 @@ function DeployerIcons({ deployers }: { deployers: string[] }) {
   return (
     <div className="flex items-center gap-1.5">
       {deployers.map((d) => {
-        const icon = d !== "HL" ? deployerIconUrl(`${d}:_`) : null;
+        const icon = deployerIconByName(d);
         return (
           <div
             key={d}
             className="w-5 h-5 rounded-full bg-surface-3 flex items-center justify-center overflow-hidden shrink-0"
-            title={d}
+            title={d === "HL" ? "Hyperliquid" : d}
           >
             {icon ? (
               <img

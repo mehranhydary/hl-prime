@@ -88,7 +88,7 @@
   font-display: swap;
 }
 
-/* ─── Design Tokens (dark mode default) ─── */
+/* ─── Design Tokens (green mode = default) ─── */
 @theme {
   --color-surface-0: #0a1a14;
   --color-surface-1: #0f2119;
@@ -116,7 +116,7 @@
   --color-border-subtle: rgba(168, 240, 212, 0.06);
 }
 
-/* ─── Light Mode Overrides ─── */
+/* ─── Light Mode ─── */
 html.light {
   --color-surface-0: #f2faf6;
   --color-surface-1: #e8f5f0;
@@ -142,6 +142,34 @@ html.light {
 
   --color-border: #c8e4d8;
   --color-border-subtle: rgba(10, 26, 20, 0.06);
+}
+
+/* ─── Dark Mode (black-based, neutral) ─── */
+html.dark {
+  --color-surface-0: #09090b;
+  --color-surface-1: #111113;
+  --color-surface-2: #19191d;
+  --color-surface-3: #222226;
+
+  --color-accent: #50e3b5;
+  --color-accent-glow: #a8f0d4;
+  --color-accent-muted: rgba(80, 227, 181, 0.12);
+  --color-accent-subtle: rgba(80, 227, 181, 0.06);
+
+  --color-long: #22c55e;
+  --color-long-muted: rgba(34, 197, 94, 0.12);
+  --color-short: #ef4444;
+  --color-short-muted: rgba(239, 68, 68, 0.12);
+  --color-warning: #f59e0b;
+  --color-loss: #f97316;
+
+  --color-text-primary: #ececef;
+  --color-text-secondary: #a1a1a8;
+  --color-text-muted: #63636e;
+  --color-text-dim: #3a3a42;
+
+  --color-border: #222226;
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
 }
 
 html {
@@ -284,6 +312,7 @@ a[href="https://www.tradingview.com/"] {
   height: 56px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  gap: 16px;
 }
 
 .landing-nav-link {
@@ -359,11 +388,17 @@ a[href="https://www.tradingview.com/"] {
   align-items: center;
   gap: 16px;
   padding: 8px 0;
+  padding-left: 12px;
   background: none;
   border: none;
+  border-left: 2px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: color 0.2s;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.landing-feature-item.active {
+  border-left-color: var(--color-accent);
 }
 
 .landing-feature-id {
@@ -408,6 +443,49 @@ a[href="https://www.tradingview.com/"] {
   background: var(--color-surface-1);
 }
 
+/* Green glow gradient behind hero */
+.landing-hero-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(ellipse at center, rgba(80, 227, 181, 0.08) 0%, rgba(80, 227, 181, 0.03) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* "Built on Hyperliquid" pill badge */
+.landing-hero-badge {
+  position: absolute;
+  top: clamp(12px, 2vw, 24px);
+  left: clamp(16px, 3vw, 48px);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.landing-hero-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-long);
+  animation: landing-badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes landing-badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .landing-hero-image-wrap {
   position: relative;
   width: 100%;
@@ -415,16 +493,24 @@ a[href="https://www.tradingview.com/"] {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 1;
 }
 
 .landing-hero-image {
+  position: absolute;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   filter: grayscale(0.15) contrast(1.05) sepia(0.2) hue-rotate(100deg);
-  transition: filter 0.4s;
+  opacity: 0;
+  transition: opacity 0.4s ease, filter 0.4s ease;
+  pointer-events: none;
 }
-.landing-hero-image:hover {
+.landing-hero-image.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.landing-hero-image.active:hover {
   filter: grayscale(0) contrast(1) sepia(0.1) hue-rotate(100deg);
 }
 
@@ -572,19 +658,80 @@ a[href="https://www.tradingview.com/"] {
   gap: 16px;
 }
 
+/* ── Header CTA (smaller, inline) ── */
+.landing-cta-header {
+  display: inline-block;
+  padding: 6px 16px;
+  background: var(--color-accent);
+  color: var(--color-surface-0);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.landing-cta-header:hover {
+  background: color-mix(in srgb, var(--color-accent) 85%, transparent);
+}
+
+/* ── Footer CTA (larger, accent-colored) ── */
 .landing-cta {
   display: inline-block;
   padding: 10px 24px;
-  background: var(--color-text-primary);
+  background: var(--color-accent);
   color: var(--color-surface-0);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-decoration: none;
-  transition: opacity 0.2s;
+  transition: background 0.2s;
 }
 .landing-cta:hover {
-  opacity: 0.85;
+  background: color-mix(in srgb, var(--color-accent) 85%, transparent);
+}
+
+/* ── Contact link ── */
+.landing-contact-link {
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.landing-contact-link:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Stats strip in right sidebar ── */
+.landing-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.landing-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.landing-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-accent);
+}
+
+.landing-stat-label {
+  font-size: 9px;
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
 }
 
 .landing-slide-nav {
@@ -615,25 +762,127 @@ a[href="https://www.tradingview.com/"] {
   letter-spacing: 0.06em;
 }
 
+/* ── Social links ── */
+.landing-social-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.landing-social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  transition: color 0.2s, border-color 0.2s;
+}
+.landing-social-link:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+}
+
+/* ── Comparison strip ── */
+.landing-compare {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.landing-compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 clamp(16px, 2vw, 32px);
+  border-right: 1px solid var(--color-border);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.landing-compare-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.landing-compare-grid {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.landing-compare-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px clamp(10px, 1.5vw, 20px);
+  border-right: 1px solid var(--color-border);
+  flex: 1;
+  min-width: 0;
+}
+.landing-compare-cell:last-child {
+  border-right: none;
+}
+
+.landing-compare-feature {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.landing-compare-check {
+  font-size: 11px;
+  color: var(--color-long);
+  flex-shrink: 0;
+}
+
+.landing-compare-x {
+  font-size: 10px;
+  color: var(--color-short);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* ── Mobile sticky CTA ── */
+.landing-mobile-cta {
+  display: none;
+}
+
 /* ── Responsive: collapse to single column on small screens ── */
 @media (max-width: 900px) {
   .landing-editorial {
     height: auto;
     overflow: auto;
+    padding-bottom: 64px; /* space for sticky CTA */
   }
 
   .landing-grid {
     grid-template-columns: 1fr;
+    /* Mobile: hero first, then sidebar left (features), then sidebar right */
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Reorder: hero comes first on mobile */
+  .landing-hero {
+    order: -1;
+    min-height: 50vh;
   }
 
   .landing-sidebar-left {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     padding: 24px;
-  }
-
-  .landing-hero {
-    min-height: 50vh;
   }
 
   .landing-sidebar-right {
@@ -663,5 +912,71 @@ a[href="https://www.tradingview.com/"] {
     border-top: none;
     align-items: center;
     padding: 24px;
+  }
+
+  .landing-top-bar .landing-title-bar {
+    display: none;
+  }
+
+  .landing-stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Comparison strip: scroll horizontally */
+  .landing-compare {
+    flex-direction: column;
+  }
+
+  .landing-compare-header {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 10px 24px;
+    justify-content: flex-start;
+  }
+
+  .landing-compare-grid {
+    flex-wrap: wrap;
+  }
+
+  .landing-compare-cell {
+    flex: 0 0 50%;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .landing-compare-cell:nth-child(odd) {
+    border-right: 1px solid var(--color-border);
+  }
+  .landing-compare-cell:nth-last-child(-n+2) {
+    border-bottom: none;
+  }
+
+  /* Mobile sticky CTA */
+  .landing-mobile-cta {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 12px 24px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: var(--color-surface-0);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .landing-mobile-cta-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: var(--color-accent);
+    color: var(--color-surface-0);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+  .landing-mobile-cta-btn:hover {
+    background: color-mix(in srgb, var(--color-accent) 85%, transparent);
   }
 }

@@ -28,11 +28,26 @@ export function requireString(value: unknown, fieldName: string): string {
   return value.trim();
 }
 
-export function parsePositiveNumber(value: unknown, fieldName: string): number {
+export function parsePositiveNumber(value: unknown, fieldName: string, max = 1e9): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new ValidationError(`Invalid ${fieldName}. Expected a positive number.`);
   }
+  if (value > max) {
+    throw new ValidationError(`${fieldName} exceeds maximum allowed value.`);
+  }
   return value;
+}
+
+export function parseLeverage(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const num = typeof value === "number" ? value : typeof value === "string" ? parseFloat(value) : NaN;
+  if (!Number.isFinite(num)) {
+    throw new ValidationError("Invalid leverage. Expected a finite number.");
+  }
+  if (num < 1 || num > 200) {
+    throw new ValidationError("Leverage must be between 1 and 200.");
+  }
+  return num;
 }
 
 export function parseLimit(value: unknown, fallback = 50, min = 1, max = 200): number {

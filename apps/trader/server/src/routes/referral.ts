@@ -83,10 +83,9 @@ export function referralRoutes(config: ServerConfig): Router {
         });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Referral route error:", message);
+      console.error("Referral route error:", err instanceof Error ? err.message : String(err));
       res.status(500).json({
-        error: message,
+        error: "Referral data unavailable.",
         code: "REFERRAL_FAILED",
       });
     }

@@ -94,8 +94,10 @@ export class Executor {
           return;
         }
 
+        // Do NOT cache the negative result for agent sessions. The master wallet
+        // may approve the builder fee at any time (e.g. via the frontend pre-trade
+        // MetaMask flow), so we must re-check on every trade until approved.
         this.builderEnabledForOrders = false;
-        this.approvalChecked = true;
         if (!this.builderManualApprovalWarned) {
           this.logger.warn(
             {
@@ -563,11 +565,36 @@ export class Executor {
 
     if ("filled" in value && value.filled && typeof value.filled === "object") {
       const filled = value.filled as Record<string, unknown>;
+      const rawSize = typeof filled.totalSz === "string" ? filled.totalSz : "0";
+      const rawPrice = typeof filled.avgPx === "string" ? filled.avgPx : "0";
+      const parsedSize = parseFloat(rawSize);
+      const parsedPrice = parseFloat(rawPrice);
+
+      // Sanity: reject nonsensical fills (negative or non-finite values)
+      if (!Number.isFinite(parsedSize) || parsedSize < 0) {
+        return {
+          success: false,
+          orderId: typeof filled.oid === "number" ? filled.oid : undefined,
+          filledSize: "0",
+          avgPrice: "0",
+          error: `Exchange returned invalid fill size: ${rawSize}`,
+        };
+      }
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        return {
+          success: false,
+          orderId: typeof filled.oid === "number" ? filled.oid : undefined,
+          filledSize: "0",
+          avgPrice: "0",
+          error: `Exchange returned invalid fill price: ${rawPrice}`,
+        };
+      }
+
       return {
         success: true,
         orderId: typeof filled.oid === "number" ? filled.oid : undefined,
-        filledSize: typeof filled.totalSz === "string" ? filled.totalSz : "0",
-        avgPrice: typeof filled.avgPx === "string" ? filled.avgPx : "0",
+        filledSize: rawSize,
+        avgPrice: rawPrice,
       };
     }
 
@@ -625,8 +652,8 @@ export class Executor {
    */
   private async pollBuilderApproval(
     userAddress: string,
-    retries = 2,
-    delayMs = 500,
+    retries = 4,
+    delayMs = 400,
   ): Promise<boolean> {
     if (!this.wireBuilder) return false;
     for (let i = 0; i < retries; i++) {

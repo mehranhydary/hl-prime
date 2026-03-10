@@ -9,7 +9,7 @@ export function useBootstrap(address: `0x${string}` | null, network: Network) {
     queryKey: ["bootstrap", address, network],
     queryFn: () => accountBootstrap(address!, network),
     enabled: !!address && auth.isAuthenticated,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });

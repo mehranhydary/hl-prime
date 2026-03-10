@@ -26,6 +26,7 @@ import type {
 import { assetVariants } from "../../../shared/asset.js";
 import { quantizeOrderPrice, quantizeOrderSize } from "../../../shared/order-precision.js";
 import {
+  parseLeverage,
   parseLimit,
   parseNetwork,
   parsePositiveNumber,
@@ -62,6 +63,7 @@ function tradeHistoryStore(config: ServerConfig): TradeHistoryStore {
   return created;
 }
 const QUOTE_TTL_MS = 30_000; // 30 seconds
+const MAX_PRICE_DEVIATION = 0.05; // 5% — reject execution if price moved beyond this
 const MANUAL_ROUTE_WARNING = "Route manually adjusted before execution.";
 const AGENT_COLLATERAL_WARNING = "Collateral swaps require master-wallet signing (usdClassTransfer). Agent mode cannot auto-move collateral between perp and spot.";
 const DEFAULT_SPLIT_SLIPPAGE = 0.01;
@@ -127,6 +129,38 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string") return error;
   return String(error);
+}
+
+/** Safe error message for client responses — avoids leaking internal details. */
+function safeErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ValidationError || error instanceof BadRequestError) {
+    return errorMessage(error);
+  }
+  return fallback;
+}
+
+/**
+ * Verify that current mid prices haven't moved too far from the quote's
+ * estimated prices. Rejects execution if any leg's price deviates beyond
+ * MAX_PRICE_DEVIATION to protect against stale quotes.
+ */
+async function validatePriceFreshness(
+  hp: any,
+  splitPlan: SplitExecutionPlan,
+): Promise<void> {
+  const mids: Record<string, string> = await hp.api.allMids();
+  for (const leg of splitPlan.legs) {
+    const currentMid = parseFloat(mids[leg.market.coin] ?? "");
+    if (!Number.isFinite(currentMid) || currentMid <= 0) continue;
+    const quotedPrice = parseFloat(leg.price);
+    if (!Number.isFinite(quotedPrice) || quotedPrice <= 0) continue;
+    const deviation = Math.abs(currentMid - quotedPrice) / quotedPrice;
+    if (deviation > MAX_PRICE_DEVIATION) {
+      throw new BadRequestError(
+        `Price for ${leg.market.coin} moved ${(deviation * 100).toFixed(1)}% since quote. Please requote.`,
+      );
+    }
+  }
 }
 
 function normalizeAddress(value: string): `0x${string}` {
@@ -378,6 +412,9 @@ function normalizeLegAdjustments(
 ): Map<string, number> | undefined {
   if (!Array.isArray(legAdjustments) || legAdjustments.length === 0) {
     return undefined;
+  }
+  if (legAdjustments.length > 50) {
+    throw new BadRequestError("Too many leg adjustments (max 50).");
   }
 
   if (routeSummary.legs.length === 0) {
@@ -966,7 +1003,7 @@ export function tradeRoutes(config: ServerConfig): Router {
       const masterAddress = requireAddress(body.masterAddress, "masterAddress");
       const amountMode = body.amountMode ?? "base";
       const amount = parsePositiveNumber(body.amount, "amount");
-      const leverage = body.leverage;
+      const leverage = parseLeverage(body.leverage);
       const isCross = body.isCross;
       resolvedNetwork = parseNetwork(body.network, config.defaultNetwork);
 
@@ -1107,8 +1144,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         });
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[trade/quote] Quote failed:", message);
+      console.error("[trade/quote] Quote failed:", errorMessage(err));
       timing.end({
         status: "error",
         route: "quote",
@@ -1119,7 +1155,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         asset: body?.asset ? body.asset.toUpperCase() : undefined,
       });
       res.status(500).json({
-        error: message,
+        error: safeErrorMessage(err, "Quote failed. Please try again."),
         code: "QUOTE_FAILED",
       });
     }
@@ -1247,7 +1283,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         user: shortAddress(cached?.masterAddress),
       });
       res.status(status).json({
-        error: errorMessage(err),
+        error: status === 400 ? errorMessage(err) : safeErrorMessage(err, "Execute preview failed."),
         code,
       });
     }
@@ -1277,7 +1313,9 @@ export function tradeRoutes(config: ServerConfig): Router {
       }
       timing.mark("validate");
 
-      cached = runtimeState().getQuote<CachedQuote>(quoteId) ?? undefined;
+      // Atomic take: retrieves and deletes the quote in one step to prevent
+      // double-execution from concurrent requests with the same quoteId.
+      cached = runtimeState().takeQuote<CachedQuote>(quoteId) ?? undefined;
       timing.mark("lookupQuote");
       if (!cached) {
         timing.end({
@@ -1326,7 +1364,6 @@ export function tradeRoutes(config: ServerConfig): Router {
           error: "Quote expired before execution.",
         }));
         timing.mark("writeHistory");
-        runtimeState().deleteQuote(quoteId);
         timing.end({
           status: "expired",
           route: "execute",
@@ -1363,10 +1400,11 @@ export function tradeRoutes(config: ServerConfig): Router {
       manualAdjusted = adjusted.adjustmentsApplied;
       timing.mark("applyLegAdjustments");
 
+      await validatePriceFreshness(hp, splitPlanToExecute);
+      timing.mark("priceFreshness");
+
       const receipt = await hp.executeSplit(splitPlanToExecute);
       timing.mark("executeSplit");
-
-      runtimeState().deleteQuote(quoteId);
       const result = toTradeResult(receipt);
       const signer = await resolveSigner(service, cached.masterAddress, cached.network);
       timing.mark("resolveSigner");
@@ -1457,7 +1495,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         manual: manualAdjusted,
       });
       res.status(status).json({
-        error: errorMessage(err),
+        error: status === 400 ? errorMessage(err) : safeErrorMessage(err, "Trade execution failed."),
         code,
       });
     }
@@ -1480,7 +1518,7 @@ export function tradeRoutes(config: ServerConfig): Router {
       const masterAddress = requireAddress(body.masterAddress, "masterAddress");
       const amountMode = body.amountMode ?? "base";
       const amount = parsePositiveNumber(body.amount, "amount");
-      const leverage = body.leverage;
+      const leverage = parseLeverage(body.leverage);
       const isCross = body.isCross;
       resolvedNetwork = parseNetwork(body.network, config.defaultNetwork);
 
@@ -1612,7 +1650,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         legs: splitPlan?.legs.length,
       });
       res.status(500).json({
-        error: errorMessage(err),
+        error: safeErrorMessage(err, "Quick trade failed. Please try again."),
         code: "QUICK_TRADE_FAILED",
       });
     }
@@ -1830,7 +1868,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         fallback: usedAgentFallback,
       });
       res.status(500).json({
-        error: errorMessage(err),
+        error: safeErrorMessage(err, "Close position failed. Please try again."),
         code: "CLOSE_FAILED",
       });
     }

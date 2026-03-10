@@ -15,13 +15,15 @@
   },
   "dependencies": {
     "@nktkas/hyperliquid": "^0.31.0",
+    "@types/ws": "^8.18.1",
     "cors": "^2.8.5",
     "express": "^5.0.1",
     "hyperliquid-prime": "file:../..",
     "lightweight-charts": "^5.1.0",
     "qrcode": "^1.5.4",
     "uuid": "^11.0.0",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
