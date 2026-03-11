@@ -2,7 +2,7 @@
 # Railway config: Root Directory = / , Dockerfile Path = apps/trader/Dockerfile
 
 # ── Stage 1: Build ──────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN apk add --no-cache python3 make g++
 
@@ -39,7 +39,7 @@ RUN npm prune --omit=dev
 RUN find dist/ -name '*.map' -delete 2>/dev/null; true
 
 # ── Stage 2: Production ────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 # Non-root user for defense in depth
 RUN apk add --no-cache su-exec \

@@ -1,4 +1,5 @@
 import * as hl from "@nktkas/hyperliquid";
+import { createRequire } from "node:module";
 import { privateKeyToAccount } from "viem/accounts";
 import type { HLProvider } from "./provider.js";
 import { NoWalletError } from "../utils/errors.js";
@@ -69,6 +70,22 @@ interface TimedCache<T> {
 const DEFAULT_L2_BOOK_CACHE_TTL_MS = 250;
 const DEFAULT_SPOT_META_CACHE_TTL_MS = 30_000;
 const BALANCE_CACHE_TTL_MS = 30_000;
+const require = createRequire(import.meta.url);
+
+type ReconnectOptions = NonNullable<hl.WebSocketTransportOptions["reconnect"]>;
+
+function resolveNodeWebSocket(): ReconnectOptions["WebSocket"] | undefined {
+  try {
+    const wsModule = require("ws") as { WebSocket?: unknown; default?: unknown };
+    const ctor = wsModule.WebSocket ?? wsModule.default;
+    if (typeof ctor === "function") {
+      return ctor as ReconnectOptions["WebSocket"];
+    }
+  } catch {
+    // No-op: browser runtimes may not have the "ws" package installed.
+  }
+  return undefined;
+}
 
 /** Normalize a user string to 0x-prefixed hex address. */
 function asHexAddress(user: string): `0x${string}` {
@@ -92,11 +109,15 @@ export class NktkasProvider implements HLProvider {
   private clearinghouseCache = new Map<string, TimedCache<ClearinghouseState>>();
 
   constructor(config: ProviderConfig) {
+    const nodeWebSocket = resolveNodeWebSocket();
     this.httpTransport = new hl.HttpTransport({
       isTestnet: config.testnet ?? false,
     });
     this.wsTransport = new hl.WebSocketTransport({
       isTestnet: config.testnet ?? false,
+      ...(nodeWebSocket
+        ? { reconnect: { WebSocket: nodeWebSocket } }
+        : {}),
     });
 
     this.info = new hl.InfoClient({ transport: this.httpTransport });

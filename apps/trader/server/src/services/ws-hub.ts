@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { WebSocketTransport, SubscriptionClient } from "@nktkas/hyperliquid";
 import type { ISubscription } from "@nktkas/hyperliquid";
+import type { WebSocketTransportOptions } from "@nktkas/hyperliquid";
 import type { Server, IncomingMessage } from "node:http";
 import type { ServerConfig } from "../config.js";
 import type { Network } from "../../../shared/types.js";
@@ -32,6 +33,11 @@ interface NetworkState {
   /** clearinghouseState subscription per user address (lowercased). */
   userSubs: Map<string, ISubscription>;
 }
+
+type ReconnectOptions = NonNullable<WebSocketTransportOptions["reconnect"]>;
+const nodeReconnect: ReconnectOptions = {
+  WebSocket: WebSocket as unknown as ReconnectOptions["WebSocket"],
+};
 
 export class WebSocketHub {
   private wss: WebSocketServer;
@@ -174,7 +180,10 @@ export class WebSocketHub {
     let state = this.networks.get(network);
 
     if (!state) {
-      const transport = new WebSocketTransport({ isTestnet: network === "testnet" });
+      const transport = new WebSocketTransport({
+        isTestnet: network === "testnet",
+        reconnect: nodeReconnect,
+      });
       const subClient = new SubscriptionClient({ transport });
       state = { transport, subClient, allMidsSub: null, userSubs: new Map() };
       this.networks.set(network, state);

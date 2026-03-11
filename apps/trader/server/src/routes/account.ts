@@ -131,7 +131,8 @@ function getCoinMeta(
 function getHip3DexNames(groups: any[]): string[] {
   const dexNames = new Set<string>();
   for (const group of groups) {
-    for (const market of group.markets) {
+    const markets = Array.isArray(group?.markets) ? group.markets : [];
+    for (const market of markets) {
       if (market.isNative) continue;
       const dexName = market.dexName as string | undefined;
       if (dexName && dexName !== "__native__") {
@@ -171,10 +172,13 @@ async function fetchHip3Positions(
 function buildCoinLookup(groups: any[]): Map<string, CoinMeta> {
   const map = new Map<string, CoinMeta>();
   for (const group of groups) {
-    const baseAsset = String(group.baseAsset).toUpperCase();
-    for (const market of group.markets) {
-      map.set(market.coin, {
-        market: market.coin,
+    const markets = Array.isArray(group?.markets) ? group.markets : [];
+    for (const market of markets) {
+      const coin = String(market?.coin ?? "");
+      if (!coin) continue;
+      const baseAsset = String(group?.baseAsset ?? deriveBaseAsset(coin)).toUpperCase();
+      map.set(coin, {
+        market: coin,
         baseAsset,
         collateral: String(market.collateral ?? "USD").toUpperCase(),
       });
@@ -631,13 +635,26 @@ export function accountRoutes(config: ServerConfig): Router {
 
       const service = getClientService(config);
       const publicHp = await service.getPublicClient(network);
-      const [allMids, spotMeta] = await Promise.all([
+      const [allMidsResult, spotMetaResult] = await Promise.allSettled([
         publicHp.api.allMids(),
-        publicHp.api.spotMeta().catch(() => null),
+        publicHp.api.spotMeta(),
       ]);
+      const allMids = allMidsResult.status === "fulfilled" ? allMidsResult.value : {};
+      const spotMeta = spotMetaResult.status === "fulfilled" ? spotMetaResult.value : null;
+      if (allMidsResult.status === "rejected") {
+        console.warn("[account/bootstrap] allMids unavailable:", allMidsResult.reason);
+      }
+      if (spotMetaResult.status === "rejected") {
+        console.warn("[account/bootstrap] spotMeta unavailable:", spotMetaResult.reason);
+      }
       const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
 
-      const agentConfigured = await service.hasClient(masterAddress, network);
+      let agentConfigured = false;
+      try {
+        agentConfigured = await service.hasClient(masterAddress, network);
+      } catch (err) {
+        console.warn("[account/bootstrap] agent status check failed:", err);
+      }
       const infoClient = (publicHp.api as any).info as any;
 
       let masterClearinghouseState: any = null;
@@ -648,7 +665,13 @@ export function accountRoutes(config: ServerConfig): Router {
       }
 
       const NATIVE_ALLOW = new Set(["BTC", "ETH", "SOL", "HYPE"]);
-      const allGroups = publicHp.markets.getAllGroups();
+      let allGroups: any[] = [];
+      try {
+        const groups = publicHp.markets.getAllGroups();
+        allGroups = Array.isArray(groups) ? groups : [];
+      } catch (err) {
+        console.warn("[account/bootstrap] market groups unavailable:", err);
+      }
       const coinLookup = buildCoinLookup(allGroups);
 
       let subAccountCandidates: AccountCandidate[] = [];
@@ -695,44 +718,54 @@ export function accountRoutes(config: ServerConfig): Router {
         fetchHip3Positions(infoClient, primaryUserAddress, hip3DexNames, allMids, coinLookup),
       ]);
       const parsedPositions = [...nativePositions, ...hip3Positions];
-      const positionAssets = new Set(parsedPositions.map((p) => p.baseAsset));
+      const positionAssets = new Set(parsedPositions.map((p) => p.baseAsset.toUpperCase()));
       const marketCountByBase = new Map<string, number>();
       for (const p of parsedPositions) {
-        marketCountByBase.set(p.baseAsset, (marketCountByBase.get(p.baseAsset) ?? 0) + 1);
+        const baseAsset = p.baseAsset.toUpperCase();
+        marketCountByBase.set(baseAsset, (marketCountByBase.get(baseAsset) ?? 0) + 1);
       }
 
       const assets: DedupedAsset[] = [];
       for (const group of allGroups) {
-        const hasHip3 = group.markets.some((m: any) => !m.isNative);
-        const isAllowedNative = NATIVE_ALLOW.has(group.baseAsset);
+        const markets = Array.isArray(group?.markets) ? group.markets : [];
+        if (markets.length === 0) continue;
+
+        const hasHip3 = markets.some((m: any) => !m.isNative);
+        const isAllowedNative = NATIVE_ALLOW.has(String(group?.baseAsset ?? "").toUpperCase());
 
         if (!hasHip3 && !isAllowedNative) continue;
 
         const primary = isAllowedNative
-          ? group.markets.find((m: any) => m.isNative) ?? group.markets[0]
-          : group.markets.find((m: any) => !m.isNative) ?? group.markets[0];
+          ? markets.find((m: any) => m.isNative) ?? markets[0]
+          : markets.find((m: any) => !m.isNative) ?? markets[0];
+        if (!primary?.coin) continue;
+
+        const baseAsset = String(group?.baseAsset ?? deriveBaseAsset(String(primary.coin))).toUpperCase();
 
         const midPrice = allMids[primary.coin] ?? primary.markPrice;
-        const collaterals = [...new Set(group.markets.map((m: any) => m.collateral))];
-        const deployers = group.markets.map((m: any) => {
+        const collaterals = Array.from(
+          new Set<string>(markets.map((m: any) => String(m?.collateral ?? "USD"))),
+        );
+        const deployers = Array.from(new Set<string>(markets.map((m: any) => {
           if (m.isNative) return "HL";
-          const idx = m.coin.indexOf(":");
-          return idx > 0 ? m.coin.slice(0, idx) : m.coin;
-        });
-        const maxLeverage = Math.max(...group.markets.map((m: any) => m.maxLeverage));
+          const coin = String(m?.coin ?? "");
+          const idx = coin.indexOf(":");
+          return idx > 0 ? coin.slice(0, idx) : coin;
+        })));
+        const maxLeverage = Math.max(...markets.map((m: any) => toNumber(m?.maxLeverage, 1)));
 
         assets.push({
-          baseAsset: group.baseAsset,
+          baseAsset,
           primaryCoin: primary.coin,
           price: midPrice ? parseFloat(midPrice) : null,
           prevDayPx: primary.prevDayPx ? parseFloat(primary.prevDayPx) : null,
           fundingRate: primary.funding ? parseFloat(primary.funding) : null,
           dayNtlVlm: primary.dayNtlVlm ? parseFloat(primary.dayNtlVlm) : 0,
-          marketCount: group.markets.length,
+          marketCount: markets.length,
           deployers,
           collaterals,
           maxLeverage,
-          hasPosition: positionAssets.has(group.baseAsset.toUpperCase()),
+          hasPosition: positionAssets.has(baseAsset),
           isHip3: hasHip3,
         });
       }
@@ -749,7 +782,7 @@ export function accountRoutes(config: ServerConfig): Router {
         unrealizedPnl: p.unrealizedPnlUsd,
         leverage: p.leverage,
         liquidationPrice: p.liquidationPrice,
-        marketCount: marketCountByBase.get(p.baseAsset) ?? 1,
+        marketCount: marketCountByBase.get(p.baseAsset.toUpperCase()) ?? 1,
       }));
 
       const response: BootstrapResponse = { balance, assets, positions, agentConfigured };
