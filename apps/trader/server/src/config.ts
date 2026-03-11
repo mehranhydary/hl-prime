@@ -187,6 +187,28 @@ export function loadConfig(): ServerConfig {
       );
     }
   }
+  if (productionRuntime) {
+    for (const origin of allowedOrigins) {
+      const lower = origin.toLowerCase();
+      if (lower.startsWith("http://")) {
+        // Allow http:// only for loopback addresses (dev proxy behind TLS termination)
+        try {
+          const parsed = new URL(lower);
+          if (!isLoopbackHost(parsed.hostname)) {
+            throw new Error(
+              `TRADER_ALLOWED_ORIGINS contains plaintext origin '${origin}' in production. ` +
+              "Use https:// for all non-localhost origins.",
+            );
+          }
+        } catch (err) {
+          if (err instanceof Error && err.message.includes("plaintext origin")) throw err;
+          throw new Error(
+            `TRADER_ALLOWED_ORIGINS contains invalid origin '${origin}'.`,
+          );
+        }
+      }
+    }
+  }
   if (productionRuntime && devInsecure) {
     throw new Error(
       "TRADER_DEV_INSECURE=true is not allowed in production runtime (NODE_ENV=production/Railway).",

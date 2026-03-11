@@ -96,6 +96,16 @@ setInterval(() => {
   stateStore().cleanupAccessGrants();
 }, 10 * 60 * 1000).unref();
 
+/**
+ * Verify a raw access-token string against the app password.
+ * Works outside Express (e.g. raw HTTP upgrade requests).
+ */
+export function isValidAppAccessToken(token: string, appPassword: string): boolean {
+  const payload = verifyAccessToken(token, deriveSigningKey(appPassword));
+  if (!payload || payload.exp <= Date.now()) return false;
+  return stateStore().hasAccessGrant(payload.id);
+}
+
 /** @internal test helper */
 export function __createAppAccessTokenForTests(secret: string, expiresAt = Date.now() + 60_000): string {
   const id = randomBytes(16).toString("hex");

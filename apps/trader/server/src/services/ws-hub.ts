@@ -7,9 +7,11 @@ import type { ServerConfig } from "../config.js";
 import type { Network } from "../../../shared/types.js";
 import type { WSServerMessage } from "../../../shared/ws-types.js";
 import { parseCookieHeader } from "../utils/cookies.js";
+import { isValidAppAccessToken } from "../middleware/password-gate.js";
 import { getRuntimeStateStore } from "./runtime-state.js";
 
 const SESSION_TOKEN_COOKIE = "trader_session_token";
+const APP_ACCESS_TOKEN_COOKIE = "trader_access_token";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const WS_PATH = "/api/ws";
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
@@ -114,6 +116,13 @@ export class WebSocketHub {
 
   private validateAuth(request: IncomingMessage, requestedAddress: string | null = null): boolean {
     if (!this.config.authEnabled) return true;
+
+    // Enforce the same password-gate check that HTTP routes use via requireAppAccess.
+    const cookies = parseCookieHeader(request.headers.cookie);
+    const accessToken = cookies[APP_ACCESS_TOKEN_COOKIE];
+    if (!accessToken || !isValidAppAccessToken(accessToken, this.config.appPassword)) {
+      return false;
+    }
 
     const session = this.readSession(request);
     if (!session) return false;
