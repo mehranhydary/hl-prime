@@ -67,10 +67,10 @@ function parseChainId(value: unknown): number | null {
   return null;
 }
 
-function authDomain(chainId: number): typeof AUTH_DOMAIN & { chainId: number } {
+function authDomain(chainId: number): typeof AUTH_DOMAIN & { chainId: bigint } {
   return {
     ...AUTH_DOMAIN,
-    chainId,
+    chainId: BigInt(chainId),
   };
 }
 

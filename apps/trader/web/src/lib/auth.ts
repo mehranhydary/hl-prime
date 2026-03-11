@@ -240,9 +240,13 @@ export async function signIn(): Promise<boolean> {
         throw new Error("Challenge response malformed");
       }
 
-      const authDomain = {
+      const authDomainForWallet = {
         ...AUTH_DOMAIN,
         chainId: challenge.chainId,
+      } as const;
+      const authDomainForVerify = {
+        ...AUTH_DOMAIN,
+        chainId: BigInt(challenge.chainId),
       } as const;
       const authMessage = {
         address,
@@ -253,7 +257,7 @@ export async function signIn(): Promise<boolean> {
 
       const serializableData = {
         types: AUTH_TYPES,
-        domain: authDomain,
+        domain: authDomainForWallet,
         primaryType: "Auth" as const,
         message: authMessage,
       };
@@ -289,7 +293,7 @@ export async function signIn(): Promise<boolean> {
         try {
           valid = await verifyTypedData({
             address,
-            domain: authDomain,
+            domain: authDomainForVerify,
             types: AUTH_TYPES,
             primaryType: "Auth",
             message: {
@@ -314,7 +318,7 @@ export async function signIn(): Promise<boolean> {
         }
         try {
           const recovered = await recoverTypedDataAddress({
-            domain: authDomain,
+            domain: authDomainForVerify,
             types: AUTH_TYPES,
             primaryType: "Auth",
             message: {

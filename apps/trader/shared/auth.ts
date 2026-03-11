@@ -26,6 +26,11 @@ export function isAuthChainId(value: number): value is AuthChainId {
 }
 
 export const AUTH_TYPES = {
+  EIP712Domain: [
+    { name: "name", type: "string" },
+    { name: "version", type: "string" },
+    { name: "chainId", type: "uint256" },
+  ],
   Auth: [
     { name: "address", type: "address" },
     { name: "nonce", type: "string" },
