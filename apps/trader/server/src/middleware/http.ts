@@ -21,9 +21,10 @@ function contentSecurityPolicy(insecure = false): string {
   // Allow Cloudflare Web Analytics beacon script when enabled at the DNS layer.
   const scriptSrc = "'self' https://static.cloudflareinsights.com";
   const imgSrc = "'self' data: https://app.hyperliquid.xyz https://cloudflareinsights.com";
+  const hlApi = "https://api.hyperliquid.xyz https://api.hyperliquid-testnet.xyz";
   const connectSrc = insecure
-    ? "'self' ws: wss: https://cloudflareinsights.com"
-    : "'self' wss: https://cloudflareinsights.com";
+    ? `'self' ws: wss: ${hlApi} https://cloudflareinsights.com`
+    : `'self' wss: ${hlApi} https://cloudflareinsights.com`;
 
   return [
     "default-src 'self'",
