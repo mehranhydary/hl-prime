@@ -193,6 +193,47 @@ function hasMatchingOpenPosition(clearinghouseState: any, requestedAsset: string
   });
 }
 
+function getRelevantDexNamesForAsset(hp: HyperliquidPrime, asset: string): string[] {
+  try {
+    const markets = hp.getMarkets(asset) as Array<{ dexName?: string; isNative?: boolean }>;
+    const dexNames = new Set<string>();
+    for (const market of markets) {
+      if (market?.isNative) continue;
+      const dexName = String(market?.dexName ?? "");
+      if (dexName && dexName !== "__native__") {
+        dexNames.add(dexName);
+      }
+    }
+    return [...dexNames];
+  } catch {
+    return [];
+  }
+}
+
+async function hasMatchingPositionOnDexes(params: {
+  infoClient: any;
+  user: string;
+  dexNames: string[];
+  asset: string;
+}): Promise<boolean> {
+  const { infoClient, user, dexNames, asset } = params;
+  if (
+    !infoClient
+    || typeof infoClient.clearinghouseState !== "function"
+    || dexNames.length === 0
+  ) {
+    return false;
+  }
+
+  const states = await Promise.allSettled(
+    dexNames.map((dex) => infoClient.clearinghouseState({ user, dex })),
+  );
+  return states.some(
+    (state): boolean =>
+      state.status === "fulfilled" && hasMatchingOpenPosition(state.value, asset),
+  );
+}
+
 type TimingMetaValue = string | number | boolean | undefined | null;
 type TimingMeta = Record<string, TimingMetaValue>;
 
@@ -1683,13 +1724,20 @@ export function tradeRoutes(config: ServerConfig): Router {
       const infoClient = (hp.api as any).info as any;
       if (infoClient && typeof infoClient.subAccounts === "function") {
         try {
+          const targetDexNames = getRelevantDexNamesForAsset(hp, asset);
           const subAccountsRaw = await infoClient.subAccounts({ user: masterAddress });
           if (Array.isArray(subAccountsRaw)) {
             for (const item of subAccountsRaw) {
               const subUser = String((item as any)?.subAccountUser ?? "");
               if (!subUser) continue;
               const subState = (item as any)?.clearinghouseState;
-              const hasTargetPosition = hasMatchingOpenPosition(subState, asset);
+              const hasTargetPosition = hasMatchingOpenPosition(subState, asset)
+                || await hasMatchingPositionOnDexes({
+                  infoClient,
+                  user: subUser,
+                  dexNames: targetDexNames,
+                  asset,
+                });
               if (hasTargetPosition) {
                 effectiveAddress = subUser;
                 break;
