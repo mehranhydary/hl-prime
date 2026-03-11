@@ -320,6 +320,7 @@ export interface ClosePositionRequest {
   network: Network;
   masterAddress: `0x${string}`;
   asset: string;
+  coin?: string;
 }
 
 export interface TradeResult {
@@ -359,7 +360,7 @@ export interface TradeHistoryItem {
   signerAddress: `0x${string}`;
   signerType: "agent" | "master";
   mode: "safe" | "quick";
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "close-long" | "close-short";
   asset: string;
   amountMode: "base" | "usd";
   requestedAmount: number;

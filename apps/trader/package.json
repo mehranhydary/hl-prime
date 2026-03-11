@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
-    "dev:server": "tsx watch server/src/index.ts",
+    "dev:server": "npm --prefix ../.. run build && tsx watch server/src/index.ts",
     "dev:web": "vite",
     "build": "npm run build:server && npm run build:web",
-    "build:server": "tsc -p server/tsconfig.json",
+    "build:server": "npm --prefix ../.. run build && tsc -p server/tsconfig.json",
     "build:web": "vite build",
-    "start": "node server/dist/server/src/index.js",
+    "start": "npm run build:server && node server/dist/server/src/index.js",
     "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

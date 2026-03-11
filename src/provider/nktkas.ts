@@ -131,6 +131,10 @@ export class NktkasProvider implements HLProvider {
     if (config.privateKey) {
       const wallet = privateKeyToAccount(config.privateKey);
       const signerAddress = wallet.address.toLowerCase() as `0x${string}`;
+      // Only use explicit vaultAddress for vault/sub-account routing.
+      // walletAddress identifies the logical user for reads/position lookups, but
+      // forcing it into defaultVaultAddress can cause "Vault not registered" errors
+      // for normal agent-on-master trading flows.
       const configuredVaultAddress = config.vaultAddress?.toLowerCase() as `0x${string}` | undefined;
       const defaultVaultAddress =
         configuredVaultAddress && configuredVaultAddress !== signerAddress

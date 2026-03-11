@@ -21,6 +21,7 @@ function createMockProvider(
   throwCoins: Set<string> = new Set(),
 ): HLProvider {
   const defaultDexes: MockDex[] = dexes ?? [
+    { name: null, universe: [], collateralToken: 0 },
     {
       name: "xyz",
       universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],

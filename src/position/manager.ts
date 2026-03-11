@@ -58,6 +58,13 @@ export class PositionManager {
         const coin = pos.position.coin;
         const market = this.registry.findByCoin(coin);
         const baseAsset = market?.baseAsset ?? coin;
+        const rawMarkPrice = parseFloat(pos.position.markPx ?? "0");
+        const registryMarkPrice = parseFloat(market?.markPrice ?? "0");
+        const markPrice = rawMarkPrice > 0
+          ? rawMarkPrice
+          : registryMarkPrice > 0
+            ? registryMarkPrice
+            : 0;
 
         positions.push({
           baseAsset,
@@ -66,7 +73,7 @@ export class PositionManager {
           side: parseFloat(pos.position.szi) >= 0 ? "long" : "short",
           size: Math.abs(parseFloat(pos.position.szi)),
           entryPrice: parseFloat(pos.position.entryPx),
-          markPrice: parseFloat(pos.position.markPx ?? "0"),
+          markPrice,
           unrealizedPnl: parseFloat(pos.position.unrealizedPnl),
           leverage: parseFloat(pos.position.leverage?.value ?? "1"),
           liquidationPrice: pos.position.liquidationPx

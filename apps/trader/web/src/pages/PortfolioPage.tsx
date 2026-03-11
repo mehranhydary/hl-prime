@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
 import { useNetwork } from "../lib/network-context";
 import { usePortfolio } from "../hooks/use-portfolio";
 import { useTradeHistory } from "../hooks/use-trade-history";
 import { useClosePosition } from "../hooks/use-trade";
+import { ApiError } from "../lib/api";
 import { DepositModal } from "../components/DepositModal";
 import {
   collateralIconUrl,
@@ -99,9 +100,14 @@ function SectionTitle({ title, count }: { title: string; count?: number }) {
 
 function SideTag({ side }: { side: string }) {
   const isLong = side === "buy" || side === "long";
+  const isClose = side === "close-long" || side === "close-short";
+  const label = isClose ? (side === "close-long" ? "close long" : "close short") : side;
+  const colorClass = isClose
+    ? "text-text-secondary"
+    : isLong ? "text-long" : "text-short";
   return (
-    <span className={isLong ? "text-long text-xs font-medium" : "text-short text-xs font-medium"}>
-      {side}
+    <span className={`${colorClass} text-xs font-medium`}>
+      {label}
     </span>
   );
 }
@@ -569,6 +575,7 @@ function TradeIntentHistoryTable({ rows }: { rows: TradeHistoryItem[] }) {
 }
 
 export function PortfolioPage() {
+  const navigate = useNavigate();
   const { address, isConnected, connect, isConnecting, error } = useWallet();
   const auth = useAuthSession();
   const { network } = useNetwork();
@@ -706,6 +713,7 @@ export function PortfolioPage() {
         network,
         masterAddress: address,
         asset: row.baseAsset,
+        coin: row.market,
       });
       if (!result.success) {
         const legErrors = result.legs
@@ -715,6 +723,11 @@ export function PortfolioPage() {
         throw new Error(legErrors || result.error || "Close order did not fill.");
       }
     } catch (err) {
+      if (err instanceof ApiError && err.code === "AGENT_NOT_APPROVED") {
+        setCloseError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        navigate("/setup");
+        return;
+      }
       setCloseError(err instanceof Error ? err.message : String(err));
     } finally {
       setClosingKey(null);

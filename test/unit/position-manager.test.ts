@@ -229,7 +229,7 @@ describe("PositionManager", () => {
       expect(data[0].baseAsset).toBe("DOGE"); // Falls back to coin name
     });
 
-    it("handles missing markPx by defaulting to 0", async () => {
+    it("falls back to registry markPrice for known markets when markPx is missing", async () => {
       const pos = makeAssetPosition("BTC", "1.0");
       (pos.position as any).markPx = undefined;
 
@@ -240,6 +240,39 @@ describe("PositionManager", () => {
       const pm = new PositionManager(provider, registry, logger);
 
       const { data } = await pm.getPositions(USER);
+      expect(data[0].markPrice).toBe(42000.5);
+    });
+
+    it("falls back to registry markPrice when markPx is missing", async () => {
+      const pos = makeAssetPosition("hyena:ETH", "1.0", "3200", "0");
+      (pos.position as any).markPx = undefined;
+
+      const provider = makeProvider({
+        clearinghouseState: vi.fn()
+          .mockResolvedValueOnce(makeClearinghouseState())
+          .mockResolvedValueOnce(makeClearinghouseState([pos])),
+      });
+      const registry = makeRegistry([ETH_NATIVE, ETH_HYENA]);
+      const pm = new PositionManager(provider, registry, logger);
+
+      const { data } = await pm.getPositions(USER);
+      expect(data).toHaveLength(1);
+      expect(data[0].coin).toBe("hyena:ETH");
+      expect(data[0].markPrice).toBe(3200.5);
+    });
+
+    it("defaults to 0 when markPx is missing and the market is unknown", async () => {
+      const pos = makeAssetPosition("DOGE", "1.0");
+      (pos.position as any).markPx = undefined;
+
+      const provider = makeProvider({
+        clearinghouseState: vi.fn().mockResolvedValue(makeClearinghouseState([pos])),
+      });
+      const registry = makeRegistry([BTC_NATIVE]);
+      const pm = new PositionManager(provider, registry, logger);
+
+      const { data } = await pm.getPositions(USER);
+      expect(data[0].coin).toBe("DOGE");
       expect(data[0].markPrice).toBe(0);
     });
   });

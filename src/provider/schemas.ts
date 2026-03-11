@@ -7,7 +7,7 @@ import { z } from "zod";
 // --- Primitives ---
 
 /** Numeric string (prices, sizes, rates). Allows empty string for some HL responses. */
-const numericStr = z.string();
+const numericStr = z.union([z.string(), z.number()]).transform((value) => String(value));
 
 /** 0x-prefixed hex address. */
 const hexAddress = z.string().regex(/^0x[0-9a-fA-F]+$/);
@@ -106,7 +106,7 @@ const MarginSummarySchema = z.object({
 
 const LeverageSchema = z.object({
   type: z.string(),
-  value: z.string(),
+  value: numericStr,
 }).nullable();
 
 const CumFundingSchema = z.object({
@@ -115,31 +115,49 @@ const CumFundingSchema = z.object({
   sinceOpen: numericStr,
 });
 
-export const AssetPositionSchema = z.object({
-  position: z.object({
-    coin: z.string(),
-    szi: numericStr,
-    entryPx: numericStr,
-    positionValue: numericStr,
-    unrealizedPnl: numericStr,
-    returnOnEquity: numericStr,
-    leverage: LeverageSchema,
-    liquidationPx: numericStr.nullable(),
-    marginUsed: numericStr,
-    maxLeverage: z.number(),
-    cumFunding: CumFundingSchema,
-    markPx: numericStr.optional(),
-  }),
-  type: z.string(),
+const PositionSchema = z.object({
+  coin: z.string(),
+  szi: numericStr,
+  entryPx: numericStr,
+  positionValue: numericStr,
+  unrealizedPnl: numericStr,
+  returnOnEquity: numericStr,
+  leverage: LeverageSchema,
+  liquidationPx: numericStr.nullable(),
+  marginUsed: numericStr,
+  maxLeverage: z.number(),
+  cumFunding: CumFundingSchema,
+  markPx: numericStr.optional(),
 });
+
+export const AssetPositionSchema = z.union([
+  z.object({
+    position: PositionSchema,
+    type: z.string().optional(),
+  }).transform((value) => ({
+    position: value.position,
+    type: value.type ?? "oneWay",
+  })),
+  PositionSchema.transform((position) => ({
+    position,
+    type: "oneWay",
+  })),
+]);
 
 export const ClearinghouseStateSchema = z.object({
   marginSummary: MarginSummarySchema,
   crossMarginSummary: MarginSummarySchema,
-  assetPositions: z.array(AssetPositionSchema),
+  assetPositions: z.array(AssetPositionSchema).optional(),
+  positions: z.array(AssetPositionSchema).optional(),
   crossMaintenanceMarginUsed: numericStr,
   withdrawable: numericStr.optional(),
-});
+}).transform((value) => ({
+  marginSummary: value.marginSummary,
+  crossMarginSummary: value.crossMarginSummary,
+  assetPositions: value.assetPositions ?? value.positions ?? [],
+  crossMaintenanceMarginUsed: value.crossMaintenanceMarginUsed,
+  withdrawable: value.withdrawable,
+}));
 
 // --- Spot Clearinghouse State ---
 

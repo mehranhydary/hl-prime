@@ -15,7 +15,7 @@ import {
 import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest } from "@shared/types";
 import { useNavigate } from "react-router-dom";
 import { runMasterPreTradeActions, isBuilderFeeAlreadyApproved } from "../lib/hl-master-actions";
-import { tradeExecutePreview } from "../lib/api";
+import { ApiError, tradeExecutePreview } from "../lib/api";
 
 interface TradeFormProps {
   asset: string;
@@ -263,10 +263,19 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       return;
     }
 
-    const result = await executeMutation.mutateAsync(executeBody);
-    if (result.totalFilledSize > 0) {
-      setActiveQuote(null);
-      setAmount("");
+    try {
+      const result = await executeMutation.mutateAsync(executeBody);
+      if (result.totalFilledSize > 0) {
+        setActiveQuote(null);
+        setAmount("");
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
+        setPreTradeError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        navigate("/setup");
+        return;
+      }
+      setPreTradeError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -299,18 +308,27 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       }
     }
 
-    const result = await quickMutation.mutateAsync({
-      network,
-      masterAddress: address,
-      side,
-      asset,
-      amountMode,
-      amount: parseFloat(amount),
-      leverage: leverageNum,
-      isCross: true,
-    });
-    if (result.totalFilledSize > 0) {
-      setAmount("");
+    try {
+      const result = await quickMutation.mutateAsync({
+        network,
+        masterAddress: address,
+        side,
+        asset,
+        amountMode,
+        amount: parseFloat(amount),
+        leverage: leverageNum,
+        isCross: true,
+      });
+      if (result.totalFilledSize > 0) {
+        setAmount("");
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
+        setPreTradeError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        navigate("/setup");
+        return;
+      }
+      setPreTradeError(error instanceof Error ? error.message : String(error));
     }
   }
 

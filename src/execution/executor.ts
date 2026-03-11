@@ -190,7 +190,7 @@ export class Executor {
           isBuy: plan.side === "buy",
           price: plan.price,
           size: plan.size,
-          reduceOnly: false,
+          reduceOnly: plan.reduceOnly ?? false,
           orderType: plan.orderType,
           cloid,
         },

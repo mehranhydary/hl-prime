@@ -206,7 +206,7 @@ export interface UserFundingEntry {
 }
 
 export interface OrderType {
-  limit?: { tif: "Alo" | "Ioc" | "Gtc" };
+  limit?: { tif: "Alo" | "Ioc" | "Gtc" | "FrontendMarket" };
   trigger?: {
     triggerPx: string;
     isMarket: boolean;

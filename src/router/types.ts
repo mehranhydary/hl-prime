@@ -29,6 +29,8 @@ export interface ExecutionPlan {
   price: string;        // Limit price (market price + slippage for IOC)
   orderType: OrderType;
   slippage: number;
+  /** When true, order may only reduce an existing position. */
+  reduceOnly?: boolean;
   leverage?: number;
   isCross?: boolean;
 }

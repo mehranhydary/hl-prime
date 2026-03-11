@@ -26,44 +26,55 @@ export class MarketRegistry {
       nextSpotTokens.set(token.index, token);
     }
 
-    // Fetch all deployers and their metadata in parallel
-    const [dexs, allMetas] = await Promise.all([
-      this.provider.perpDexs(),
-      this.provider.allPerpMetas(),
-    ]);
+    // Fetch deployer list — indices in this array ARE the canonical dex indices
+    // used by the exchange for global asset ID computation.
+    // Previously we iterated allPerpMetas() which can have different array
+    // indices than perpDexs(), causing wrong asset IDs (e.g. 110003 instead
+    // of 170009 for xyz:GOLD).
+    const dexs = await this.provider.perpDexs();
 
+    // Build (dexIndex, dexName) pairs from perpDexs.
+    // In the real API, perpDexs[0] is always null (native perps).
+    // null entries → native deployer, non-null → HIP-3 deployer.
+    const dexEntries: { dexIndex: number; dexName: string; apiDex: string; isNative: boolean }[] = [];
+    for (let i = 0; i < dexs.length; i++) {
+      const dex = dexs[i];
+      if (dex === null) {
+        dexEntries.push({ dexIndex: i, dexName: "__native__", apiDex: "", isNative: true });
+      } else if (dex.name && dex.name.length > 0) {
+        dexEntries.push({ dexIndex: i, dexName: dex.name, apiDex: dex.name, isNative: false });
+      }
+    }
+
+    // Fetch metaAndAssetCtxs for each deployer in parallel
     const ctxResults = await Promise.allSettled(
-      allMetas.map((_, dexIndex) => {
-        const dex = dexs[dexIndex];
-        return this.provider.metaAndAssetCtxs(dex ? dex.name : "");
-      }),
+      dexEntries.map((entry) => this.provider.metaAndAssetCtxs(entry.apiDex)),
     );
 
     this.logger.info(
-      { dexCount: dexs.length, spotTokens: spotMeta.tokens.length },
+      { dexCount: dexEntries.length, spotTokens: spotMeta.tokens.length },
       "Discovering markets across all deployers",
     );
 
     let totalAssets = 0;
     let dexContextFailures = 0;
 
-    for (const [dexIndex, meta] of allMetas.entries()) {
-      const dex = dexs[dexIndex];
-      const dexName = dex ? dex.name : "__native__";
-      const collateral = this.resolveCollateralToken(meta.collateralToken, nextSpotTokens);
-      const ctxResult = ctxResults[dexIndex];
+    for (const [idx, entry] of dexEntries.entries()) {
+      const ctxResult = ctxResults[idx];
       if (!ctxResult || ctxResult.status === "rejected") {
         dexContextFailures++;
         this.logger.warn(
           {
-            dexName,
+            dexName: entry.dexName,
+            dexIndex: entry.dexIndex,
             reason: ctxResult?.status === "rejected" ? String(ctxResult.reason) : "missing context result",
           },
           "Skipping deployer due to missing asset contexts",
         );
         continue;
       }
-      const [, assetCtxs] = ctxResult.value;
+      const [meta, assetCtxs] = ctxResult.value;
+      const collateral = this.resolveCollateralToken(meta.collateralToken, nextSpotTokens);
 
       for (const [i, asset] of meta.universe.entries()) {
         // Skip delisted markets
@@ -72,17 +83,17 @@ export class MarketRegistry {
         const ctx = assetCtxs[i];
         if (!ctx) {
           this.logger.warn(
-            { dexName, asset: asset.name, assetIndex: i },
+            { dexName: entry.dexName, asset: asset.name, assetIndex: i },
             "Skipping asset due to missing context",
           );
           continue;
         }
 
-        // Compute global asset ID:
-        // Native (dexIndex 0): assetIndex = local index
-        // HIP-3 (dexIndex > 0): assetIndex = 100000 + dexIndex * 10000 + local index
-        const globalAssetIndex = dexIndex === 0 ? i : 100000 + dexIndex * 10000 + i;
-        const parsed = this.parseAsset(asset, globalAssetIndex, ctx, dexName, collateral);
+        // Compute global asset ID using the CANONICAL dex index from perpDexs():
+        // Native: assetIndex = local index
+        // HIP-3: assetIndex = 100000 + dexIndex * 10000 + local index
+        const globalAssetIndex = entry.isNative ? i : 100000 + entry.dexIndex * 10000 + i;
+        const parsed = this.parseAsset(asset, globalAssetIndex, ctx, entry.dexName, collateral);
         if (!parsed) continue;
 
         const key = parsed.baseAsset.toUpperCase();

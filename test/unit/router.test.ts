@@ -20,6 +20,7 @@ function createMockProvider(
   throwCoins: Set<string> = new Set(),
 ): HLProvider & { l2Book: ReturnType<typeof vi.fn> } {
   const defaultDexes: MockDex[] = dexes ?? [
+    { name: null, universe: [], collateralToken: 0 },
     {
       name: "xyz",
       universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
@@ -210,6 +211,7 @@ describe("Router", () => {
   it("clamps leverage per-leg in split quotes with mixed maxLeverage", async () => {
     // xyz maxLeverage = 5, flx maxLeverage = 10 → different clamps
     const dexes: MockDex[] = [
+      { name: null, universe: [], collateralToken: 0 },
       {
         name: "xyz",
         universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 5 }],
@@ -320,11 +322,14 @@ describe("Router", () => {
         [{ px: "73.3929", sz: "100", n: 1 }],
       ],
     };
-    const dexes: MockDex[] = [{
-      name: "cash",
-      universe: [{ name: "cash:SILVER", szDecimals: 4, maxLeverage: 20 }],
-      collateralToken: 0,
-    }];
+    const dexes: MockDex[] = [
+      { name: null, universe: [], collateralToken: 0 },
+      {
+        name: "cash",
+        universe: [{ name: "cash:SILVER", szDecimals: 4, maxLeverage: 20 }],
+        collateralToken: 0,
+      },
+    ];
     const provider = createMockProvider({ "cash:SILVER": silverBook }, dexes);
     const { router } = await createRouter(provider);
 

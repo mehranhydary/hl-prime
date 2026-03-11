@@ -200,6 +200,7 @@ describe("MarketRegistry", () => {
 
   it("skips delisted markets", async () => {
     const provider = createMockProvider([
+      { name: null, universe: [], collateralToken: 0 },
       {
         name: "xyz",
         universe: [
@@ -219,6 +220,7 @@ describe("MarketRegistry", () => {
 
   it("handles HIP-3 names without trailing digits", async () => {
     const provider = createMockProvider([
+      { name: null, universe: [], collateralToken: 0 },
       {
         name: "xyz",
         universe: [
@@ -286,6 +288,7 @@ describe("MarketRegistry", () => {
 
   it("is idempotent across repeated discover() calls", async () => {
     const provider = createMockProvider([
+      { name: null, universe: [], collateralToken: 0 },
       {
         name: "xyz",
         universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],

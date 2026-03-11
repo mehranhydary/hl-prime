@@ -139,6 +139,26 @@ function safeErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function isAgentNotApprovedError(error: unknown): boolean {
+  const msg = errorMessage(error).toLowerCase();
+  return msg.includes("not approved on-chain") || msg.includes("agent") && msg.includes("not approved");
+}
+
+function toTradeErrorCode(error: unknown, fallbackCode: string): string {
+  return isAgentNotApprovedError(error) ? "AGENT_NOT_APPROVED" : fallbackCode;
+}
+
+function toTradeErrorStatus(error: unknown, fallbackStatus: number): number {
+  return isAgentNotApprovedError(error) ? 409 : fallbackStatus;
+}
+
+function toTradeErrorMessage(error: unknown, fallback: string): string {
+  if (isAgentNotApprovedError(error)) {
+    return "Agent wallet is not approved for trading. Open Setup and approve the agent wallet.";
+  }
+  return safeErrorMessage(error, fallback);
+}
+
 /**
  * Verify that current mid prices haven't moved too far from the quote's
  * estimated prices. Rejects execution if any leg's price deviates beyond
@@ -174,8 +194,10 @@ function extractPositions(state: any): any[] {
 }
 
 function hasMatchingOpenPosition(clearinghouseState: any, requestedAsset: string): boolean {
-  const requestedVariants = assetVariants(requestedAsset);
-  if (requestedVariants.size === 0) return false;
+  const normalizedRequested = String(requestedAsset ?? "").trim().toUpperCase();
+  if (!normalizedRequested) return false;
+  const requestedCoin = normalizedRequested.includes(":") ? normalizedRequested : null;
+  const requestedVariants = requestedCoin ? new Set<string>() : assetVariants(normalizedRequested);
 
   const positions = extractPositions(clearinghouseState);
   return positions.some((item: any) => {
@@ -186,6 +208,10 @@ function hasMatchingOpenPosition(clearinghouseState: any, requestedAsset: string
     const szi = parseFloat(String(pos?.szi ?? "0"));
     if (!Number.isFinite(szi) || Math.abs(szi) < 1e-9) return false;
 
+    if (requestedCoin) {
+      return coin.toUpperCase() === requestedCoin;
+    }
+
     for (const variant of assetVariants(coin)) {
       if (requestedVariants.has(variant)) return true;
     }
@@ -194,6 +220,12 @@ function hasMatchingOpenPosition(clearinghouseState: any, requestedAsset: string
 }
 
 function getRelevantDexNamesForAsset(hp: HyperliquidPrime, asset: string): string[] {
+  const normalizedAsset = String(asset ?? "").trim();
+  if (normalizedAsset.includes(":")) {
+    const dexName = normalizedAsset.split(":")[0]?.trim().toLowerCase();
+    if (dexName) return [dexName];
+  }
+
   try {
     const markets = hp.getMarkets(asset) as Array<{ dexName?: string; isNative?: boolean }>;
     const dexNames = new Set<string>();
@@ -916,7 +948,7 @@ function createHistoryItem(params: {
   masterAddress: string;
   signer: { signerAddress: `0x${string}`; signerType: "agent" | "master" };
   mode: "safe" | "quick";
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "close-long" | "close-short";
   asset: string;
   amountMode: "base" | "usd";
   requestedAmount: number;
@@ -1186,18 +1218,20 @@ export function tradeRoutes(config: ServerConfig): Router {
         return;
       }
       console.error("[trade/quote] Quote failed:", errorMessage(err));
+      const code = toTradeErrorCode(err, "QUOTE_FAILED");
+      const status = toTradeErrorStatus(err, 500);
       timing.end({
         status: "error",
         route: "quote",
-        code: "QUOTE_FAILED",
+        code,
         network: resolvedNetwork ?? config.defaultNetwork,
         user: shortAddress(body?.masterAddress),
         side: body?.side,
         asset: body?.asset ? body.asset.toUpperCase() : undefined,
       });
-      res.status(500).json({
-        error: safeErrorMessage(err, "Quote failed. Please try again."),
-        code: "QUOTE_FAILED",
+      res.status(status).json({
+        error: toTradeErrorMessage(err, "Quote failed. Please try again."),
+        code,
       });
     }
   });
@@ -1313,8 +1347,10 @@ export function tradeRoutes(config: ServerConfig): Router {
       });
       res.json(response);
     } catch (err) {
-      const code = err instanceof BadRequestError ? "BAD_REQUEST" : "EXECUTE_PREVIEW_FAILED";
-      const status = err instanceof BadRequestError ? 400 : 500;
+      const baseCode = err instanceof BadRequestError ? "BAD_REQUEST" : "EXECUTE_PREVIEW_FAILED";
+      const baseStatus = err instanceof BadRequestError ? 400 : 500;
+      const code = toTradeErrorCode(err, baseCode);
+      const status = toTradeErrorStatus(err, baseStatus);
       timing.end({
         status: "error",
         route: "execute_preview",
@@ -1324,7 +1360,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         user: shortAddress(cached?.masterAddress),
       });
       res.status(status).json({
-        error: status === 400 ? errorMessage(err) : safeErrorMessage(err, "Execute preview failed."),
+        error: status === 400 ? errorMessage(err) : toTradeErrorMessage(err, "Execute preview failed."),
         code,
       });
     }
@@ -1522,8 +1558,10 @@ export function tradeRoutes(config: ServerConfig): Router {
       if (quoteId && !isBadRequest) {
         runtimeState().deleteQuote(quoteId);
       }
-      const code = isBadRequest ? "BAD_REQUEST" : "EXECUTE_FAILED";
-      const status = isBadRequest ? 400 : 500;
+      const baseCode = isBadRequest ? "BAD_REQUEST" : "EXECUTE_FAILED";
+      const baseStatus = isBadRequest ? 400 : 500;
+      const code = toTradeErrorCode(err, baseCode);
+      const status = toTradeErrorStatus(err, baseStatus);
       timing.end({
         status: "error",
         route: "execute",
@@ -1536,7 +1574,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         manual: manualAdjusted,
       });
       res.status(status).json({
-        error: status === 400 ? errorMessage(err) : safeErrorMessage(err, "Trade execution failed."),
+        error: status === 400 ? errorMessage(err) : toTradeErrorMessage(err, "Trade execution failed."),
         code,
       });
     }
@@ -1680,19 +1718,21 @@ export function tradeRoutes(config: ServerConfig): Router {
           // Indexing failure should not mask quick-trade failure response.
         }
       }
+      const code = toTradeErrorCode(err, "QUICK_TRADE_FAILED");
+      const status = toTradeErrorStatus(err, 500);
       timing.end({
         status: "error",
         route: "quick",
-        code: "QUICK_TRADE_FAILED",
+        code,
         network: resolvedNetwork ?? config.defaultNetwork,
         user: shortAddress(body?.masterAddress),
         side: body?.side,
         asset: body?.asset ? body.asset.toUpperCase() : undefined,
         legs: splitPlan?.legs.length,
       });
-      res.status(500).json({
-        error: safeErrorMessage(err, "Quick trade failed. Please try again."),
-        code: "QUICK_TRADE_FAILED",
+      res.status(status).json({
+        error: toTradeErrorMessage(err, "Quick trade failed. Please try again."),
+        code,
       });
     }
   });
@@ -1709,6 +1749,8 @@ export function tradeRoutes(config: ServerConfig): Router {
       body = req.body as ClosePositionRequest;
       const masterAddress = requireAddress(body.masterAddress, "masterAddress");
       const asset = requireString(body.asset, "asset");
+      const coin = body.coin === undefined ? undefined : requireString(body.coin, "coin");
+      const closeTarget = coin ?? asset;
       resolvedNetwork = parseNetwork(body.network, config.defaultNetwork);
       timing.mark("validate");
 
@@ -1717,41 +1759,85 @@ export function tradeRoutes(config: ServerConfig): Router {
 
       // Resolve the actual address holding the position.
       // Positions may live on a sub-account rather than the master address.
+      // We query the raw HL info client first (same approach as portfolio) to
+      // find which address actually holds the position before calling close().
       let effectiveAddress: string = masterAddress;
       const hp = await service.getClient(masterAddress, resolvedNetwork);
       timing.mark("client");
 
       const infoClient = (hp.api as any).info as any;
-      if (infoClient && typeof infoClient.subAccounts === "function") {
+      let positionFoundOnMaster = false;
+
+      // Step 1: Check master address directly via the raw info API
+      if (infoClient && typeof infoClient.clearinghouseState === "function") {
         try {
-          const targetDexNames = getRelevantDexNamesForAsset(hp, asset);
+          const masterState = await infoClient.clearinghouseState({ user: masterAddress });
+          positionFoundOnMaster = hasMatchingOpenPosition(masterState, closeTarget);
+          if (!positionFoundOnMaster) {
+            const rawPositions = extractPositions(masterState);
+            const coins = rawPositions
+              .map((p: any) => {
+                const pos = p?.position ?? p;
+                return `${String(pos?.coin ?? "")}(szi=${String(pos?.szi ?? "0")})`;
+              })
+              .join(", ");
+            console.warn(
+              `[trade.close] No "${closeTarget}" on master ${shortAddress(masterAddress)}. ` +
+              `Raw positions: [${coins || "none"}]`,
+            );
+          }
+        } catch (err) {
+          console.warn(`[trade.close] Master state check failed:`, err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      // Step 2: If not on master, check sub-accounts
+      if (!positionFoundOnMaster && infoClient && typeof infoClient.subAccounts === "function") {
+        try {
+          const targetDexNames = getRelevantDexNamesForAsset(hp, closeTarget);
           const subAccountsRaw = await infoClient.subAccounts({ user: masterAddress });
           if (Array.isArray(subAccountsRaw)) {
             for (const item of subAccountsRaw) {
               const subUser = String((item as any)?.subAccountUser ?? "");
               if (!subUser) continue;
               const subState = (item as any)?.clearinghouseState;
-              const hasTargetPosition = hasMatchingOpenPosition(subState, asset)
+              const hasTargetPosition = hasMatchingOpenPosition(subState, closeTarget)
                 || await hasMatchingPositionOnDexes({
                   infoClient,
                   user: subUser,
                   dexNames: targetDexNames,
-                  asset,
+                  asset: closeTarget,
                 });
               if (hasTargetPosition) {
                 effectiveAddress = subUser;
+                console.log(`[trade.close] Position for "${closeTarget}" found on sub-account ${shortAddress(subUser)}`);
                 break;
               }
             }
           }
           timing.mark("resolveSubAccount");
-        } catch {
+        } catch (err) {
           timing.mark("resolveSubAccount");
-          // Fall through to master address.
+          console.warn(`[trade.close] Sub-account check failed:`, err instanceof Error ? err.message : String(err));
         }
       }
 
-      // If position is on a sub-account, create an HP targeting that address
+      // Step 3: If not on master or sub-accounts, check agent address
+      if (!positionFoundOnMaster && effectiveAddress.toLowerCase() === masterAddress.toLowerCase()) {
+        if (stored?.agentAddress && infoClient && typeof infoClient.clearinghouseState === "function") {
+          try {
+            const agentState = await infoClient.clearinghouseState({ user: stored.agentAddress });
+            if (hasMatchingOpenPosition(agentState, closeTarget)) {
+              effectiveAddress = stored.agentAddress;
+              console.log(`[trade.close] Position for "${closeTarget}" found on agent ${shortAddress(stored.agentAddress)}`);
+            }
+          } catch {
+            // Agent address check is best-effort.
+          }
+        }
+      }
+
+      // If position is on a different address, create an HP targeting it
       let closeHp = hp;
       if (effectiveAddress.toLowerCase() !== masterAddress.toLowerCase()) {
         if (stored?.agentPrivateKey) {
@@ -1763,22 +1849,30 @@ export function tradeRoutes(config: ServerConfig): Router {
           });
           await closeHp.connect();
           timing.mark("connectSubAccount");
+        } else {
+          console.warn(
+            `[trade.close] Position on ${shortAddress(effectiveAddress)} but no agent private key. ` +
+            `Falling back to master HP.`,
+          );
         }
       }
 
-      let receipts = await closeHp.close(asset);
+      let receipts = await closeHp.close(closeTarget);
       timing.mark("closePrimary");
       let signer = await resolveSigner(service, masterAddress, resolvedNetwork);
       timing.mark("resolveSigner");
 
       // Fallback 1: if we targeted a sub-account but found nothing, retry on master
       if (receipts.length === 0 && effectiveAddress.toLowerCase() !== masterAddress.toLowerCase()) {
-        receipts = await hp.close(asset);
+        console.warn(`[trade.close] Close on ${shortAddress(effectiveAddress)} returned empty, retrying on master`);
+        receipts = await hp.close(closeTarget);
         timing.mark("closeMasterFallback");
       }
 
-      // Fallback 2: try agent address as position owner
-      if (receipts.length === 0 && stored?.agentPrivateKey && stored.agentAddress) {
+      // Fallback 2: try agent address as position owner (skip if already tried above)
+      if (receipts.length === 0 && stored?.agentPrivateKey && stored.agentAddress
+          && effectiveAddress.toLowerCase() !== stored.agentAddress.toLowerCase()) {
+        console.warn(`[trade.close] Trying agent fallback on ${shortAddress(stored.agentAddress)}`);
         const fallbackHp = new HyperliquidPrime({
           privateKey: stored.agentPrivateKey,
           walletAddress: stored.agentAddress,
@@ -1788,7 +1882,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         try {
           await fallbackHp.connect();
           timing.mark("connectFallback");
-          receipts = await fallbackHp.close(asset);
+          receipts = await fallbackHp.close(closeTarget);
           timing.mark("closeFallback");
           if (receipts.length > 0) {
             usedAgentFallback = true;
@@ -1801,6 +1895,14 @@ export function tradeRoutes(config: ServerConfig): Router {
           await fallbackHp.disconnect().catch(() => {});
           timing.mark("disconnectFallback");
         }
+      }
+
+      if (receipts.length === 0) {
+        console.warn(
+          `[trade.close] All close attempts failed for "${closeTarget}". ` +
+          `master=${shortAddress(masterAddress)} effective=${shortAddress(effectiveAddress)} ` +
+          `hasAgentKey=${Boolean(stored?.agentPrivateKey)} agentAddr=${shortAddress(stored?.agentAddress)}`,
+        );
       }
 
       // Clean up sub-account HP if we created one
@@ -1820,10 +1922,11 @@ export function tradeRoutes(config: ServerConfig): Router {
         (sum, receipt) => sum + toFiniteNumber(String(receipt?.requestedSize ?? "0")),
         0,
       );
-      const side =
-        result.legs[0]?.side === "buy" || result.legs[0]?.side === "sell"
-          ? (result.legs[0].side as "buy" | "sell")
-          : "sell";
+      // Close-long sells to exit, close-short buys to exit.
+      // Use dedicated side values so the frontend can distinguish close from open.
+      const legSide = result.legs[0]?.side;
+      const side: "buy" | "sell" | "close-long" | "close-short" =
+        legSide === "sell" ? "close-long" : "close-short";
 
       await tradeHistoryStore(config).append(createHistoryItem({
         clickedAt,
@@ -1832,7 +1935,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         signer,
         mode: "quick",
         side,
-        asset,
+        asset: closeTarget,
         amountMode: "base",
         requestedAmount: requestedBaseSize,
         resolvedBaseSize: requestedBaseSize,
@@ -1849,7 +1952,7 @@ export function tradeRoutes(config: ServerConfig): Router {
         route: "close",
         network: resolvedNetwork,
         user: shortAddress(masterAddress),
-        asset: asset.toUpperCase(),
+        asset: closeTarget.toUpperCase(),
         legs: result.legs.length,
         success: result.success,
         fallback: usedAgentFallback,
@@ -1863,7 +1966,11 @@ export function tradeRoutes(config: ServerConfig): Router {
           code: "BAD_REQUEST",
           network: resolvedNetwork ?? config.defaultNetwork,
           user: shortAddress(body?.masterAddress),
-          asset: body?.asset ? body.asset.toUpperCase() : undefined,
+          asset: typeof body?.coin === "string"
+            ? body.coin.toUpperCase()
+            : body?.asset
+              ? body.asset.toUpperCase()
+              : undefined,
           fallback: usedAgentFallback,
         });
         res.status(400).json({
@@ -1890,8 +1997,8 @@ export function tradeRoutes(config: ServerConfig): Router {
             masterAddress: body.masterAddress,
             signer,
             mode: "quick",
-            side: "sell",
-            asset: body.asset,
+            side: "close-long",
+            asset: typeof body.coin === "string" ? body.coin : body.asset,
             amountMode: "base",
             requestedAmount: 0,
             resolvedBaseSize: 0,
@@ -1906,18 +2013,24 @@ export function tradeRoutes(config: ServerConfig): Router {
         }
       }
 
+      const code = toTradeErrorCode(err, "CLOSE_FAILED");
+      const status = toTradeErrorStatus(err, 500);
       timing.end({
         status: "error",
         route: "close",
-        code: "CLOSE_FAILED",
+        code,
         network: resolvedNetwork ?? config.defaultNetwork,
         user: shortAddress(body?.masterAddress),
-        asset: body?.asset ? body.asset.toUpperCase() : undefined,
+        asset: typeof body?.coin === "string"
+          ? body.coin.toUpperCase()
+          : body?.asset
+            ? body.asset.toUpperCase()
+            : undefined,
         fallback: usedAgentFallback,
       });
-      res.status(500).json({
-        error: safeErrorMessage(err, "Close position failed. Please try again."),
-        code: "CLOSE_FAILED",
+      res.status(status).json({
+        error: toTradeErrorMessage(err, "Close position failed. Please try again."),
+        code,
       });
     }
   });

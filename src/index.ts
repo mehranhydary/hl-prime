@@ -12,6 +12,7 @@ import { PositionManager } from "./position/manager.js";
 import { createLogger } from "./logging/logger.js";
 import { HyperliquidPrimeError, NoWalletError, NotConnectedError } from "./utils/errors.js";
 import { assetVariants } from "./utils/asset.js";
+import { quantizeOrderSize, quantizeOrderPrice } from "./utils/order-precision.js";
 import type { PerpMarket, MarketGroup, AggregatedBook, FundingComparison } from "./market/types.js";
 import type {
   Quote,
@@ -299,27 +300,118 @@ export class HyperliquidPrime {
     // Without this, the 30-second cache can serve stale data that doesn't
     // include positions opened externally (e.g. on the Hyperliquid UI).
     this.provider.invalidateBalanceCaches?.();
-    const requestedVariants = assetVariants(baseAsset);
-    const { data: allPositions } = await this.positions.getPositions(user);
-    const toClose = allPositions.filter(
-      (p) => {
-        if (p.size <= 0 || requestedVariants.size === 0) return false;
-        const positionVariants = new Set<string>([
-          ...assetVariants(p.baseAsset),
-          ...assetVariants(p.coin),
-        ]);
-        for (const variant of positionVariants) {
-          if (requestedVariants.has(variant)) return true;
-        }
-        return false;
-      },
-    );
+    const normalizedRequest = String(baseAsset ?? "").trim().toUpperCase();
+    const requestedCoin = normalizedRequest.includes(":") ? normalizedRequest : null;
+    const requestedVariants = requestedCoin ? new Set<string>() : assetVariants(baseAsset);
+    const { data: allPositions, warnings } = await this.positions.getPositions(user);
 
+    if (allPositions.length === 0) {
+      this.logger.warn(
+        { user, baseAsset, warnings },
+        "close: getPositions returned empty — no positions found for user",
+      );
+    }
+
+    const toClose = allPositions.filter((p) => {
+      if (p.size <= 0) return false;
+      if (requestedCoin) {
+        return p.coin.toUpperCase() === requestedCoin;
+      }
+      if (requestedVariants.size === 0) return false;
+      const positionVariants = new Set<string>([
+        ...assetVariants(p.baseAsset),
+        ...assetVariants(p.coin),
+      ]);
+      for (const variant of positionVariants) {
+        if (requestedVariants.has(variant)) return true;
+      }
+      return false;
+    });
+
+    if (allPositions.length > 0 && toClose.length === 0) {
+      this.logger.warn(
+        {
+          baseAsset,
+          requestedCoin,
+          requestedVariants: [...requestedVariants],
+          positions: allPositions.map((p) => ({
+            coin: p.coin,
+            baseAsset: p.baseAsset,
+            size: p.size,
+            side: p.side,
+          })),
+        },
+        "close: positions exist but none match the requested asset variants",
+      );
+    }
+
+    const slippage = this._config.defaultSlippage ?? 0.01;
     const receipts: ExecutionReceipt[] = [];
+
     for (const pos of toClose) {
-      const side = pos.side === "long" ? "sell" : "buy";
-      const q = await this.quote(pos.baseAsset, side, pos.size);
-      const receipt = await this.execute(q.plan);
+      const side: "buy" | "sell" = pos.side === "long" ? "sell" : "buy";
+
+      if (!pos.market) {
+        this.logger.error(
+          { coin: pos.coin, baseAsset: pos.baseAsset },
+          "Cannot close position: no market data available in registry",
+        );
+        receipts.push({
+          success: false,
+          market: { coin: pos.coin, baseAsset: pos.baseAsset, assetIndex: -1 } as PerpMarket,
+          side,
+          requestedSize: String(pos.size),
+          filledSize: "0",
+          avgPrice: "0",
+          orderId: undefined,
+          timestamp: Date.now(),
+          error: `No market data found for ${pos.coin}`,
+        });
+        continue;
+      }
+
+      // Build execution plan directly from position data, bypassing the
+      // router's market selection. This ensures we target the exact market
+      // where the position exists rather than whatever the router picks as
+      // "best" (which may be a different deployer market entirely).
+      const slippageMultiplier = side === "buy" ? (1 + slippage) : (1 - slippage);
+      const limitPrice = pos.markPrice * slippageMultiplier;
+      const orderSize = quantizeOrderSize(pos.size, pos.market);
+      const orderPrice = quantizeOrderPrice(limitPrice, side, pos.market);
+
+      if (parseFloat(orderSize) <= 0 || parseFloat(orderPrice) <= 0) {
+        this.logger.error(
+          { coin: pos.coin, size: pos.size, markPrice: pos.markPrice, orderSize, orderPrice },
+          "Cannot close position: quantized size or price is zero",
+        );
+        receipts.push({
+          success: false,
+          market: pos.market,
+          side,
+          requestedSize: String(pos.size),
+          filledSize: "0",
+          avgPrice: "0",
+          orderId: undefined,
+          timestamp: Date.now(),
+          error: `Quantized order size (${orderSize}) or price (${orderPrice}) is zero for ${pos.coin}`,
+        });
+        continue;
+      }
+
+      // Match Hyperliquid UI close behavior: reduceOnly + FrontendMarket TIF.
+      // Without reduceOnly the exchange treats the order as a new position open,
+      // which fails with "Vault not registered" on HIP-3 deployer markets.
+      const plan: ExecutionPlan = {
+        market: pos.market,
+        side,
+        size: orderSize,
+        price: orderPrice,
+        orderType: { limit: { tif: "FrontendMarket" } },
+        slippage,
+        reduceOnly: true,
+      };
+
+      const receipt = await this.execute(plan);
       receipts.push(receipt);
     }
     return receipts;

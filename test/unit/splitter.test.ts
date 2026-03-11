@@ -26,6 +26,7 @@ async function aggregateBooks(
   dexes?: { name: string | null; universe: { name: string; szDecimals: number; maxLeverage: number }[]; collateralToken: number }[],
 ): Promise<AggregatedBook> {
   const defaultDexes = dexes ?? [
+    { name: null, universe: [], collateralToken: 0 },
     {
       name: "xyz",
       universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
@@ -240,19 +241,22 @@ describe("SplitOptimizer", () => {
     });
 
     it("handles 3+ market split with a third dex", async () => {
-      const thirdDex = [{
-        name: "xyz",
-        universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
-        collateralToken: 0,
-      }, {
-        name: "flx",
-        universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
-        collateralToken: 1,
-      }, {
-        name: "cash",
-        universe: [{ name: "cash:TSLA", szDecimals: 3, maxLeverage: 10 }],
-        collateralToken: 2,
-      }];
+      const thirdDex = [
+        { name: null, universe: [], collateralToken: 0 },
+        {
+          name: "xyz",
+          universe: [{ name: "xyz:TSLA", szDecimals: 3, maxLeverage: 10 }],
+          collateralToken: 0,
+        }, {
+          name: "flx",
+          universe: [{ name: "flx:TSLA", szDecimals: 3, maxLeverage: 10 }],
+          collateralToken: 1,
+        }, {
+          name: "cash",
+          universe: [{ name: "cash:TSLA", szDecimals: 3, maxLeverage: 10 }],
+          collateralToken: 2,
+        },
+      ];
       const cashBook: L2Book = {
         coin: "cash:TSLA",
         time: 1707580800000,
