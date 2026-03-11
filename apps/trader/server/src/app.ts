@@ -5,6 +5,7 @@ import path from "node:path";
 import type { ServerConfig } from "./config.js";
 import { authRoutes, sessionAuth } from "./middleware/auth.js";
 import { memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
+import { csrfProtection } from "./middleware/csrf.js";
 import { passwordGateRoutes, requireAppAccess, requireWebAppAccess } from "./middleware/password-gate.js";
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
@@ -75,7 +76,8 @@ export function createApp(config: ServerConfig) {
 
   if (config.authEnabled) {
     app.use("/api", sessionAuth());
-    console.log("EIP-712 session auth enabled");
+    app.use("/api", csrfProtection({ disabled: config.devInsecure }));
+    console.log("EIP-712 session auth + CSRF protection enabled");
   }
 
   app.use("/api/agent", agentRoutes(config));

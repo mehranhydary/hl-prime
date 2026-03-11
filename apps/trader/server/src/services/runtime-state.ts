@@ -42,6 +42,8 @@ export interface RuntimeStateStore {
 
   putPendingAgent(agent: PendingAgentState, ttlMs: number): void;
   getPendingAgent(id: string): PendingAgentState | null;
+  /** Atomic get-and-delete: returns the pending agent and scrubs the key in one step. */
+  takePendingAgent(id: string): PendingAgentState | null;
   deletePendingAgent(id: string): void;
   cleanupPendingAgents(now?: number): void;
 
@@ -52,6 +54,7 @@ export interface RuntimeStateStore {
   deleteQuote(id: string): void;
   cleanupQuotes(now?: number): void;
 
+  close(): void;
   clearAllForTests(): void;
 }
 
@@ -103,23 +106,33 @@ function tokenHash(token: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(token).digest("hex");
 }
 
+/** Best-effort: overwrite the key property so the plaintext reference is no longer reachable via the store. */
+function scrubAgentKey(agent: PendingAgentState): void {
+  (agent as { agentPrivateKey: string }).agentPrivateKey = "0x" + "0".repeat(64);
+}
+
 class MemoryRuntimeStateStore implements RuntimeStateStore {
   private sessions = new Map<string, SessionState>();
   private accessGrants = new Map<string, number>();
   private authChallenges = new Map<string, { payload: AuthChallengeState; expiresAt: number }>();
   private pendingAgents = new Map<string, { payload: PendingAgentState; expiresAt: number }>();
   private quotes = new Map<string, { payload: unknown; expiresAt: number }>();
+  private readonly secret: string;
+
+  constructor(secret: string) {
+    this.secret = secret;
+  }
 
   putSession(session: SessionState): void {
-    this.sessions.set(session.token, session);
+    this.sessions.set(tokenHash(session.token, this.secret), session);
   }
 
   getSession(token: string): SessionState | null {
-    return this.sessions.get(token) ?? null;
+    return this.sessions.get(tokenHash(token, this.secret)) ?? null;
   }
 
   deleteSession(token: string): void {
-    this.sessions.delete(token);
+    this.sessions.delete(tokenHash(token, this.secret));
   }
 
   cleanupSessions(now = Date.now()): void {
@@ -178,19 +191,36 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
     const found = this.pendingAgents.get(id);
     if (!found) return null;
     if (found.expiresAt <= Date.now()) {
+      scrubAgentKey(found.payload);
       this.pendingAgents.delete(id);
       return null;
     }
     return found.payload;
   }
 
+  takePendingAgent(id: string): PendingAgentState | null {
+    const found = this.pendingAgents.get(id);
+    if (!found) return null;
+    this.pendingAgents.delete(id);
+    if (found.expiresAt <= Date.now()) {
+      scrubAgentKey(found.payload);
+      return null;
+    }
+    return found.payload;
+  }
+
   deletePendingAgent(id: string): void {
+    const found = this.pendingAgents.get(id);
+    if (found) scrubAgentKey(found.payload);
     this.pendingAgents.delete(id);
   }
 
   cleanupPendingAgents(now = Date.now()): void {
     for (const [id, value] of this.pendingAgents.entries()) {
-      if (value.expiresAt <= now) this.pendingAgents.delete(id);
+      if (value.expiresAt <= now) {
+        scrubAgentKey(value.payload);
+        this.pendingAgents.delete(id);
+      }
     }
   }
 
@@ -224,6 +254,10 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
     for (const [id, value] of this.quotes.entries()) {
       if (value.expiresAt <= now) this.quotes.delete(id);
     }
+  }
+
+  close(): void {
+    // No-op for in-memory store.
   }
 
   clearAllForTests(): void {
@@ -420,6 +454,23 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
     ) as PendingAgentState;
   }
 
+  takePendingAgent(id: string): PendingAgentState | null {
+    const tx = this.db.transaction((agentId: string, now: number): PendingAgentState | null => {
+      const row = this.db.prepare(`
+        SELECT payload, expires_at as expiresAt
+        FROM pending_agents
+        WHERE id = ?
+      `).get(agentId) as { payload: string; expiresAt: number } | undefined;
+      if (!row) return null;
+      this.db.prepare("DELETE FROM pending_agents WHERE id = ?").run(agentId);
+      if (row.expiresAt <= now) return null;
+      return JSON.parse(
+        decryptStatePayload(row.payload, this.storageSecret),
+      ) as PendingAgentState;
+    });
+    return tx(id, Date.now());
+  }
+
   deletePendingAgent(id: string): void {
     this.db.prepare("DELETE FROM pending_agents WHERE id = ?").run(id);
   }
@@ -475,6 +526,10 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
 
   cleanupQuotes(now = Date.now()): void {
     this.db.prepare("DELETE FROM quotes WHERE expires_at <= ?").run(now);
+  }
+
+  close(): void {
+    if (this.db.open) this.db.close();
   }
 
   clearAllForTests(): void {
@@ -568,7 +623,11 @@ export function getRuntimeStateStore(config?: ServerConfig): RuntimeStateStore {
   const backend = config?.runtimeStateBackend
     ?? ((process.env.TRADER_RUNTIME_STATE_BACKEND ?? "sqlite").trim().toLowerCase() === "memory" ? "memory" : "sqlite");
   if (backend === "memory") {
-    runtimeStateStore = new MemoryRuntimeStateStore();
+    const memSecret = config?.storePassphrase
+      ?? process.env.TRADER_STORE_PASSPHRASE
+      ?? process.env.TRADER_APP_PASSWORD
+      ?? crypto.randomBytes(32).toString("hex");
+    runtimeStateStore = new MemoryRuntimeStateStore(memSecret);
     return runtimeStateStore;
   }
 
@@ -589,6 +648,13 @@ export function getRuntimeStateStore(config?: ServerConfig): RuntimeStateStore {
   }
   runtimeStateStore = new SqliteRuntimeStateStore(sqlitePath, storageSecret);
   return runtimeStateStore;
+}
+
+export function closeRuntimeStateStore(): void {
+  if (runtimeStateStore) {
+    runtimeStateStore.close();
+    runtimeStateStore = null;
+  }
 }
 
 export function __resetRuntimeStateStoreForTests(): void {

@@ -11,11 +11,8 @@ export function marketRoutes(config: ServerConfig): Router {
   router.get("/candles", async (req, res) => {
     try {
       const coin = requireString(req.query.coin, "coin");
-      const interval = (req.query.interval as CandleInterval) ?? "1h";
+      const rawInterval = (req.query.interval as string) ?? "1h";
       const network = parseNetwork(req.query.network, config.defaultNetwork) as Network;
-
-      const service = getClientService(config);
-      const publicHp = await service.getPublicClient(network);
 
       // Fetch last 300 candles
       const intervalMs: Record<string, number> = {
@@ -26,7 +23,15 @@ export function marketRoutes(config: ServerConfig): Router {
         "1w": 604_800_000, "1M": 2_592_000_000,
       };
 
-      const periodMs = intervalMs[interval] ?? 3_600_000;
+      if (!(rawInterval in intervalMs)) {
+        throw new ValidationError(`Invalid interval: ${rawInterval}. Valid: ${Object.keys(intervalMs).join(", ")}`);
+      }
+      const interval = rawInterval as CandleInterval;
+
+      const service = getClientService(config);
+      const publicHp = await service.getPublicClient(network);
+
+      const periodMs = intervalMs[interval];
       const startTime = Date.now() - periodMs * 300;
 
       const raw = await publicHp.api.candleSnapshot(coin, interval, startTime);

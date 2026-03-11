@@ -152,6 +152,31 @@ describe("PendingAgentStore", () => {
     expect(store.get(pending.id)).toBeUndefined();
   });
 
+  it("take() returns and removes pending agent atomically", () => {
+    const store = new PendingAgentStore();
+    const pending = {
+      id: "take-test",
+      agentPrivateKey: "0xdeadbeef" as `0x${string}`,
+      agentAddress: "0x1234" as `0x${string}`,
+      agentName: "test agent",
+      createdAt: Date.now(),
+    };
+
+    store.add(pending);
+    const taken = store.take(pending.id);
+    expect(taken).toBeDefined();
+    expect(taken!.id).toBe(pending.id);
+    expect(taken!.agentAddress).toBe(pending.agentAddress);
+    // Second take returns undefined
+    expect(store.take(pending.id)).toBeUndefined();
+    expect(store.get(pending.id)).toBeUndefined();
+  });
+
+  it("take() returns undefined for unknown id", () => {
+    const store = new PendingAgentStore();
+    expect(store.take("nonexistent")).toBeUndefined();
+  });
+
   it("returns undefined for unknown id", () => {
     const store = new PendingAgentStore();
     expect(store.get("unknown")).toBeUndefined();

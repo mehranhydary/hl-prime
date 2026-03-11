@@ -12,7 +12,7 @@
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "node:crypto";
-import { verifyTypedData, getAddress, recoverTypedDataAddress } from "viem";
+import { verifyTypedData, getAddress, recoverTypedDataAddress, isAddress } from "viem";
 import {
   AUTH_AUDIENCE,
   AUTH_ALLOWED_CHAIN_IDS,
@@ -30,6 +30,7 @@ import {
 import type { ServerConfig } from "../config.js";
 import { getRuntimeStateStore, type AuthChallengeState } from "../services/runtime-state.js";
 import { clearAuthCookie, readCookie, setAuthCookie } from "../utils/cookies.js";
+import { generateCsrfToken, setCsrfCookie, clearCsrfCookie } from "./csrf.js";
 
 // ── Session store ──────────────────────────────────────────────────────
 
@@ -262,6 +263,9 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
       secure: secureCookie,
     });
 
+    // Issue CSRF double-submit cookie (readable by frontend JS)
+    setCsrfCookie(res, generateCsrfToken(), { secure: secureCookie, expiresAt });
+
     const response: SessionResponse = { expiresAt };
     res.json(response);
   });
@@ -281,6 +285,7 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
       name: SESSION_TOKEN_COOKIE,
       secure: secureCookie,
     });
+    clearCsrfCookie(res, secureCookie);
     res.json({ success: true });
   });
 
@@ -328,9 +333,15 @@ export function sessionAuth() {
       ? authReq.query.masterAddress
       : undefined;
     const requestedAddress = bodyAddress ?? queryAddress;
-    if (requestedAddress && requestedAddress.toLowerCase() !== session.address.toLowerCase()) {
-      res.status(403).json({ error: "masterAddress does not match authenticated session", code: "FORBIDDEN" });
-      return;
+    if (requestedAddress) {
+      if (!isAddress(requestedAddress)) {
+        res.status(400).json({ error: "Invalid masterAddress format", code: "BAD_REQUEST" });
+        return;
+      }
+      if (requestedAddress.toLowerCase() !== session.address.toLowerCase()) {
+        res.status(403).json({ error: "masterAddress does not match authenticated session", code: "FORBIDDEN" });
+        return;
+      }
     }
 
     next();

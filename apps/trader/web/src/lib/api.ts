@@ -28,6 +28,7 @@ import {
   signIn,
 } from "./auth.js";
 import { clearAccessToken, getAccessHeaders } from "./access-gate.js";
+import { getCsrfHeaders } from "./csrf.js";
 
 const BASE = "/api";
 
@@ -80,12 +81,14 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
 
   const accessHeaders = getAccessHeaders();
   const authHeaders = getAuthHeaders();
+  const csrfHeaders = getCsrfHeaders();
   const res = await fetch(`${BASE}${url}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...accessHeaders,
       ...authHeaders,
+      ...csrfHeaders,
       ...(options?.headers as Record<string, string> | undefined),
     },
   });

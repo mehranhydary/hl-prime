@@ -209,7 +209,6 @@ export class WebSocketHub {
             balance: {
               perpAccountValueUsd: parseFloat(ms.accountValue),
               perpRawUsd: parseFloat(ms.totalRawUsd),
-              availableUsd: parseFloat(data.clearinghouseState.withdrawable),
             },
           });
         },

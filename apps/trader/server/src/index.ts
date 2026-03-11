@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { createApp } from "./app.js";
 import { getClientService } from "./routes/agent.js";
 import { WebSocketHub } from "./services/ws-hub.js";
+import { closeRuntimeStateStore } from "./services/runtime-state.js";
 
 const config = loadConfig();
 const app = createApp(config);
@@ -38,6 +39,12 @@ async function shutdown(signal: string): Promise<void> {
     await getClientService(config).disconnectAll();
   } catch (err) {
     console.warn("[shutdown] disconnectAll failed:", err instanceof Error ? err.message : String(err));
+  }
+
+  try {
+    closeRuntimeStateStore();
+  } catch (err) {
+    console.warn("[shutdown] closeRuntimeStateStore failed:", err instanceof Error ? err.message : String(err));
   }
 
   process.exit(0);

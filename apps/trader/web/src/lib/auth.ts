@@ -16,6 +16,7 @@ import {
 import type { Network } from "@shared/types";
 import { getAddress, recoverTypedDataAddress, verifyTypedData } from "viem";
 import { getAccessHeaders } from "./access-gate.js";
+import { getCsrfHeaders } from "./csrf.js";
 import { ensureWalletChain } from "./wallet-client.js";
 
 const STORAGE_KEY = "hl-prime:auth-session:v1";
@@ -389,6 +390,7 @@ export function signOut(): void {
     credentials: "same-origin",
     headers: {
       ...getAccessHeaders(),
+      ...getCsrfHeaders(),
     },
   }).catch(() => {});
 }

@@ -18,7 +18,6 @@ export interface WSClearinghouseMessage {
   balance: {
     perpAccountValueUsd: number;
     perpRawUsd: number;
-    availableUsd: number;
   };
 }
 

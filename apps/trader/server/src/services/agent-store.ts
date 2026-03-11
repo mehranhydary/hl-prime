@@ -122,7 +122,7 @@ interface PendingAgent {
 export class PendingAgentStore {
   private ttlMs: number;
 
-  constructor(ttlMs = 10 * 60 * 1000) { // 10 min default
+  constructor(ttlMs = 3 * 60 * 1000) { // 3 min default
     this.ttlMs = ttlMs;
   }
 
@@ -138,6 +138,13 @@ export class PendingAgentStore {
     const store = getRuntimeStateStore();
     store.cleanupPendingAgents();
     return store.getPendingAgent(id) ?? undefined;
+  }
+
+  /** Atomic get-and-delete. Preferred over get()+remove() to minimize key exposure window. */
+  take(id: string): PendingAgent | undefined {
+    const store = getRuntimeStateStore();
+    store.cleanupPendingAgents();
+    return store.takePendingAgent(id) ?? undefined;
   }
 
   remove(id: string): void {

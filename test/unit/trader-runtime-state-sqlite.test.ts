@@ -72,6 +72,26 @@ describe("trader runtime state sqlite encryption", () => {
     );
   });
 
+  it("takePendingAgent atomically retrieves and deletes", () => {
+    const store = getRuntimeStateStore();
+    store.putPendingAgent({
+      id: "take-1",
+      agentPrivateKey: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      agentAddress: "0xdddddddddddddddddddddddddddddddddddddddd",
+      agentName: "hlprime take test",
+      createdAt: Date.now(),
+    }, 60_000);
+
+    const taken = store.takePendingAgent("take-1");
+    expect(taken).not.toBeNull();
+    expect(taken!.agentPrivateKey).toBe(
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    );
+    // Second take returns null (already deleted)
+    expect(store.takePendingAgent("take-1")).toBeNull();
+    expect(store.getPendingAgent("take-1")).toBeNull();
+  });
+
   it("persists app access grants and expires them correctly", () => {
     const store = getRuntimeStateStore();
     const id = "grant-1";

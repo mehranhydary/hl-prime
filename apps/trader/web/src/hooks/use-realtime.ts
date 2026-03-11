@@ -77,7 +77,6 @@ export function useRealtimeUpdates(
                 ...old.balance,
                 perpAccountValueUsd: newPerpValue,
                 perpRawUsd: msg.balance.perpRawUsd,
-                availableUsd: msg.balance.availableUsd,
                 totalUsd: newPerpValue + spotStableUsd,
               },
             };
