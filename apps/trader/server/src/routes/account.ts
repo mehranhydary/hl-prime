@@ -151,8 +151,11 @@ async function fetchHip3Positions(
   coinLookup: Map<string, CoinMeta>,
 ): Promise<ParsedPosition[]> {
   if (dexNames.length === 0) return [];
+  if (!infoClient || typeof infoClient.clearinghouseState !== "function") {
+    return [];
+  }
   const results = await Promise.allSettled(
-    dexNames.map((dex) =>
+    dexNames.map(async (dex) =>
       infoClient.clearinghouseState({ user: userAddress, dex }),
     ),
   );
@@ -759,7 +762,7 @@ export function accountRoutes(config: ServerConfig): Router {
         });
         return;
       }
-      console.error("[account/bootstrap] Bootstrap failed:", err instanceof Error ? err.message : String(err));
+      console.error("[account/bootstrap] Bootstrap failed:", err);
       res.status(500).json({
         error: "Account bootstrap failed. Please try again.",
         code: "BOOTSTRAP_FAILED",
