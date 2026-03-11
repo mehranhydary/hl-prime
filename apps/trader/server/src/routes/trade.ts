@@ -62,7 +62,7 @@ function tradeHistoryStore(config: ServerConfig): TradeHistoryStore {
   tradeHistoryStores.set(key, created);
   return created;
 }
-const QUOTE_TTL_MS = 30_000; // 30 seconds
+const QUOTE_TTL_MS = 120_000; // 2 minutes — allows time for manual leg adjustments
 const MAX_PRICE_DEVIATION = 0.05; // 5% — reject execution if price moved beyond this
 const MANUAL_ROUTE_WARNING = "Route manually adjusted before execution.";
 const AGENT_COLLATERAL_WARNING = "Collateral swaps require master-wallet signing (usdClassTransfer). Agent mode cannot auto-move collateral between perp and spot.";
@@ -1329,6 +1329,14 @@ export function tradeRoutes(config: ServerConfig): Router {
       if (collateralPreview?.swapsNeeded) {
         appendWarningOnce(routeSummary.warnings, AGENT_COLLATERAL_WARNING);
       }
+
+      // Refresh the quote TTL so it survives until execution.
+      // This turns the TTL into an idle timeout — as long as the user is
+      // actively previewing (adjusting legs), the quote stays alive.
+      runtimeState().putQuote(quoteId, {
+        ...cached,
+        createdAt: Date.now(),
+      }, QUOTE_TTL_MS);
 
       const response: ExecutePreviewResponse = {
         routeSummary,

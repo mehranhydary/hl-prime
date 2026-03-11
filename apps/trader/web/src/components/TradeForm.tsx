@@ -12,7 +12,7 @@ import {
   getDeployer,
   showIconFallback,
 } from "../lib/display";
-import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest } from "@shared/types";
+import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest, ExecutePreviewResponse } from "@shared/types";
 import { useNavigate } from "react-router-dom";
 import { runMasterPreTradeActions, isBuilderFeeAlreadyApproved } from "../lib/hl-master-actions";
 import { ApiError, tradeExecutePreview } from "../lib/api";
@@ -57,6 +57,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
   const [quoteFetching, setQuoteFetching] = useState(false);
   const [legOverrides, setLegOverrides] = useState<LegOverride[]>([]);
   const [preTradeError, setPreTradeError] = useState<string | null>(null);
+  const [adjustedPreview, setAdjustedPreview] = useState<ExecutePreviewResponse | null>(null);
 
   const quoteMutation = useQuote();
   const executeMutation = useExecute();
@@ -69,12 +70,16 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
   const isBuy = side === "buy";
   const leverageNum = parseInt(leverage, 10);
   const isMultiLeg = (activeQuote?.routeSummary.legs.length ?? 0) > 1;
+  const effectiveCollateralPreview = useMemo(
+    () => adjustedPreview?.collateralPreview ?? activeQuote?.collateralPreview ?? undefined,
+    [adjustedPreview, activeQuote],
+  );
   const plannedCollateralSwaps = useMemo(() => {
-    if (!activeQuote?.collateralPreview) return [];
-    return activeQuote.collateralPreview.requirements.filter((req) => req.shortfall > 0);
-  }, [activeQuote]);
+    if (!effectiveCollateralPreview) return [];
+    return effectiveCollateralPreview.requirements.filter((req) => req.shortfall > 0);
+  }, [effectiveCollateralPreview]);
 
-  // Reset leg overrides when a new quote arrives
+  // Reset leg overrides and adjusted preview when a new quote arrives
   useEffect(() => {
     if (activeQuote && activeQuote.quoteId !== lastQuoteIdRef.current) {
       lastQuoteIdRef.current = activeQuote.quoteId;
@@ -84,10 +89,12 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
           weight: leg.proportion > 0 ? leg.proportion * 100 : 0,
         })),
       );
+      setAdjustedPreview(null);
     }
     if (!activeQuote) {
       lastQuoteIdRef.current = null;
       setLegOverrides([]);
+      setAdjustedPreview(null);
     }
   }, [activeQuote]);
 
@@ -134,6 +141,42 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       proportion: effectiveProportions[i] ?? leg.proportion,
     }));
   }, [activeQuote, legOverrides, effectiveProportions]);
+
+  // Stable serialized key to control debounced preview calls
+  const legAdjustmentsKey = useMemo(() => {
+    if (!hasManualLegAdjustments) return "";
+    return legAdjustments.map(a => `${a.coin}:${a.enabled}:${a.proportion.toFixed(6)}`).join(",");
+  }, [hasManualLegAdjustments, legAdjustments]);
+
+  // Keep a ref to legAdjustments so the debounced effect reads the latest value
+  const latestLegAdjustments = useRef(legAdjustments);
+  latestLegAdjustments.current = legAdjustments;
+
+  // Debounced execute-preview when legs are manually adjusted.
+  // This serves two purposes:
+  //   1. Updates the collateral preview shown to the user
+  //   2. Refreshes the server-side quote TTL so it doesn't expire while adjusting
+  useEffect(() => {
+    if (!activeQuote || !legAdjustmentsKey) {
+      setAdjustedPreview(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const preview = await tradeExecutePreview({
+          quoteId: activeQuote.quoteId,
+          legAdjustments: latestLegAdjustments.current,
+        });
+        setAdjustedPreview(preview);
+      } catch {
+        // Preview failed — keep showing original collateral data.
+        // Server may still have refreshed the TTL before the error.
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [activeQuote?.quoteId, legAdjustmentsKey]);
 
   function toggleLeg(index: number) {
     setLegOverrides((prev) => {
@@ -630,12 +673,12 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
               )}
             </div>
 
-            {activeQuote.collateralPreview && (
+            {effectiveCollateralPreview && (
               <div className="space-y-1 pt-2 border-t border-border text-xs">
                 <div className="flex justify-between">
                   <span className="text-text-muted">Collateral Prep</span>
-                  <span className={activeQuote.collateralPreview.swapsNeeded ? "text-short" : "text-text-secondary"}>
-                    {activeQuote.collateralPreview.swapsNeeded ? "Swaps needed" : "No swaps needed"}
+                  <span className={effectiveCollateralPreview.swapsNeeded ? "text-short" : "text-text-secondary"}>
+                    {effectiveCollateralPreview.swapsNeeded ? "Swaps needed" : "No swaps needed"}
                   </span>
                 </div>
 
@@ -679,7 +722,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
                     ))}
                     <div className="flex justify-between text-[11px] text-text-dim">
                       <span>Weighted swap impact</span>
-                      <span>{activeQuote.collateralPreview.totalSwapCostBps.toFixed(2)} bps</span>
+                      <span>{effectiveCollateralPreview.totalSwapCostBps.toFixed(2)} bps</span>
                     </div>
                   </div>
                 ) : (
