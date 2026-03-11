@@ -84,6 +84,7 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
   const csrfHeaders = getCsrfHeaders();
   const res = await fetch(`${BASE}${url}`, {
     ...options,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...accessHeaders,
@@ -110,6 +111,17 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
           retryAuth: false,
         });
       }
+    }
+  }
+  if (code === "CSRF_FAILED" && allowAuthRetry) {
+    // CSRF cookie lost (browser cleared it, expired, etc.) — re-sign-in sets a fresh one.
+    clearAuthSession();
+    const signedIn = await signIn();
+    if (signedIn) {
+      return fetchJson<T>(url, {
+        ...options,
+        retryAuth: false,
+      });
     }
   }
 

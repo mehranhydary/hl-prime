@@ -37,6 +37,7 @@ export function createApp(config: ServerConfig) {
 
   app.use(cors({
     origin: config.devInsecure ? true : config.allowedOrigins,
+    credentials: true,
   }));
   app.use(express.json({ limit: "1mb" }));
 
