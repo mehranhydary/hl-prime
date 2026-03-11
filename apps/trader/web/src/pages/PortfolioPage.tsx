@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
 import { useNetwork } from "../lib/network-context";
@@ -23,6 +25,7 @@ import type {
   PortfolioOpenOrderRow,
   PortfolioOrderHistoryRow,
   PortfolioPositionRow,
+  PortfolioResponse,
   PortfolioTradeRow,
   TradeHistoryItem,
   PortfolioViewMode,
@@ -581,6 +584,7 @@ export function PortfolioPage() {
   const { network } = useNetwork();
   const { data, isLoading, error: portfolioError } = usePortfolio(address, network);
   const { data: tradeHistoryData, isLoading: tradeHistoryLoading } = useTradeHistory(address, network, 75);
+  const queryClient = useQueryClient();
   const closeMutation = useClosePosition();
   const [viewMode, setViewMode] = useState<PortfolioViewMode>("aggregate");
   const [pages, setPages] = useState<Record<SectionKey, number>>(INITIAL_PAGES);
@@ -722,13 +726,33 @@ export function PortfolioPage() {
           .join(" | ");
         throw new Error(legErrors || result.error || "Close order did not fill.");
       }
+      toast.success(`Closed ${row.market} position`);
+      // Optimistically remove the closed position from the cache so the UI
+      // updates instantly instead of waiting for the next server refetch.
+      queryClient.setQueryData<PortfolioResponse>(
+        ["portfolio", address, network],
+        (old) => {
+          if (!old) return old;
+          const filter = (rows: PortfolioPositionRow[]) =>
+            rows.filter((r) => r.key !== row.key);
+          return {
+            ...old,
+            positions: {
+              aggregate: filter(old.positions.aggregate),
+              breakdown: filter(old.positions.breakdown),
+            },
+          };
+        },
+      );
     } catch (err) {
       if (err instanceof ApiError && err.code === "AGENT_NOT_APPROVED") {
-        setCloseError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        toast.error("Agent not approved — redirecting to Setup");
         navigate("/setup");
         return;
       }
-      setCloseError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setCloseError(msg);
+      toast.error(msg);
     } finally {
       setClosingKey(null);
     }

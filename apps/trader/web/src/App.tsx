@@ -1,5 +1,6 @@
 import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { LandingPage } from "./pages/LandingPage";
 import { LandingPage2 } from "./pages/LandingPage2";
 import { PasswordGatePage } from "./pages/PasswordGatePage";
@@ -90,6 +91,27 @@ export function App() {
       <WalletProvider>
         <NetworkProvider>
           <AppRoutes />
+          <Toaster
+            position="bottom-center"
+            containerStyle={{ bottom: 72 }}
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: "var(--color-surface-2)",
+                color: "var(--color-text-primary)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "2px",
+                fontSize: "13px",
+                maxWidth: "400px",
+              },
+              success: {
+                iconTheme: { primary: "var(--color-long)", secondary: "var(--color-surface-0)" },
+              },
+              error: {
+                iconTheme: { primary: "var(--color-short)", secondary: "var(--color-surface-0)" },
+              },
+            }}
+          />
         </NetworkProvider>
       </WalletProvider>
     </ThemeProvider>

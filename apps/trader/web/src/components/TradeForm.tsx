@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import toast from "react-hot-toast";
 import { useQuote, useExecute, useQuickTrade } from "../hooks/use-trade";
 import { useWallet } from "../hooks/use-wallet";
 import { useNetwork } from "../lib/network-context";
@@ -302,23 +303,28 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
         });
       }
     } catch (error) {
-      setPreTradeError(error instanceof Error ? error.message : String(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      setPreTradeError(msg);
+      toast.error(msg);
       return;
     }
 
     try {
       const result = await executeMutation.mutateAsync(executeBody);
       if (result.totalFilledSize > 0) {
+        toast.success(`Filled ${result.totalFilledSize} ${asset} @ $${result.aggregateAvgPrice.toFixed(2)}`);
         setActiveQuote(null);
         setAmount("");
+      } else {
+        toast("Order did not fill — try smaller size or wider slippage", { icon: "\u26A0\uFE0F" });
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
-        setPreTradeError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        toast.error("Agent not approved — redirecting to Setup");
         navigate("/setup");
         return;
       }
-      setPreTradeError(error instanceof Error ? error.message : String(error));
+      toast.error(error instanceof Error ? error.message : "Trade failed");
     }
   }
 
@@ -345,7 +351,9 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
             collateralPreview: activeQuote.collateralPreview,
           });
         } catch (error) {
-          setPreTradeError(error instanceof Error ? error.message : String(error));
+          const msg = error instanceof Error ? error.message : String(error);
+          setPreTradeError(msg);
+          toast.error(msg);
           return;
         }
       }
@@ -363,15 +371,18 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
         isCross: true,
       });
       if (result.totalFilledSize > 0) {
+        toast.success(`Filled ${result.totalFilledSize} ${asset} @ $${result.aggregateAvgPrice.toFixed(2)}`);
         setAmount("");
+      } else {
+        toast("Order did not fill — try smaller size or wider slippage", { icon: "\u26A0\uFE0F" });
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
-        setPreTradeError("Agent wallet is not approved for trading. Redirecting to Setup.");
+        toast.error("Agent not approved — redirecting to Setup");
         navigate("/setup");
         return;
       }
-      setPreTradeError(error instanceof Error ? error.message : String(error));
+      toast.error(error instanceof Error ? error.message : "Trade failed");
     }
   }
 

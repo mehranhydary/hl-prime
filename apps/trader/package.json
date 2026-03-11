@@ -21,6 +21,7 @@
     "hyperliquid-prime": "file:../..",
     "lightweight-charts": "^5.1.0",
     "qrcode": "^1.5.4",
+    "react-hot-toast": "^2.6.0",
     "uuid": "^11.0.0",
     "viem": "^2.21.0",
     "ws": "^8.19.0"
