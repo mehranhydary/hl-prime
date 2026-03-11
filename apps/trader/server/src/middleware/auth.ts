@@ -12,7 +12,7 @@
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "node:crypto";
-import { verifyTypedData, getAddress } from "viem";
+import { verifyTypedData, getAddress, recoverTypedDataAddress } from "viem";
 import {
   AUTH_AUDIENCE,
   AUTH_ALLOWED_CHAIN_IDS,
@@ -202,6 +202,19 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
 
     // Verify EIP-712 signature
     try {
+      const recovered = await recoverTypedDataAddress({
+        domain: authDomain(chainId),
+        types: AUTH_TYPES,
+        primaryType: "Auth",
+        message: {
+          address: checksumAddress,
+          nonce: challenge.nonce,
+          issuedAt: BigInt(challenge.issuedAt),
+          audience: AUTH_AUDIENCE,
+        },
+        signature: body.signature as `0x${string}`,
+      });
+
       const valid = await verifyTypedData({
         address: checksumAddress,
         domain: authDomain(chainId),
@@ -217,6 +230,9 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
       });
 
       if (!valid) {
+        console.warn(
+          `[auth] Invalid signature: expected=${checksumAddress.toLowerCase()} recovered=${recovered.toLowerCase()} chainId=${chainId}`,
+        );
         res.status(401).json({ error: "Invalid signature", code: "AUTH_FAILED" });
         return;
       }

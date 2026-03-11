@@ -14,7 +14,7 @@ import {
   type SessionResponse,
 } from "@shared/auth";
 import type { Network } from "@shared/types";
-import { getAddress } from "viem";
+import { getAddress, verifyTypedData } from "viem";
 import { getAccessHeaders } from "./access-gate.js";
 import { ensureWalletChain } from "./wallet-client.js";
 
@@ -39,7 +39,28 @@ let sessionExpiresAt = 0;
 let currentAddress: `0x${string}` | null = null;
 let authRequired = false;
 let authNetwork: Network = "mainnet";
+let signInInFlight: Promise<boolean> | null = null;
 const listeners = new Set<AuthListener>();
+
+async function resolveActiveAuthAddress(expectedAddress: `0x${string}`): Promise<`0x${string}`> {
+  if (typeof window.ethereum === "undefined") {
+    throw new Error("No wallet provider found.");
+  }
+
+  const accounts = await window.ethereum.request({ method: "eth_accounts" });
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    throw new Error("No connected wallet account found. Reconnect wallet and try again.");
+  }
+
+  const activeAddress = getAddress(accounts[0] as string);
+  if (activeAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error(
+      `Connected wallet account changed to ${activeAddress}. Reconnect wallet to keep signing in sync.`,
+    );
+  }
+
+  return activeAddress as `0x${string}`;
+}
 
 // ── localStorage helpers ───────────────────────────────────────────────
 
@@ -158,121 +179,169 @@ export function clearAuthSession(): void {
  * Call this from a user-initiated action (e.g. "Sign In" button), never automatically.
  */
 export async function signIn(): Promise<boolean> {
-  if (!SESSION_AUTH_ENABLED) {
-    authRequired = false;
-    emit();
-    return true;
-  }
-  if (!currentAddress || typeof window.ethereum === "undefined") return false;
+  if (signInInFlight) return signInInFlight;
 
-  let address: `0x${string}`;
-  try {
-    address = getAddress(currentAddress);
-  } catch {
-    return false;
-  }
-  try {
-    await ensureWalletChain(authNetwork);
+  signInInFlight = (async (): Promise<boolean> => {
+    if (!SESSION_AUTH_ENABLED) {
+      authRequired = false;
+      emit();
+      return true;
+    }
+    if (!currentAddress || typeof window.ethereum === "undefined") return false;
 
-    const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
-    if (typeof chainIdHex !== "string") throw new Error("Wallet returned invalid chainId");
-    const chainId = parseInt(chainIdHex, 16);
-    if (!Number.isInteger(chainId)) throw new Error("Unable to parse wallet chainId");
-
-    const challengeRes = await fetch("/api/auth/challenge", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAccessHeaders(),
-      },
-      body: JSON.stringify({ address, chainId }),
-    });
-    if (!challengeRes.ok) {
-      const data = await challengeRes.json().catch(() => ({}));
-      console.error("[auth] Challenge creation rejected:", (data as Record<string, string>).error);
+    let address: `0x${string}`;
+    try {
+      address = getAddress(currentAddress);
+    } catch {
       return false;
     }
+    try {
+      await ensureWalletChain(authNetwork);
+      address = await resolveActiveAuthAddress(address);
 
-    const challenge = (await challengeRes.json()) as SessionChallengeResponse;
-    if (
-      typeof challenge.nonce !== "string"
-      || typeof challenge.issuedAt !== "number"
-      || typeof challenge.chainId !== "number"
-      || typeof challenge.audience !== "string"
-      || challenge.address.toLowerCase() !== address.toLowerCase()
-      || challenge.audience !== AUTH_AUDIENCE
-    ) {
-      throw new Error("Challenge response malformed");
-    }
+      const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
+      if (typeof chainIdHex !== "string") throw new Error("Wallet returned invalid chainId");
+      const chainId = parseInt(chainIdHex, 16);
+      if (!Number.isInteger(chainId)) throw new Error("Unable to parse wallet chainId");
 
-    const serializableData = {
-      types: AUTH_TYPES,
-      domain: {
+      const challengeRes = await fetch("/api/auth/challenge", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAccessHeaders(),
+        },
+        body: JSON.stringify({ address, chainId }),
+      });
+      if (!challengeRes.ok) {
+        const data = await challengeRes.json().catch(() => ({}));
+        console.error("[auth] Challenge creation rejected:", (data as Record<string, string>).error);
+        return false;
+      }
+
+      const challenge = (await challengeRes.json()) as SessionChallengeResponse;
+      if (
+        typeof challenge.nonce !== "string"
+        || typeof challenge.issuedAt !== "number"
+        || typeof challenge.chainId !== "number"
+        || typeof challenge.audience !== "string"
+        || challenge.address.toLowerCase() !== address.toLowerCase()
+        || challenge.audience !== AUTH_AUDIENCE
+      ) {
+        throw new Error("Challenge response malformed");
+      }
+
+      const authDomain = {
         ...AUTH_DOMAIN,
         chainId: challenge.chainId,
-      },
-      primaryType: "Auth" as const,
-      message: {
+      } as const;
+      const authMessage = {
         address,
         nonce: challenge.nonce,
         issuedAt: challenge.issuedAt,
         audience: challenge.audience,
-      },
-    };
+      } as const;
 
-    const serializedData = JSON.stringify(serializableData);
-    let signature = await window.ethereum.request({
-      method: "eth_signTypedData_v4",
-      params: [address, serializedData],
-    });
+      const serializableData = {
+        types: AUTH_TYPES,
+        domain: authDomain,
+        primaryType: "Auth" as const,
+        message: authMessage,
+      };
 
-    // Non-MetaMask providers may require reversed parameter ordering.
-    const provider = window.ethereum as { isMetaMask?: boolean };
-    if (typeof signature !== "string" && !provider.isMetaMask) {
-      signature = await window.ethereum.request({
-        method: "eth_signTypedData_v4",
-        params: [serializedData, address],
+      const serializedData = JSON.stringify(serializableData);
+      const signParamAttempts: [unknown, unknown][] = [
+        [address, serializedData],
+        [serializedData, address],
+      ];
+
+      let signature: string | null = null;
+      for (const params of signParamAttempts) {
+        let candidate: unknown;
+        try {
+          candidate = await window.ethereum.request({
+            method: "eth_signTypedData_v4",
+            params,
+          });
+        } catch (error) {
+          // User explicitly rejected signing; don't prompt again with fallback params.
+          const code = (error as { code?: number }).code;
+          if (code === 4001) throw error;
+          continue;
+        }
+        if (typeof candidate !== "string") {
+          continue;
+        }
+
+        let valid = false;
+        try {
+          valid = await verifyTypedData({
+            address,
+            domain: authDomain,
+            types: AUTH_TYPES,
+            primaryType: "Auth",
+            message: {
+              ...authMessage,
+              issuedAt: BigInt(authMessage.issuedAt),
+            },
+            signature: candidate as `0x${string}`,
+          });
+        } catch {
+          valid = false;
+        }
+
+        if (valid) {
+          signature = candidate;
+          break;
+        }
+      }
+
+      if (!signature) {
+        throw new Error("Wallet returned a typed-data signature that could not be verified.");
+      }
+
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAccessHeaders(),
+        },
+        body: JSON.stringify({
+          address,
+          chainId: challenge.chainId,
+          nonce: challenge.nonce,
+          signature,
+        }),
       });
-    }
 
-    if (typeof signature !== "string") throw new Error("Wallet did not return a signature");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("[auth] Session creation rejected:", (data as Record<string, string>).error);
+        return false;
+      }
 
-    const res = await fetch("/api/auth/session", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAccessHeaders(),
-      },
-      body: JSON.stringify({
-        address,
-        chainId: challenge.chainId,
-        nonce: challenge.nonce,
-        signature,
-      }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      console.error("[auth] Session creation rejected:", (data as Record<string, string>).error);
+      const data = (await res.json()) as Partial<SessionResponse>;
+      if (typeof data.expiresAt !== "number" || !Number.isFinite(data.expiresAt)) {
+        throw new Error("Invalid session response");
+      }
+      sessionExpiresAt = data.expiresAt;
+      authRequired = false;
+      persistSession(address, data.expiresAt);
+      emit();
+      return true;
+    } catch (err) {
+      console.error("[auth] Sign-in failed:", err instanceof Error ? err.message : err);
+      authRequired = true;
+      emit();
       return false;
     }
+  })();
 
-    const data = (await res.json()) as Partial<SessionResponse>;
-    if (typeof data.expiresAt !== "number" || !Number.isFinite(data.expiresAt)) {
-      throw new Error("Invalid session response");
-    }
-    sessionExpiresAt = data.expiresAt;
-    authRequired = false;
-    persistSession(address, data.expiresAt);
-    emit();
-    return true;
-  } catch (err) {
-    console.error("[auth] Sign-in failed:", err instanceof Error ? err.message : err);
-    authRequired = true;
-    emit();
-    return false;
+  try {
+    return await signInInFlight;
+  } finally {
+    signInInFlight = null;
   }
 }
 
