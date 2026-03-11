@@ -65,6 +65,12 @@ export class HLClientService {
         logLevel: "warn",
       });
       await hp.connect();
+      // Ensure market groups are populated before first bootstrap call.
+      try {
+        await hp.markets.discover();
+      } catch (err) {
+        console.warn(`[hl-client] initial market discovery failed (${network}):`, err);
+      }
       return hp;
     })();
     this.publicConnecting.set(network, promise);

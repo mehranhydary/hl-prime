@@ -74,6 +74,15 @@ function authDomain(chainId: number): typeof AUTH_DOMAIN & { chainId: number } {
   };
 }
 
+function normalizeSignatureV(signature: string): `0x${string}` {
+  if (!signature.startsWith("0x")) return signature as `0x${string}`;
+  if (signature.length !== 132) return signature as `0x${string}`;
+  const v = signature.slice(-2).toLowerCase();
+  if (v === "00") return `${signature.slice(0, -2)}1b` as `0x${string}`;
+  if (v === "01") return `${signature.slice(0, -2)}1c` as `0x${string}`;
+  return signature as `0x${string}`;
+}
+
 const SESSION_TOKEN_COOKIE = "trader_session_token";
 const SUPPORTED_CHAIN_IDS_LABEL = AUTH_ALLOWED_CHAIN_IDS.join(", ");
 
@@ -202,6 +211,7 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
 
     // Verify EIP-712 signature
     try {
+      const normalizedSignature = normalizeSignatureV(body.signature);
       const recovered = await recoverTypedDataAddress({
         domain: authDomain(chainId),
         types: AUTH_TYPES,
@@ -212,7 +222,7 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
           issuedAt: BigInt(challenge.issuedAt),
           audience: AUTH_AUDIENCE,
         },
-        signature: body.signature as `0x${string}`,
+        signature: normalizedSignature,
       });
 
       const valid = await verifyTypedData({
@@ -226,7 +236,7 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
           issuedAt: BigInt(challenge.issuedAt),
           audience: AUTH_AUDIENCE,
         },
-        signature: body.signature as `0x${string}`,
+        signature: normalizedSignature,
       });
 
       if (!valid) {

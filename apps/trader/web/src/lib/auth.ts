@@ -14,7 +14,7 @@ import {
   type SessionResponse,
 } from "@shared/auth";
 import type { Network } from "@shared/types";
-import { getAddress, verifyTypedData } from "viem";
+import { getAddress, recoverTypedDataAddress, verifyTypedData } from "viem";
 import { getAccessHeaders } from "./access-gate.js";
 import { ensureWalletChain } from "./wallet-client.js";
 
@@ -41,6 +41,15 @@ let authRequired = false;
 let authNetwork: Network = "mainnet";
 let signInInFlight: Promise<boolean> | null = null;
 const listeners = new Set<AuthListener>();
+
+function normalizeSignatureV(signature: string): `0x${string}` {
+  if (!signature.startsWith("0x")) return signature as `0x${string}`;
+  if (signature.length !== 132) return signature as `0x${string}`;
+  const v = signature.slice(-2).toLowerCase();
+  if (v === "00") return `${signature.slice(0, -2)}1b` as `0x${string}`;
+  if (v === "01") return `${signature.slice(0, -2)}1c` as `0x${string}`;
+  return signature as `0x${string}`;
+}
 
 async function resolveActiveAuthAddress(expectedAddress: `0x${string}`): Promise<`0x${string}`> {
   if (typeof window.ethereum === "undefined") {
@@ -256,6 +265,7 @@ export async function signIn(): Promise<boolean> {
       ];
 
       let signature: string | null = null;
+      let firstCandidate: `0x${string}` | null = null;
       for (const params of signParamAttempts) {
         let candidate: unknown;
         try {
@@ -272,6 +282,8 @@ export async function signIn(): Promise<boolean> {
         if (typeof candidate !== "string") {
           continue;
         }
+        const normalizedCandidate = normalizeSignatureV(candidate);
+        if (!firstCandidate) firstCandidate = normalizedCandidate;
 
         let valid = false;
         try {
@@ -284,20 +296,40 @@ export async function signIn(): Promise<boolean> {
               ...authMessage,
               issuedAt: BigInt(authMessage.issuedAt),
             },
-            signature: candidate as `0x${string}`,
+            signature: normalizedCandidate,
           });
         } catch {
           valid = false;
         }
 
         if (valid) {
-          signature = candidate;
+          signature = normalizedCandidate;
           break;
         }
       }
 
       if (!signature) {
-        throw new Error("Wallet returned a typed-data signature that could not be verified.");
+        if (!firstCandidate) {
+          throw new Error("Wallet did not return a valid typed-data signature.");
+        }
+        try {
+          const recovered = await recoverTypedDataAddress({
+            domain: authDomain,
+            types: AUTH_TYPES,
+            primaryType: "Auth",
+            message: {
+              ...authMessage,
+              issuedAt: BigInt(authMessage.issuedAt),
+            },
+            signature: firstCandidate,
+          });
+          console.warn(
+            `[auth] Local typed-data verify failed; sending candidate to server. expected=${address.toLowerCase()} recovered=${recovered.toLowerCase()}`,
+          );
+        } catch {
+          console.warn("[auth] Local typed-data verify failed; sending candidate to server.");
+        }
+        signature = firstCandidate;
       }
 
       const res = await fetch("/api/auth/session", {

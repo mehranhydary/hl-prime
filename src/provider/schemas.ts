@@ -35,11 +35,13 @@ export const AssetCtxSchema = z.object({
   openInterest: numericStr,
   prevDayPx: numericStr,
   dayNtlVlm: numericStr,
-  premium: numericStr.optional(),
+  premium: numericStr.nullish().transform((value) => value ?? undefined),
   oraclePx: numericStr,
   markPx: numericStr,
-  midPx: numericStr.optional(),
-  impactPxs: z.tuple([numericStr, numericStr]).optional(),
+  // Some upstream responses return null midPx for illiquid/uninitialized markets.
+  // Normalize null -> undefined to preserve the existing optional string type.
+  midPx: numericStr.nullish().transform((value) => value ?? undefined),
+  impactPxs: z.tuple([numericStr, numericStr]).nullish().transform((value) => value ?? undefined),
 });
 
 export const MetaAndAssetCtxsSchema = z.tuple([
