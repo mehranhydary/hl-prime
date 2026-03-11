@@ -240,7 +240,14 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
   private readonly storageSecret: string;
 
   constructor(sqlitePath: string, storageSecret: string) {
-    const resolved = path.resolve(sqlitePath);
+    let resolved = path.resolve(sqlitePath);
+    try {
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        resolved = path.join(resolved, "runtime-state.db");
+      }
+    } catch {
+      // Best-effort normalization; sqlite open error is handled by caller.
+    }
     const dir = path.dirname(resolved);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     this.storageSecret = storageSecret;
@@ -565,9 +572,12 @@ export function getRuntimeStateStore(config?: ServerConfig): RuntimeStateStore {
     return runtimeStateStore;
   }
 
+  const envSqlitePath = process.env.TRADER_RUNTIME_STATE_SQLITE_PATH?.trim();
+  const envDataDir = process.env.TRADER_DATA_DIR?.trim();
   const sqlitePath = config?.runtimeStateSqlitePath
-    ?? process.env.TRADER_RUNTIME_STATE_SQLITE_PATH
-    ?? path.join(process.env.TRADER_DATA_DIR ?? ".data", "runtime-state.db");
+    ?? (envSqlitePath && envSqlitePath.length > 0
+      ? envSqlitePath
+      : path.join(envDataDir && envDataDir.length > 0 ? envDataDir : ".data", "runtime-state.db"));
   const storageSecret = config?.storePassphrase
     ?? process.env.TRADER_STORE_PASSPHRASE
     ?? process.env.TRADER_APP_PASSWORD

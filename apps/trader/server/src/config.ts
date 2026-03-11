@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { Network } from "../../shared/types.js";
 
@@ -71,6 +72,28 @@ function isLoopbackHost(host: string): boolean {
   return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
 }
 
+function resolveRuntimeStateSqlitePath(rawValue: string | undefined, dataDir: string): string {
+  const fallback = path.join(dataDir, "runtime-state.db");
+  const trimmed = rawValue?.trim();
+  if (!trimmed) return fallback;
+
+  const resolved = path.resolve(trimmed);
+  const resolvedDataDir = path.resolve(dataDir);
+  if (trimmed.endsWith("/") || trimmed.endsWith("\\") || resolved === resolvedDataDir) {
+    return path.join(resolved, "runtime-state.db");
+  }
+
+  try {
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      return path.join(resolved, "runtime-state.db");
+    }
+  } catch {
+    // Best-effort normalization; actual open errors are surfaced by sqlite init.
+  }
+
+  return resolved;
+}
+
 const MIN_APP_PASSWORD_LENGTH = 16;
 
 export function loadConfig(): ServerConfig {
@@ -109,8 +132,10 @@ export function loadConfig(): ServerConfig {
   const runtimeStateBackend = (process.env.TRADER_RUNTIME_STATE_BACKEND ?? "sqlite").trim().toLowerCase() === "memory"
     ? "memory"
     : "sqlite";
-  const runtimeStateSqlitePath = process.env.TRADER_RUNTIME_STATE_SQLITE_PATH
-    ?? path.join(dataDir, "runtime-state.db");
+  const runtimeStateSqlitePath = resolveRuntimeStateSqlitePath(
+    process.env.TRADER_RUNTIME_STATE_SQLITE_PATH,
+    dataDir,
+  );
   const passphrase = process.env.TRADER_STORE_PASSPHRASE ?? null;
   const appPassword = process.env.TRADER_APP_PASSWORD?.trim() ?? "";
   if (!appPassword) {

@@ -42,7 +42,9 @@ RUN find dist/ -name '*.map' -delete 2>/dev/null; true
 FROM node:20-alpine AS runner
 
 # Non-root user for defense in depth
-RUN addgroup -S trader && adduser -S trader -G trader
+RUN apk add --no-cache su-exec \
+  && addgroup -S trader \
+  && adduser -S trader -G trader
 
 WORKDIR /app
 
@@ -57,13 +59,17 @@ COPY --from=builder /app/apps/trader/package.json ./
 COPY --from=builder /app/apps/trader/node_modules/ node_modules/
 COPY --from=builder /app/apps/trader/server/dist/ server/dist/
 COPY --from=builder /app/apps/trader/dist/ dist/
+COPY apps/trader/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Volume mount point for persistent data (Railway Volume)
-RUN mkdir -p /data && chown trader:trader /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /data \
+  && chown trader:trader /data
 
 ENV NODE_ENV=production
 ENV TRADER_DATA_DIR=/data
+ENV TRADER_RUNTIME_STATE_SQLITE_PATH=/data/runtime-state.db
 EXPOSE 4400
 
-USER trader
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server/dist/server/src/index.js"]
