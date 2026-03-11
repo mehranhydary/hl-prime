@@ -18,8 +18,12 @@ interface HitState {
 function contentSecurityPolicy(insecure = false): string {
   // Keep styles inline-compatible for existing React style attrs.
   const styleSrc = "'self' 'unsafe-inline'";
-  const imgSrc = "'self' data: https://app.hyperliquid.xyz";
-  const connectSrc = insecure ? "'self' ws: wss:" : "'self'";
+  // Allow Cloudflare Web Analytics beacon script when enabled at the DNS layer.
+  const scriptSrc = "'self' https://static.cloudflareinsights.com";
+  const imgSrc = "'self' data: https://app.hyperliquid.xyz https://cloudflareinsights.com";
+  const connectSrc = insecure
+    ? "'self' ws: wss: https://cloudflareinsights.com"
+    : "'self' wss: https://cloudflareinsights.com";
 
   return [
     "default-src 'self'",
@@ -27,7 +31,7 @@ function contentSecurityPolicy(insecure = false): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "script-src 'self'",
+    `script-src ${scriptSrc}`,
     `style-src ${styleSrc}`,
     "font-src 'self'",
     `img-src ${imgSrc}`,

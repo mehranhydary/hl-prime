@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LandingPage } from "./pages/LandingPage";
 import { LandingPage2 } from "./pages/LandingPage2";
@@ -15,6 +15,8 @@ import { BottomNav } from "./components/BottomNav";
 import { NetworkProvider, useNetwork } from "./lib/network-context";
 import { WalletProvider, useWallet } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
+import { useAuthSession } from "./hooks/use-auth-session";
+import { setAuthNetwork } from "./lib/auth";
 
 function RequireAccess({ children }: { children: ReactElement }) {
   const access = useAccessGate();
@@ -28,7 +30,13 @@ function RequireAccess({ children }: { children: ReactElement }) {
 function RealtimeUpdates() {
   const { address } = useWallet();
   const { network } = useNetwork();
-  useRealtimeUpdates(address, network);
+  const auth = useAuthSession();
+
+  useEffect(() => {
+    setAuthNetwork(network);
+  }, [network]);
+
+  useRealtimeUpdates(address, network, auth.isAuthenticated);
   return null;
 }
 

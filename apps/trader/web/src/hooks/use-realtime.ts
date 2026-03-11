@@ -10,6 +10,7 @@ const RECONNECT_MAX_MS = 15_000;
 export function useRealtimeUpdates(
   address: `0x${string}` | null,
   network: string,
+  enabled = true,
 ) {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
@@ -19,7 +20,7 @@ export function useRealtimeUpdates(
   const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!address) return;
+    if (!address || !enabled) return;
 
     let disposed = false;
 
@@ -142,5 +143,5 @@ export function useRealtimeUpdates(
         wsRef.current = null;
       }
     };
-  }, [address, network, queryClient]);
+  }, [address, network, enabled, queryClient]);
 }

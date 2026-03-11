@@ -13,8 +13,10 @@ import {
   type SessionChallengeResponse,
   type SessionResponse,
 } from "@shared/auth";
+import type { Network } from "@shared/types";
 import { getAddress } from "viem";
 import { getAccessHeaders } from "./access-gate.js";
+import { ensureWalletChain } from "./wallet-client.js";
 
 const STORAGE_KEY = "hl-prime:auth-session:v1";
 const SESSION_AUTH_ENABLED = (import.meta.env.VITE_TRADER_AUTH_ENABLED ?? "true").toLowerCase() !== "false";
@@ -36,6 +38,7 @@ type AuthListener = (snapshot: AuthSnapshot) => void;
 let sessionExpiresAt = 0;
 let currentAddress: `0x${string}` | null = null;
 let authRequired = false;
+let authNetwork: Network = "mainnet";
 const listeners = new Set<AuthListener>();
 
 // ── localStorage helpers ───────────────────────────────────────────────
@@ -88,6 +91,10 @@ export function subscribeAuth(listener: AuthListener): () => void {
 
 export function getAuthSnapshot(): AuthSnapshot {
   return snapshot();
+}
+
+export function setAuthNetwork(network: Network): void {
+  authNetwork = network;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
@@ -165,6 +172,8 @@ export async function signIn(): Promise<boolean> {
     return false;
   }
   try {
+    await ensureWalletChain(authNetwork);
+
     const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
     if (typeof chainIdHex !== "string") throw new Error("Wallet returned invalid chainId");
     const chainId = parseInt(chainIdHex, 16);

@@ -15,6 +15,7 @@ import { randomBytes } from "node:crypto";
 import { verifyTypedData, getAddress } from "viem";
 import {
   AUTH_AUDIENCE,
+  AUTH_ALLOWED_CHAIN_IDS,
   AUTH_CHALLENGE_TTL_MS,
   isAuthChainId,
   AUTH_DOMAIN,
@@ -74,6 +75,7 @@ function authDomain(chainId: number): typeof AUTH_DOMAIN & { chainId: number } {
 }
 
 const SESSION_TOKEN_COOKIE = "trader_session_token";
+const SUPPORTED_CHAIN_IDS_LABEL = AUTH_ALLOWED_CHAIN_IDS.join(", ");
 
 /** @internal test helper */
 export function __createSessionTokenForTests(address: string, expiresAt = Date.now() + SESSION_TTL_MS): string {
@@ -119,7 +121,10 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
 
     const chainId = parseChainId(body.chainId);
     if (chainId === null || !isAuthChainId(chainId)) {
-      res.status(401).json({ error: "Unsupported chainId", code: "AUTH_FAILED" });
+      res.status(401).json({
+        error: `Unsupported chainId. Supported chainIds: ${SUPPORTED_CHAIN_IDS_LABEL}`,
+        code: "AUTH_FAILED",
+      });
       return;
     }
 
@@ -169,7 +174,10 @@ export function authRoutes(config: Pick<ServerConfig, "devInsecure">): Router {
 
     const chainId = parseChainId(body.chainId);
     if (chainId === null || !isAuthChainId(chainId)) {
-      res.status(401).json({ error: "Unsupported chainId", code: "AUTH_FAILED" });
+      res.status(401).json({
+        error: `Unsupported chainId. Supported chainIds: ${SUPPORTED_CHAIN_IDS_LABEL}`,
+        code: "AUTH_FAILED",
+      });
       return;
     }
 

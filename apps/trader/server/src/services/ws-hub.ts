@@ -14,6 +14,10 @@ const WS_PATH = "/api/ws";
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
 const MAX_CONNECTIONS_PER_IP = 5;
 
+function normalizeOrigin(origin: string): string {
+  return origin.replace(/\/+$/, "");
+}
+
 interface ClientState {
   ws: WebSocket;
   address: string;
@@ -85,7 +89,8 @@ export class WebSocketHub {
     if (this.config.devInsecure) return true;
     const origin = request.headers.origin;
     if (!origin) return false;
-    return this.config.allowedOrigins.some((allowed) => origin === allowed);
+    const normalizedOrigin = normalizeOrigin(origin);
+    return this.config.allowedOrigins.some((allowed) => normalizeOrigin(allowed) === normalizedOrigin);
   }
 
   private readSession(request: IncomingMessage): { address: string; expiresAt: number } | null {
