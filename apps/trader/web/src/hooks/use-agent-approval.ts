@@ -111,7 +111,16 @@ export function useAgentApproval() {
         }
       }
 
-      setState(prev => ({ ...prev, step: "complete", isProcessing: false }));
+      // If we have a pendingId, go to complete step. Otherwise, we're done (re-approval case)
+      if (state.pendingId) {
+        setState(prev => ({ ...prev, step: "complete", isProcessing: false }));
+      } else {
+        setState(prev => ({ ...prev, step: "done", isProcessing: false }));
+        // Invalidate queries immediately for re-approval case
+        queryClient.invalidateQueries({ queryKey: ["agent-status"] });
+        queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+        queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+      }
     } catch (err) {
       setState(prev => ({
         ...prev,
@@ -151,6 +160,18 @@ export function useAgentApproval() {
     });
   }
 
+  function skipToApprove(agentAddress: string, agentName: string, pendingId: string) {
+    setState({
+      step: "approve",
+      agentAddress,
+      agentName,
+      pendingId,
+      builderApproval: null,
+      error: "",
+      isProcessing: false,
+    });
+  }
+
   return {
     state,
     initAgent: () => {
@@ -160,6 +181,7 @@ export function useAgentApproval() {
     },
     approveAgent: handleApprove,
     completeSetup: () => completeMutation.mutate(),
+    skipToApprove,
     reset,
     isInitializing: initMutation.isPending,
     isCompleting: completeMutation.isPending,

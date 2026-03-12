@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useAgentApproval, type ApprovalStep } from "../hooks/use-agent-approval";
 import { useNetwork } from "../lib/network-context";
+import { useWallet } from "../hooks/use-wallet";
+import { useAgentStatus } from "../hooks/use-agent-status";
 
 interface AgentApprovalModalProps {
   isOpen: boolean;
@@ -13,15 +15,29 @@ const STEP_LABELS = ["Generate", "Approve", "Finalize", "Done"];
 
 export function AgentApprovalModal({ isOpen, onClose, onComplete }: AgentApprovalModalProps) {
   const { network } = useNetwork();
+  const { address } = useWallet();
+  const { data: agentStatus } = useAgentStatus(address, network);
   const {
     state,
     initAgent,
     approveAgent,
     completeSetup,
     reset,
+    skipToApprove,
     isInitializing,
     isCompleting,
   } = useAgentApproval();
+
+  // Skip to approve step if agent already exists
+  useEffect(() => {
+    if (isOpen && agentStatus?.configured && state.step === "init") {
+      skipToApprove(
+        agentStatus.agentAddress || "",
+        agentStatus.agentName || "Agent Wallet",
+        "" // No pending ID needed for re-approval
+      );
+    }
+  }, [isOpen, agentStatus, state.step, skipToApprove]);
 
   // Auto-close on completion
   useEffect(() => {
@@ -47,7 +63,9 @@ export function AgentApprovalModal({ isOpen, onClose, onComplete }: AgentApprova
       <div className="relative w-full max-w-md bg-surface-1 rounded-2xl p-6 mx-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-heading text-text-primary">Agent Re-Approval Required</h2>
+          <h2 className="text-xl font-heading text-text-primary">
+            {state.step === "init" ? "Agent Setup" : "Agent Re-Approval Required"}
+          </h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
@@ -60,11 +78,13 @@ export function AgentApprovalModal({ isOpen, onClose, onComplete }: AgentApprova
         </div>
 
         {/* Info Banner */}
-        <div className="bg-short/10 border border-short/20 p-4 mb-6 rounded-xl">
-          <p className="text-sm text-short leading-relaxed">
-            Your agent wallet is not approved on-chain. Please re-approve to continue trading.
-          </p>
-        </div>
+        {state.step !== "init" && (
+          <div className="bg-short/10 border border-short/20 p-4 mb-6 rounded-xl">
+            <p className="text-sm text-short leading-relaxed">
+              Your agent wallet is not approved on-chain. Please re-approve to continue trading.
+            </p>
+          </div>
+        )}
 
         {/* Progress Steps */}
         <div className="flex items-center gap-1 mb-6">
