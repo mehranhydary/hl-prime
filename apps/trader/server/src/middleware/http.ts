@@ -18,13 +18,40 @@ interface HitState {
 function contentSecurityPolicy(insecure = false): string {
   // Keep styles inline-compatible for existing React style attrs.
   const styleSrc = "'self' 'unsafe-inline'";
-  // Allow Cloudflare Web Analytics beacon script when enabled at the DNS layer.
-  const scriptSrc = "'self' https://static.cloudflareinsights.com";
-  const imgSrc = "'self' data: https://app.hyperliquid.xyz https://cloudflareinsights.com";
-  const hlApi = "https://api.hyperliquid.xyz https://api.hyperliquid-testnet.xyz";
-  const connectSrc = insecure
-    ? `'self' ws: wss: ${hlApi} https://cloudflareinsights.com`
-    : `'self' wss: ${hlApi} https://cloudflareinsights.com`;
+  // Privy uses Cloudflare challenges during auth flows, in addition to our
+  // existing Cloudflare Web Analytics beacon.
+  const scriptSrc = [
+    "'self'",
+    "https://static.cloudflareinsights.com",
+    "https://challenges.cloudflare.com",
+  ].join(" ");
+  const imgSrc = [
+    "'self'",
+    "data:",
+    "blob:",
+    "https://app.hyperliquid.xyz",
+    "https://cloudflareinsights.com",
+  ].join(" ");
+  const childSrc = [
+    "https://auth.privy.io",
+    "https://verify.walletconnect.com",
+    "https://verify.walletconnect.org",
+  ].join(" ");
+  const frameSrc = [
+    childSrc,
+    "https://challenges.cloudflare.com",
+  ].join(" ");
+  const connectSrc = [
+    "'self'",
+    insecure ? "ws:" : null,
+    "wss:",
+    "https://api.hyperliquid.xyz",
+    "https://api.hyperliquid-testnet.xyz",
+    "https://cloudflareinsights.com",
+    "https://auth.privy.io",
+    "https://explorer-api.walletconnect.com",
+    "https://*.rpc.privy.systems",
+  ].filter(Boolean).join(" ");
 
   return [
     "default-src 'self'",
@@ -36,7 +63,11 @@ function contentSecurityPolicy(insecure = false): string {
     `style-src ${styleSrc}`,
     "font-src 'self'",
     `img-src ${imgSrc}`,
+    `child-src ${childSrc}`,
+    `frame-src ${frameSrc}`,
     `connect-src ${connectSrc}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
   ].join("; ");
 }
 
