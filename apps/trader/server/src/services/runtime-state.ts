@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import type { ServerConfig } from "../config.js";
+import type { Network } from "../../../shared/types.js";
 
 export interface SessionState {
   token: string;
@@ -19,10 +20,21 @@ export interface AuthChallengeState {
 
 export interface PendingAgentState {
   id: string;
-  agentPrivateKey: `0x${string}`;
+  agentPrivateKey?: `0x${string}`;
   agentAddress: `0x${string}`;
   agentName: string;
   createdAt: number;
+  privyWalletId?: string;
+  ownerPrivyUserId?: string;
+  masterAddress?: `0x${string}`;
+  network?: Network;
+}
+
+export interface WSTicketState {
+  token: string;
+  address: string;
+  network: Network;
+  expiresAt: number;
 }
 
 export interface RuntimeStateStore {
@@ -42,10 +54,19 @@ export interface RuntimeStateStore {
 
   putPendingAgent(agent: PendingAgentState, ttlMs: number): void;
   getPendingAgent(id: string): PendingAgentState | null;
+  findPendingAgent(
+    masterAddress: `0x${string}`,
+    network: Network,
+    ownerPrivyUserId?: string,
+  ): PendingAgentState | null;
   /** Atomic get-and-delete: returns the pending agent and scrubs the key in one step. */
   takePendingAgent(id: string): PendingAgentState | null;
   deletePendingAgent(id: string): void;
   cleanupPendingAgents(now?: number): void;
+
+  putWSTicket(ticket: WSTicketState): void;
+  takeWSTicket(token: string, now?: number): WSTicketState | null;
+  cleanupWSTickets(now?: number): void;
 
   putQuote<T>(id: string, quote: T, ttlMs: number): void;
   getQuote<T>(id: string): T | null;
@@ -108,7 +129,31 @@ function tokenHash(token: string, secret: string): string {
 
 /** Best-effort: overwrite the key property so the plaintext reference is no longer reachable via the store. */
 function scrubAgentKey(agent: PendingAgentState): void {
-  (agent as { agentPrivateKey: string }).agentPrivateKey = "0x" + "0".repeat(64);
+  if (agent.agentPrivateKey) {
+    (agent as { agentPrivateKey: string }).agentPrivateKey = "0x" + "0".repeat(64);
+  }
+}
+
+function warnIfOrphanedPendingAgent(agent: PendingAgentState): void {
+  if (agent.privyWalletId && !agent.agentPrivateKey) {
+    console.warn(
+      `[runtime-state] Pending Privy agent expired without completion: walletId=${agent.privyWalletId} address=${agent.agentAddress}`,
+    );
+  }
+}
+
+function matchesPendingAgent(params: {
+  agent: PendingAgentState;
+  masterAddress: `0x${string}`;
+  network: Network;
+  ownerPrivyUserId?: string;
+}): boolean {
+  const { agent, masterAddress, network, ownerPrivyUserId } = params;
+  if (!agent.masterAddress || !agent.network) return false;
+  if (agent.masterAddress.toLowerCase() !== masterAddress.toLowerCase()) return false;
+  if (agent.network !== network) return false;
+  if (ownerPrivyUserId && agent.ownerPrivyUserId !== ownerPrivyUserId) return false;
+  return true;
 }
 
 class MemoryRuntimeStateStore implements RuntimeStateStore {
@@ -116,6 +161,7 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
   private accessGrants = new Map<string, number>();
   private authChallenges = new Map<string, { payload: AuthChallengeState; expiresAt: number }>();
   private pendingAgents = new Map<string, { payload: PendingAgentState; expiresAt: number }>();
+  private wsTickets = new Map<string, WSTicketState>();
   private quotes = new Map<string, { payload: unknown; expiresAt: number }>();
   private readonly secret: string;
 
@@ -191,6 +237,7 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
     const found = this.pendingAgents.get(id);
     if (!found) return null;
     if (found.expiresAt <= Date.now()) {
+      warnIfOrphanedPendingAgent(found.payload);
       scrubAgentKey(found.payload);
       this.pendingAgents.delete(id);
       return null;
@@ -198,11 +245,36 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
     return found.payload;
   }
 
+  findPendingAgent(
+    masterAddress: `0x${string}`,
+    network: Network,
+    ownerPrivyUserId?: string,
+  ): PendingAgentState | null {
+    let newest: PendingAgentState | null = null;
+    const now = Date.now();
+    for (const [id, found] of this.pendingAgents.entries()) {
+      if (found.expiresAt <= now) {
+        warnIfOrphanedPendingAgent(found.payload);
+        scrubAgentKey(found.payload);
+        this.pendingAgents.delete(id);
+        continue;
+      }
+      if (!matchesPendingAgent({ agent: found.payload, masterAddress, network, ownerPrivyUserId })) {
+        continue;
+      }
+      if (!newest || found.payload.createdAt > newest.createdAt) {
+        newest = found.payload;
+      }
+    }
+    return newest;
+  }
+
   takePendingAgent(id: string): PendingAgentState | null {
     const found = this.pendingAgents.get(id);
     if (!found) return null;
     this.pendingAgents.delete(id);
     if (found.expiresAt <= Date.now()) {
+      warnIfOrphanedPendingAgent(found.payload);
       scrubAgentKey(found.payload);
       return null;
     }
@@ -211,16 +283,38 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
 
   deletePendingAgent(id: string): void {
     const found = this.pendingAgents.get(id);
-    if (found) scrubAgentKey(found.payload);
+    if (found) {
+      warnIfOrphanedPendingAgent(found.payload);
+      scrubAgentKey(found.payload);
+    }
     this.pendingAgents.delete(id);
   }
 
   cleanupPendingAgents(now = Date.now()): void {
     for (const [id, value] of this.pendingAgents.entries()) {
       if (value.expiresAt <= now) {
+        warnIfOrphanedPendingAgent(value.payload);
         scrubAgentKey(value.payload);
         this.pendingAgents.delete(id);
       }
+    }
+  }
+
+  putWSTicket(ticket: WSTicketState): void {
+    this.wsTickets.set(ticket.token, ticket);
+  }
+
+  takeWSTicket(token: string, now = Date.now()): WSTicketState | null {
+    const found = this.wsTickets.get(token);
+    if (!found) return null;
+    this.wsTickets.delete(token);
+    if (found.expiresAt <= now) return null;
+    return found;
+  }
+
+  cleanupWSTickets(now = Date.now()): void {
+    for (const [token, ticket] of this.wsTickets.entries()) {
+      if (ticket.expiresAt <= now) this.wsTickets.delete(token);
     }
   }
 
@@ -265,6 +359,7 @@ class MemoryRuntimeStateStore implements RuntimeStateStore {
     this.accessGrants.clear();
     this.authChallenges.clear();
     this.pendingAgents.clear();
+    this.wsTickets.clear();
     this.quotes.clear();
   }
 }
@@ -306,6 +401,11 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
         payload TEXT NOT NULL,
         expires_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS ws_tickets (
+        token_hash TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS quotes (
         id TEXT PRIMARY KEY,
         payload TEXT NOT NULL,
@@ -315,6 +415,7 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
       CREATE INDEX IF NOT EXISTS idx_auth_challenges_expires_at ON auth_challenges(expires_at);
       CREATE INDEX IF NOT EXISTS idx_access_grants_expires_at ON access_grants(expires_at);
       CREATE INDEX IF NOT EXISTS idx_pending_agents_expires_at ON pending_agents(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_ws_tickets_expires_at ON ws_tickets(expires_at);
       CREATE INDEX IF NOT EXISTS idx_quotes_expires_at ON quotes(expires_at);
     `);
     this.migrateLegacySessionsSchema();
@@ -454,6 +555,35 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
     ) as PendingAgentState;
   }
 
+  findPendingAgent(
+    masterAddress: `0x${string}`,
+    network: Network,
+    ownerPrivyUserId?: string,
+  ): PendingAgentState | null {
+    const rows = this.db.prepare(`
+      SELECT payload, expires_at as expiresAt
+      FROM pending_agents
+      WHERE expires_at > ?
+    `).all(Date.now()) as Array<{ payload: string; expiresAt: number }>;
+
+    let newest: PendingAgentState | null = null;
+    for (const row of rows) {
+      let agent: PendingAgentState;
+      try {
+        agent = JSON.parse(
+          decryptStatePayload(row.payload, this.storageSecret),
+        ) as PendingAgentState;
+      } catch {
+        continue;
+      }
+      if (!matchesPendingAgent({ agent, masterAddress, network, ownerPrivyUserId })) continue;
+      if (!newest || agent.createdAt > newest.createdAt) {
+        newest = agent;
+      }
+    }
+    return newest;
+  }
+
   takePendingAgent(id: string): PendingAgentState | null {
     const tx = this.db.transaction((agentId: string, now: number): PendingAgentState | null => {
       const row = this.db.prepare(`
@@ -476,7 +606,57 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
   }
 
   cleanupPendingAgents(now = Date.now()): void {
+    const expired = this.db.prepare(`
+      SELECT payload
+      FROM pending_agents
+      WHERE expires_at <= ?
+    `).all(now) as Array<{ payload: string }>;
+    for (const row of expired) {
+      try {
+        const payload = JSON.parse(
+          decryptStatePayload(row.payload, this.storageSecret),
+        ) as PendingAgentState;
+        warnIfOrphanedPendingAgent(payload);
+      } catch {
+        // Ignore malformed rows during cleanup.
+      }
+    }
     this.db.prepare("DELETE FROM pending_agents WHERE expires_at <= ?").run(now);
+  }
+
+  putWSTicket(ticket: WSTicketState): void {
+    const payload = encryptStatePayload(JSON.stringify(ticket), this.storageSecret);
+    this.db.prepare(`
+      INSERT INTO ws_tickets(token_hash, payload, expires_at)
+      VALUES(@tokenHash, @payload, @expiresAt)
+      ON CONFLICT(token_hash) DO UPDATE SET payload=@payload, expires_at=@expiresAt
+    `).run({
+      tokenHash: tokenHash(ticket.token, this.storageSecret),
+      payload,
+      expiresAt: ticket.expiresAt,
+    });
+  }
+
+  takeWSTicket(token: string, now = Date.now()): WSTicketState | null {
+    const tx = this.db.transaction((rawToken: string, currentTime: number): WSTicketState | null => {
+      const tokenDigest = tokenHash(rawToken, this.storageSecret);
+      const row = this.db.prepare(`
+        SELECT payload, expires_at as expiresAt
+        FROM ws_tickets
+        WHERE token_hash = ?
+      `).get(tokenDigest) as { payload: string; expiresAt: number } | undefined;
+      if (!row) return null;
+      this.db.prepare("DELETE FROM ws_tickets WHERE token_hash = ?").run(tokenDigest);
+      if (row.expiresAt <= currentTime) return null;
+      return JSON.parse(
+        decryptStatePayload(row.payload, this.storageSecret),
+      ) as WSTicketState;
+    });
+    return tx(token, now);
+  }
+
+  cleanupWSTickets(now = Date.now()): void {
+    this.db.prepare("DELETE FROM ws_tickets WHERE expires_at <= ?").run(now);
   }
 
   putQuote<T>(id: string, quote: T, ttlMs: number): void {
@@ -538,6 +718,7 @@ class SqliteRuntimeStateStore implements RuntimeStateStore {
       DELETE FROM access_grants;
       DELETE FROM auth_challenges;
       DELETE FROM pending_agents;
+      DELETE FROM ws_tickets;
       DELETE FROM quotes;
     `);
   }

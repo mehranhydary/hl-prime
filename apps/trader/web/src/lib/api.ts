@@ -1,4 +1,5 @@
 import type {
+  AgentInitRequest,
   AgentInitResponse,
   AgentCompleteRequest,
   AgentCompleteResponse,
@@ -28,7 +29,6 @@ import {
   signIn,
 } from "./auth.js";
 import { clearAccessToken, getAccessHeaders } from "./access-gate.js";
-import { getCsrfHeaders } from "./csrf.js";
 
 const BASE = "/api";
 
@@ -80,8 +80,7 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
   }
 
   const accessHeaders = getAccessHeaders();
-  const authHeaders = getAuthHeaders();
-  const csrfHeaders = getCsrfHeaders();
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${BASE}${url}`, {
     ...options,
     credentials: "same-origin",
@@ -89,7 +88,6 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
       "Content-Type": "application/json",
       ...accessHeaders,
       ...authHeaders,
-      ...csrfHeaders,
       ...(options?.headers as Record<string, string> | undefined),
     },
   });
@@ -113,24 +111,16 @@ async function fetchJson<T>(url: string, options?: FetchJsonOptions): Promise<T>
       }
     }
   }
-  if (code === "CSRF_FAILED" && allowAuthRetry) {
-    // CSRF cookie lost (browser cleared it, expired, etc.) — re-sign-in sets a fresh one.
-    clearAuthSession();
-    const signedIn = await signIn();
-    if (signedIn) {
-      return fetchJson<T>(url, {
-        ...options,
-        retryAuth: false,
-      });
-    }
-  }
-
   throw new ApiError(error ?? `Request failed: ${res.status}`, code ?? "REQUEST_FAILED", res.status);
 }
 
 // Agent
-export const agentInit = () =>
-  fetchJson<AgentInitResponse>("/agent/init", { method: "POST", retryAuth: true });
+export const agentInit = (body: AgentInitRequest) =>
+  fetchJson<AgentInitResponse>("/agent/init", {
+    method: "POST",
+    body: JSON.stringify(body),
+    retryAuth: true,
+  });
 
 export const agentComplete = (body: AgentCompleteRequest) =>
   fetchJson<AgentCompleteResponse>("/agent/complete", {

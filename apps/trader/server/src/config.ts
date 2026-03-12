@@ -20,7 +20,7 @@ export interface ServerConfig {
   enableTimingLogs: boolean;
   /** Allowed CORS origins. Empty array = permissive (dev mode). */
   allowedOrigins: string[];
-  /** Enable EIP-712 session auth. Default: true. Set TRADER_AUTH_ENABLED=false to disable. */
+  /** Enable Privy bearer-token auth. Default: true. Set TRADER_AUTH_ENABLED=false to disable. */
   authEnabled: boolean;
   /** Explicit opt-in insecure local mode (permissive CORS and optional auth). */
   devInsecure: boolean;
@@ -36,10 +36,7 @@ export interface ServerConfig {
     appId: string | null;
     appSecret: string | null;
     authorizationKey: string | null;
-  };
-  aws: {
-    region: string | null;
-    kmsKeyId: string | null;
+    jwtVerificationKey: string | null;
   };
 }
 
@@ -235,6 +232,27 @@ export function loadConfig(): ServerConfig {
     );
   }
 
+  const privyAppId = process.env.TRADER_PRIVY_APP_ID ?? null;
+  const privyAppSecret = process.env.TRADER_PRIVY_APP_SECRET ?? null;
+  const privyAuthorizationKey = process.env.TRADER_PRIVY_AUTHORIZATION_KEY ?? null;
+  const privyJwtVerificationKey = process.env.TRADER_PRIVY_JWT_VERIFICATION_KEY ?? null;
+
+  if (authEnabled && (!privyAppId || !privyJwtVerificationKey)) {
+    throw new Error(
+      "Privy auth requires TRADER_PRIVY_APP_ID and TRADER_PRIVY_JWT_VERIFICATION_KEY.",
+    );
+  }
+  if (signerBackend === "privy" && (!privyAppId || !privyAppSecret)) {
+    throw new Error(
+      "TRADER_SIGNER_BACKEND=privy requires TRADER_PRIVY_APP_ID and TRADER_PRIVY_APP_SECRET.",
+    );
+  }
+  if (signerBackend === "privy" && !privyAuthorizationKey) {
+    throw new Error(
+      "TRADER_SIGNER_BACKEND=privy requires TRADER_PRIVY_AUTHORIZATION_KEY.",
+    );
+  }
+
   return {
     port: Number.isFinite(parsedPort) ? parsedPort : 4400,
     host,
@@ -259,13 +277,10 @@ export function loadConfig(): ServerConfig {
     signerBackend,
     signerLocalFallback,
     privy: {
-      appId: process.env.TRADER_PRIVY_APP_ID ?? null,
-      appSecret: process.env.TRADER_PRIVY_APP_SECRET ?? null,
-      authorizationKey: process.env.TRADER_PRIVY_AUTHORIZATION_KEY ?? null,
-    },
-    aws: {
-      region: process.env.TRADER_AWS_REGION ?? null,
-      kmsKeyId: process.env.TRADER_AWS_KMS_KEY_ID ?? null,
+      appId: privyAppId,
+      appSecret: privyAppSecret,
+      authorizationKey: privyAuthorizationKey,
+      jwtVerificationKey: privyJwtVerificationKey,
     },
   };
 }

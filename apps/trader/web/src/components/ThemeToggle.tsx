@@ -64,7 +64,7 @@ export function ThemeToggle() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="bg-surface-2 hover:bg-surface-3 border border-border h-8 px-2 flex items-center gap-1.5 transition-colors"
+        className="app-control bg-surface-2 hover:bg-surface-3 border border-border px-2 gap-1.5 transition-colors"
         title={`Theme: ${current.label}`}
       >
         <span className="text-text-muted">{current.icon}</span>

@@ -2,10 +2,13 @@ import { Router } from "express";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { v4 as uuid } from "uuid";
 import type { ServerConfig } from "../config.js";
+import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { PendingAgentStore } from "../services/agent-store.js";
 import { HLClientService } from "../services/hl-client.js";
+import { createPrivyEthereumWallet } from "../services/privy.js";
 import { parseNetwork, requireAddress, requireString, ValidationError } from "../utils/validation.js";
 import type {
+  AgentInitRequest,
   AgentInitResponse,
   AgentCompleteRequest,
   AgentCompleteResponse,
@@ -28,12 +31,62 @@ export function agentRoutes(config: ServerConfig): Router {
   const service = getClientService(config);
   const agentStore = service.getAgentStore();
 
+  function buildInitResponse(params: {
+    pendingAgentId: string;
+    agentAddress: `0x${string}`;
+    agentName: string;
+  }): AgentInitResponse {
+    return {
+      pendingAgentId: params.pendingAgentId,
+      agentAddress: params.agentAddress,
+      agentName: params.agentName,
+      builderApproval: {
+        builder: config.defaultBuilderAddress,
+        feeBps: config.defaultBuilderFeeBps,
+        maxFeeRate: `${(config.defaultBuilderFeeBps * 0.01).toFixed(2)}%`,
+      },
+    };
+  }
+
   // POST /api/agent/init
   // Generate a pending agent keypair and return the address for frontend approval
-  router.post("/init", async (_req, res) => {
+  router.post("/init", async (req, res) => {
     try {
-      const agentPrivateKey = generatePrivateKey();
-      const agentAccount = privateKeyToAccount(agentPrivateKey);
+      const body = req.body as AgentInitRequest;
+      const masterAddress = requireAddress(body.masterAddress, "masterAddress");
+      const network = parseNetwork(body.network, config.defaultNetwork);
+      const ownerPrivyUserId = (req as AuthenticatedRequest).auth?.privyUserId;
+
+      if (await agentStore.exists(masterAddress, network)) {
+        res.status(409).json({
+          error: "Agent already configured for this wallet and network",
+          code: "AGENT_ALREADY_CONFIGURED",
+        });
+        return;
+      }
+
+      const existingPending = pendingStore.findForMaster(masterAddress, network, ownerPrivyUserId);
+      if (existingPending) {
+        res.json(buildInitResponse({
+          pendingAgentId: existingPending.id,
+          agentAddress: existingPending.agentAddress,
+          agentName: existingPending.agentName,
+        }));
+        return;
+      }
+
+      let agentPrivateKey: `0x${string}` | undefined;
+      let agentAddress: `0x${string}`;
+      let privyWalletId: string | undefined;
+
+      if (config.signerBackend === "privy") {
+        const wallet = await createPrivyEthereumWallet(config);
+        agentAddress = wallet.address.toLowerCase() as `0x${string}`;
+        privyWalletId = wallet.id;
+      } else {
+        agentPrivateKey = generatePrivateKey();
+        agentAddress = privateKeyToAccount(agentPrivateKey).address;
+      }
 
       const expiryMs = Date.now() + config.agentExpiryDays * 24 * 60 * 60 * 1000;
       const agentName = `hlprime valid_until ${expiryMs}`;
@@ -42,24 +95,28 @@ export function agentRoutes(config: ServerConfig): Router {
       pendingStore.add({
         id: pendingId,
         agentPrivateKey,
-        agentAddress: agentAccount.address,
+        agentAddress,
         agentName,
         createdAt: Date.now(),
+        privyWalletId,
+        ownerPrivyUserId,
+        masterAddress: masterAddress.toLowerCase() as `0x${string}`,
+        network,
       });
 
-      const response: AgentInitResponse = {
+      res.json(buildInitResponse({
         pendingAgentId: pendingId,
-        agentAddress: agentAccount.address,
+        agentAddress,
         agentName,
-        builderApproval: {
-          builder: config.defaultBuilderAddress,
-          feeBps: config.defaultBuilderFeeBps,
-          maxFeeRate: `${(config.defaultBuilderFeeBps * 0.01).toFixed(2)}%`,
-        },
-      };
-
-      res.json(response);
+      }));
     } catch (err) {
+      if (err instanceof ValidationError) {
+        res.status(400).json({
+          error: err.message,
+          code: "BAD_REQUEST",
+        });
+        return;
+      }
       console.error("[agent/init]", err instanceof Error ? err.message : String(err));
       res.status(500).json({
         error: "Failed to initialize agent",
@@ -76,9 +133,42 @@ export function agentRoutes(config: ServerConfig): Router {
       const masterAddress = requireAddress(body.masterAddress, "masterAddress");
       const network = parseNetwork(body.network, config.defaultNetwork);
       const pendingAgentId = requireString(body.pendingAgentId, "pendingAgentId");
-
-      const pending = pendingStore.take(pendingAgentId);
+      const ownerPrivyUserId = (req as AuthenticatedRequest).auth?.privyUserId;
+      const pending = pendingStore.get(pendingAgentId);
       if (!pending) {
+        res.status(404).json({
+          error: "Pending agent not found or expired",
+          code: "PENDING_NOT_FOUND",
+        });
+        return;
+      }
+      if (!pending.masterAddress || !pending.network) {
+        res.status(409).json({
+          error: "Pending agent is missing ownership metadata. Start setup again.",
+          code: "PENDING_INVALID",
+        });
+        return;
+      }
+      if (
+        pending.masterAddress.toLowerCase() !== masterAddress.toLowerCase()
+        || pending.network !== network
+      ) {
+        res.status(409).json({
+          error: "Pending agent does not match the requested wallet or network",
+          code: "PENDING_MISMATCH",
+        });
+        return;
+      }
+      if (ownerPrivyUserId && pending.ownerPrivyUserId !== ownerPrivyUserId) {
+        res.status(403).json({
+          error: "Pending agent does not belong to the authenticated user",
+          code: "FORBIDDEN",
+        });
+        return;
+      }
+
+      const takenPending = pendingStore.take(pendingAgentId);
+      if (!takenPending) {
         res.status(404).json({
           error: "Pending agent not found or expired",
           code: "PENDING_NOT_FOUND",
@@ -89,12 +179,13 @@ export function agentRoutes(config: ServerConfig): Router {
       // Persist the agent key
       await agentStore.save({
         backend: config.signerBackend,
-        agentPrivateKey: pending.agentPrivateKey,
-        agentAddress: pending.agentAddress,
+        agentPrivateKey: takenPending.agentPrivateKey,
+        agentAddress: takenPending.agentAddress,
         masterAddress,
         network,
-        agentName: pending.agentName,
+        agentName: takenPending.agentName,
         createdAt: Date.now(),
+        privyWalletId: takenPending.privyWalletId,
       });
 
       // Evict any cached HP client so the next trade creates a fresh one
@@ -103,7 +194,7 @@ export function agentRoutes(config: ServerConfig): Router {
 
       const response: AgentCompleteResponse = {
         success: true,
-        agentAddress: pending.agentAddress,
+        agentAddress: takenPending.agentAddress,
       };
 
       res.json(response);

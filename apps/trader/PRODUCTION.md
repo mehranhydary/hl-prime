@@ -4,6 +4,8 @@ Last verified against repo code on 2026-03-10.
 
 This runbook is for the `apps/trader` service (single deployment serving both API and web SPA).
 
+Privy is now part of the required auth path. The SPA must be built with `VITE_TRADER_PRIVY_APP_ID`, and the API verifies Privy bearer tokens with `TRADER_PRIVY_APP_ID` plus `TRADER_PRIVY_JWT_VERIFICATION_KEY`.
+
 ## 1. Railway service settings
 
 - Source repo: this monorepo
@@ -22,6 +24,14 @@ The Docker image already sets:
 
 Set these in Railway `Variables`:
 
+- `VITE_TRADER_PRIVY_APP_ID`
+  - Required at Docker build time and runtime.
+  - Must match your Privy app.
+- `TRADER_PRIVY_APP_ID`
+  - Required when `TRADER_AUTH_ENABLED=true` (default).
+- `TRADER_PRIVY_JWT_VERIFICATION_KEY`
+  - Required when `TRADER_AUTH_ENABLED=true` (default).
+  - Used by the server to verify Privy access tokens.
 - `TRADER_APP_PASSWORD`
   - Required, non-empty, minimum 16 characters.
   - Used by `/unlock` and protected API routes.
@@ -32,7 +42,7 @@ Set these in Railway `Variables`:
   - Required in production.
   - Comma-separated full origins, for example:
   - `https://<service>.up.railway.app,https://app.yourdomain.com`
-  - The app uses secure HttpOnly cookies with `SameSite=Strict`, so browser clients should be served from the same site as the API.
+  - The app uses secure HttpOnly cookies for the `/unlock` gate, so browser clients should be served from the same site as the API.
 
 You usually do not need to set `TRADER_PORT`; Railway provides `PORT` and the app reads it automatically.
 
@@ -49,15 +59,12 @@ You usually do not need to set `TRADER_PORT`; Railway provides `PORT` and the ap
 
 ## 4. Optional signer/backend variables
 
-Use only if you are integrating Privy signer metadata:
+Use these when you want Privy-managed server-side agent signing:
 
 - `TRADER_SIGNER_BACKEND=privy`
 - `TRADER_SIGNER_LOCAL_FALLBACK=true|false`
-- `TRADER_PRIVY_APP_ID`
 - `TRADER_PRIVY_APP_SECRET`
 - `TRADER_PRIVY_AUTHORIZATION_KEY`
-- `TRADER_AWS_REGION`
-- `TRADER_AWS_KMS_KEY_ID`
 
 If `TRADER_SIGNER_BACKEND=local` (default), keep `TRADER_STORE_PASSPHRASE` set.
 
@@ -80,7 +87,7 @@ In Railway/production runtime:
 5. Trigger deploy.
 6. Watch startup logs for:
    - `Trader API listening on http://0.0.0.0:<port>`
-   - `EIP-712 session auth enabled`
+   - `Privy bearer-token auth enabled`
 
 ## 7. Post-deploy smoke tests
 
@@ -99,6 +106,7 @@ Expected:
 Then open:
 
 - `https://<host>/unlock` and verify unlock with `TRADER_APP_PASSWORD`.
+- Complete a Privy login and confirm authenticated API calls succeed.
 
 ## 8. Data persisted in `/data`
 
@@ -107,7 +115,7 @@ With the volume mounted, these persist across restarts:
 - Encrypted signer files (`*.enc`) in `TRADER_DATA_DIR`
 - `runtime-state.db` (sqlite runtime/session/access state)
 - `trade-history.jsonl`
-- `signers.json` (Privy metadata mode)
+- `signers.json` (Privy signer metadata)
 
 If the volume is removed, signer/runtime history data is lost.
 
@@ -117,6 +125,8 @@ If the volume is removed, signer/runtime history data is lost.
   - Set a stronger password.
 - `TRADER_STORE_PASSPHRASE must be set...`
   - Set `TRADER_STORE_PASSPHRASE` (min 8 chars).
+- `Privy auth requires TRADER_PRIVY_APP_ID and TRADER_PRIVY_JWT_VERIFICATION_KEY`
+  - Set both auth env vars and rebuild if `VITE_TRADER_PRIVY_APP_ID` was missing.
 - `TRADER_ALLOWED_ORIGINS must be set...`
   - Add valid `https://...` origins.
 - `TRADER_HOST=127.0.0.1 is not allowed in production runtime`

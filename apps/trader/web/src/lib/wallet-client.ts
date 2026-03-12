@@ -1,5 +1,7 @@
 import * as hl from "@nktkas/hyperliquid";
+import type { ConnectedWallet, EIP1193Provider } from "@privy-io/react-auth";
 import type { Network } from "@shared/types";
+import { getActiveWallet } from "./active-wallet.js";
 
 const CHAIN_CONFIG = {
   mainnet: {
@@ -16,10 +18,6 @@ const CHAIN_CONFIG = {
   },
 } as const;
 
-function configFor(network: Network) {
-  return CHAIN_CONFIG[network];
-}
-
 type JsonRpcTypedDataParams = {
   domain: Record<string, unknown>;
   types: Record<string, unknown>;
@@ -27,29 +25,22 @@ type JsonRpcTypedDataParams = {
   message: Record<string, unknown>;
 };
 
-interface InjectedWalletAdapter {
+interface ConnectedWalletAdapter {
   signTypedData: (params: JsonRpcTypedDataParams, options?: unknown) => Promise<`0x${string}`>;
   getAddresses: () => Promise<`0x${string}`[]>;
   getChainId: () => Promise<number>;
 }
 
-function normalizeAddress(address: string): string {
-  return address.toLowerCase();
+function configFor(network: Network) {
+  return CHAIN_CONFIG[network];
+}
+
+function normalizeAddress(address: string): `0x${string}` {
+  return address.toLowerCase() as `0x${string}`;
 }
 
 function hexChainId(value: number): `0x${string}` {
   return `0x${value.toString(16)}`;
-}
-
-async function readActiveChainId(): Promise<number> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-  const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
-  if (typeof chainIdHex !== "string") {
-    throw new Error("Wallet returned an invalid chainId.");
-  }
-  return parseInt(chainIdHex, 16);
 }
 
 function parseDomainChainId(domain: Record<string, unknown> | undefined): number | null {
@@ -58,80 +49,65 @@ function parseDomainChainId(domain: Record<string, unknown> | undefined): number
   if (typeof chainId === "number" && Number.isFinite(chainId)) return chainId;
   if (typeof chainId === "bigint") return Number(chainId);
   if (typeof chainId === "string" && chainId.length > 0) {
-    if (chainId.startsWith("0x") || chainId.startsWith("0X")) {
-      const value = parseInt(chainId, 16);
-      return Number.isFinite(value) ? value : null;
-    }
-    const value = parseInt(chainId, 10);
+    const value = chainId.startsWith("0x") || chainId.startsWith("0X")
+      ? parseInt(chainId, 16)
+      : parseInt(chainId, 10);
     return Number.isFinite(value) ? value : null;
   }
   return null;
 }
 
-async function switchWalletChain(chainId: number): Promise<void> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-  await window.ethereum.request({
-    method: "wallet_switchEthereumChain",
-    params: [{ chainId: hexChainId(chainId) }],
-  });
-}
-
-async function getInjectedAddresses(requestAccess = false): Promise<`0x${string}`[]> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
+async function resolveActiveWallet(expectedAddress?: `0x${string}`): Promise<ConnectedWallet> {
+  const wallet = getActiveWallet();
+  if (!wallet) {
+    throw new Error("No Privy wallet selected. Connect a wallet and try again.");
   }
 
-  const method = requestAccess ? "eth_requestAccounts" : "eth_accounts";
-  const result = await window.ethereum.request({ method });
-  if (!Array.isArray(result)) return [];
-  return result.filter((value): value is `0x${string}` => typeof value === "string");
-}
-
-async function resolveActiveInjectedAddress(
-  expectedAddress: `0x${string}`,
-): Promise<`0x${string}`> {
-  let addresses = await getInjectedAddresses(false);
-  if (addresses.length === 0) {
-    addresses = await getInjectedAddresses(true);
+  const isConnected = await wallet.isConnected();
+  if (!isConnected) {
+    throw new Error("Selected wallet is no longer connected. Reconnect and try again.");
   }
 
-  if (addresses.length === 0) {
-    throw new Error("No connected wallet account found. Reconnect your wallet and try again.");
-  }
-
-  const activeAddress = addresses[0];
-  if (normalizeAddress(activeAddress) !== normalizeAddress(expectedAddress)) {
+  if (expectedAddress && normalizeAddress(wallet.address) !== normalizeAddress(expectedAddress)) {
     throw new Error(
-      `Connected wallet account changed to ${activeAddress}. Reconnect the app to keep signing in sync.`,
+      `Connected wallet account changed to ${wallet.address}. Reconnect the app to keep signing in sync.`,
     );
   }
 
-  return activeAddress;
+  return wallet;
 }
 
-function createInjectedWalletAdapter(
-  expectedAddress: `0x${string}`,
-  _network: Network,
-): InjectedWalletAdapter {
-  const ethereum = window.ethereum;
-  if (!ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
+async function getWalletProvider(wallet: ConnectedWallet): Promise<EIP1193Provider> {
+  return wallet.getEthereumProvider();
+}
 
+async function readActiveChainId(wallet: ConnectedWallet): Promise<number> {
+  const provider = await getWalletProvider(wallet);
+  const chainIdHex = await provider.request({ method: "eth_chainId" });
+  if (typeof chainIdHex !== "string") {
+    throw new Error("Wallet returned an invalid chainId.");
+  }
+  return parseInt(chainIdHex, 16);
+}
+
+async function switchWalletChain(wallet: ConnectedWallet, chainId: number): Promise<void> {
+  await wallet.switchChain(chainId);
+}
+
+function createWalletAdapter(expectedAddress: `0x${string}`): ConnectedWalletAdapter {
   return {
     async getAddresses() {
-      const activeAddress = await resolveActiveInjectedAddress(expectedAddress);
-      return [activeAddress];
+      const wallet = await resolveActiveWallet(expectedAddress);
+      return [normalizeAddress(wallet.address)];
     },
     async getChainId() {
-      return readActiveChainId();
+      const wallet = await resolveActiveWallet(expectedAddress);
+      return readActiveChainId(wallet);
     },
-    async signTypedData(params, _options) {
-      const activeAddress = await resolveActiveInjectedAddress(expectedAddress);
+    async signTypedData(params) {
+      const wallet = await resolveActiveWallet(expectedAddress);
       const targetDomainChainId = parseDomainChainId(params.domain);
-      const initialChainId = await readActiveChainId();
+      const initialChainId = await readActiveChainId(wallet);
 
       let switched = false;
       if (
@@ -139,30 +115,23 @@ function createInjectedWalletAdapter(
         Number.isFinite(targetDomainChainId) &&
         initialChainId !== targetDomainChainId
       ) {
-        try {
-          await switchWalletChain(targetDomainChainId);
-          switched = true;
-        } catch (error) {
-          const code = (error as { code?: number }).code;
-          if (code === 4902) {
-            throw new Error(
-              `Wallet is missing chainId ${targetDomainChainId} required for Hyperliquid typed-data signing. Add this chain in wallet settings, then retry.`,
-            );
-          }
-          throw error;
-        }
+        await switchWalletChain(wallet, targetDomainChainId);
+        switched = true;
       }
 
       try {
-        const typedData = JSON.stringify({
-          domain: params.domain,
-          types: params.types,
-          primaryType: params.primaryType,
-          message: params.message,
-        });
-        const signature = await ethereum.request({
+        const provider = await getWalletProvider(wallet);
+        const signature = await provider.request({
           method: "eth_signTypedData_v4",
-          params: [activeAddress, typedData],
+          params: [
+            normalizeAddress(wallet.address),
+            JSON.stringify({
+              domain: params.domain,
+              types: params.types,
+              primaryType: params.primaryType,
+              message: params.message,
+            }),
+          ],
         });
         if (typeof signature !== "string") {
           throw new Error("Wallet returned an invalid typed-data signature.");
@@ -171,7 +140,7 @@ function createInjectedWalletAdapter(
       } finally {
         if (switched) {
           try {
-            await switchWalletChain(initialChainId);
+            await switchWalletChain(wallet, initialChainId);
           } catch {
             // Ignore restoration failures to avoid masking the primary signing result.
           }
@@ -210,25 +179,20 @@ export function getErrorChainMessage(error: unknown): string {
   return "Unknown error";
 }
 
-export async function ensureWalletChain(network: Network): Promise<void> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-
+export async function ensureWalletChain(network: Network, expectedAddress?: `0x${string}`): Promise<void> {
+  const wallet = await resolveActiveWallet(expectedAddress);
   const chainCfg = configFor(network);
 
   try {
-    await window.ethereum.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: chainCfg.chainId }],
-    });
-  } catch (err) {
-    const code = (err as { code?: number }).code;
+    await switchWalletChain(wallet, parseInt(chainCfg.chainId, 16));
+  } catch (error) {
+    const provider = await getWalletProvider(wallet);
+    const code = (error as { code?: number }).code;
     if (code !== 4902) {
-      throw err;
+      throw error;
     }
 
-    await window.ethereum.request({
+    await provider.request({
       method: "wallet_addEthereumChain",
       params: [{
         chainId: chainCfg.chainId,
@@ -249,13 +213,9 @@ export async function createExchangeClientFromInjected(
   address: `0x${string}`,
   network: Network,
 ): Promise<hl.ExchangeClient> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-
-  await ensureWalletChain(network);
-  await resolveActiveInjectedAddress(address);
-  const wallet = createInjectedWalletAdapter(address, network);
+  await ensureWalletChain(network, address);
+  await resolveActiveWallet(address);
+  const wallet = createWalletAdapter(address);
 
   const transport = new hl.HttpTransport({
     isTestnet: network === "testnet",
@@ -263,6 +223,8 @@ export async function createExchangeClientFromInjected(
 
   return new hl.ExchangeClient({
     transport,
-    wallet: wallet as any,
+    wallet: wallet as never,
   });
 }
+
+export const createExchangeClientFromWallet = createExchangeClientFromInjected;

@@ -67,6 +67,9 @@ class PrivySignerStore implements SignerStore {
 
   async save(record: StoredSignerRecord): Promise<void> {
     await this.ensureLoaded();
+    if (!record.privyWalletId) {
+      throw new Error("Privy signer records must include privyWalletId");
+    }
     const key = signerKey(record.masterAddress, record.network);
     this.byKey.set(key, {
       backend: "privy",

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BootstrapResponse } from "@shared/types";
-import type { WSServerMessage } from "@shared/ws-types";
+import type { WSServerMessage, WSTicketResponse } from "@shared/ws-types";
+import { getAuthHeaders } from "../lib/auth";
 
 const THROTTLE_MS = 500;
 const RECONNECT_BASE_MS = 1_000;
@@ -92,35 +93,62 @@ export function useRealtimeUpdates(
     function connect() {
       if (disposed) return;
 
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const url = `${protocol}//${window.location.host}/api/ws?address=${address}&network=${network}`;
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
+      void (async () => {
+        try {
+          const authHeaders = await getAuthHeaders();
+          const ticketRes = await fetch("/api/auth/ws-ticket", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeaders,
+            },
+            body: JSON.stringify({ masterAddress: address, network }),
+          });
+          if (!ticketRes.ok) {
+            throw new Error(`WS ticket request failed: ${ticketRes.status}`);
+          }
 
-      ws.onmessage = handleMessage;
+          const ticket = await ticketRes.json() as WSTicketResponse;
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          const url = `${protocol}//${window.location.host}/api/ws?address=${address}&network=${network}&ticket=${ticket.token}`;
+          const ws = new WebSocket(url);
+          wsRef.current = ws;
 
-      ws.onopen = () => {
-        reconnectAttempt.current = 0;
-      };
+          ws.onmessage = handleMessage;
 
-      ws.onclose = (event) => {
-        wsRef.current = null;
-        if (disposed) return;
+          ws.onopen = () => {
+            reconnectAttempt.current = 0;
+          };
 
-        // Don't reconnect on intentional close (1000) or auth failure (1008)
-        if (event.code === 1000 || event.code === 1008) return;
+          ws.onclose = (event) => {
+            wsRef.current = null;
+            if (disposed) return;
 
-        const delay = Math.min(
-          RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt.current),
-          RECONNECT_MAX_MS,
-        );
-        reconnectAttempt.current++;
-        reconnectTimer.current = setTimeout(connect, delay);
-      };
+            // Don't reconnect on intentional close (1000) or auth failure (1008)
+            if (event.code === 1000 || event.code === 1008) return;
 
-      ws.onerror = () => {
-        // onclose will fire after onerror, which handles reconnection
-      };
+            const delay = Math.min(
+              RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt.current),
+              RECONNECT_MAX_MS,
+            );
+            reconnectAttempt.current++;
+            reconnectTimer.current = setTimeout(connect, delay);
+          };
+
+          ws.onerror = () => {
+            // onclose will fire after onerror, which handles reconnection
+          };
+        } catch {
+          if (disposed) return;
+          const delay = Math.min(
+            RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt.current),
+            RECONNECT_MAX_MS,
+          );
+          reconnectAttempt.current++;
+          reconnectTimer.current = setTimeout(connect, delay);
+        }
+      })();
     }
 
     connect();

@@ -659,7 +659,7 @@ export function PortfolioPage() {
           <button
             onClick={connect}
             disabled={isConnecting}
-            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
@@ -679,7 +679,7 @@ export function PortfolioPage() {
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>

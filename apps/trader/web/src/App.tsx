@@ -1,4 +1,6 @@
-import { useEffect, type ReactElement } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { LandingPage } from "./pages/LandingPage";
@@ -17,7 +19,7 @@ import { NetworkProvider, useNetwork } from "./lib/network-context";
 import { WalletProvider, useWallet } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
 import { useAuthSession } from "./hooks/use-auth-session";
-import { setAuthNetwork } from "./lib/auth";
+import { setAuthNetwork, syncPrivyAuth } from "./lib/auth";
 
 function RequireAccess({ children }: { children: ReactElement }) {
   const access = useAccessGate();
@@ -38,6 +40,52 @@ function RealtimeUpdates() {
   }, [network]);
 
   useRealtimeUpdates(address, network, auth.isAuthenticated);
+  return null;
+}
+
+function AuthSync() {
+  const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
+
+  useEffect(() => {
+    syncPrivyAuth({
+      ready,
+      authenticated,
+      login,
+      logout,
+      getAccessToken,
+    });
+  }, [authenticated, getAccessToken, login, logout, ready]);
+
+  return null;
+}
+
+const AUTHENTICATED_QUERY_KEYS = new Set([
+  "agent-status",
+  "bootstrap",
+  "portfolio",
+  "referral",
+  "trade-history",
+  "candles",
+]);
+
+function AuthCacheSync() {
+  const auth = useAuthSession();
+  const queryClient = useQueryClient();
+  const previousAuthenticated = useRef(auth.isAuthenticated);
+
+  useEffect(() => {
+    if (previousAuthenticated.current && !auth.isAuthenticated) {
+      queryClient.removeQueries({
+        predicate: (query) => {
+          const rootKey = query.queryKey[0];
+          return typeof rootKey === "string" && AUTHENTICATED_QUERY_KEYS.has(rootKey);
+        },
+      });
+    }
+
+    previousAuthenticated.current = auth.isAuthenticated;
+  }, [auth.isAuthenticated, queryClient]);
+
   return null;
 }
 
@@ -89,6 +137,8 @@ export function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
+        <AuthSync />
+        <AuthCacheSync />
         <NetworkProvider>
           <AppRoutes />
           <Toaster

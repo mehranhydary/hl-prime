@@ -15,6 +15,11 @@ export interface AgentInitResponse {
   };
 }
 
+export interface AgentInitRequest {
+  masterAddress: `0x${string}`;
+  network: Network;
+}
+
 export interface AgentCompleteRequest {
   masterAddress: `0x${string}`;
   network: Network;
@@ -301,11 +306,13 @@ export interface ExecuteLegAdjustment {
 
 export interface ExecuteRequest {
   quoteId: string;
+  masterAddress: `0x${string}`;
   legAdjustments?: ExecuteLegAdjustment[];
 }
 
 export interface ExecutePreviewRequest {
   quoteId: string;
+  masterAddress: `0x${string}`;
   legAdjustments?: ExecuteLegAdjustment[];
 }
 

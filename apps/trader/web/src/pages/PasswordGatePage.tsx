@@ -75,7 +75,7 @@ export function PasswordGatePage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-accent hover:bg-accent/90 disabled:opacity-60 px-4 py-2 text-sm font-medium text-surface-0 transition-colors"
+            className="app-button-md w-full bg-accent hover:bg-accent/90 disabled:opacity-60 px-4 text-sm font-medium text-surface-0 transition-colors"
           >
             {isSubmitting ? "Unlocking..." : "Unlock App"}
           </button>

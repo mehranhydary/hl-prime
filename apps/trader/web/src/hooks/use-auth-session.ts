@@ -3,7 +3,7 @@ import { getAuthSnapshot, subscribeAuth, signIn, signOut, type AuthSnapshot } fr
 
 interface AuthSessionState extends AuthSnapshot {
   signIn: () => Promise<boolean>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 export function useAuthSession(): AuthSessionState {
@@ -17,4 +17,3 @@ export function useAuthSession(): AuthSessionState {
     signOut,
   };
 }
-

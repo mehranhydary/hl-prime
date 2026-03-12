@@ -5,7 +5,6 @@ import path from "node:path";
 import type { ServerConfig } from "./config.js";
 import { authRoutes, sessionAuth } from "./middleware/auth.js";
 import { memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
-import { csrfProtection } from "./middleware/csrf.js";
 import { passwordGateRoutes, requireAppAccess, requireWebAppAccess } from "./middleware/password-gate.js";
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
@@ -41,22 +40,22 @@ export function createApp(config: ServerConfig) {
   }));
   app.use(express.json({ limit: "1mb" }));
 
-  app.use("/api/auth/session", memoryRateLimit({
-    keyPrefix: "auth_session",
+  app.use("/api/auth/ws-ticket", memoryRateLimit({
+    keyPrefix: "auth_ws_ticket",
     windowMs: 60_000,
-    max: 10,
-    backoff: true,
-  }));
-  app.use("/api/auth/challenge", memoryRateLimit({
-    keyPrefix: "auth_challenge",
-    windowMs: 60_000,
-    max: 10,
+    max: 30,
     backoff: true,
   }));
   app.use("/api/access/verify", memoryRateLimit({
     keyPrefix: "access_verify",
     windowMs: 5 * 60_000,
     max: 5,
+    backoff: true,
+  }));
+  app.use("/api/agent/init", memoryRateLimit({
+    keyPrefix: "agent_init",
+    windowMs: 60_000,
+    max: 10,
     backoff: true,
   }));
   app.use("/api/agent", memoryRateLimit({
@@ -76,9 +75,8 @@ export function createApp(config: ServerConfig) {
   app.use("/api/auth", authRoutes(config));
 
   if (config.authEnabled) {
-    app.use("/api", sessionAuth());
-    app.use("/api", csrfProtection({ disabled: config.devInsecure }));
-    console.log("EIP-712 session auth + CSRF protection enabled");
+    app.use("/api", sessionAuth(config));
+    console.log("Privy bearer-token auth enabled");
   }
 
   app.use("/api/agent", agentRoutes(config));

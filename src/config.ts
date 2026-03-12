@@ -1,3 +1,5 @@
+import type { AbstractWallet } from "@nktkas/hyperliquid/signing";
+
 /** Builder fee configuration. */
 export interface BuilderConfig {
   /** Builder address (0x-prefixed). */
@@ -16,8 +18,14 @@ export interface HyperliquidPrimeConfig {
   /** Hex private key. Required for trading, optional for read-only. */
   privateKey?: `0x${string}`;
 
+  /** Abstract wallet/signer. Use this for remote or embedded signing backends. */
+  wallet?: AbstractWallet;
+
   /** User's wallet address. Derived from privateKey if not provided. */
   walletAddress?: string;
+
+  /** Explicit signer address for abstract wallets when it cannot be derived eagerly. */
+  signerAddress?: string;
 
   /** Use testnet. Default: false. */
   testnet?: boolean;

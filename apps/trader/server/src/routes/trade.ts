@@ -51,6 +51,7 @@ interface CachedQuote {
   masterAddress: string;
   network: Network;
   createdAt: number;
+  ownerPrivyUserId?: string;
 }
 
 const tradeHistoryStores = new Map<string, TradeHistoryStore>();
@@ -72,6 +73,13 @@ class BadRequestError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BadRequestError";
+  }
+}
+
+class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ForbiddenError";
   }
 }
 
@@ -185,6 +193,27 @@ async function validatePriceFreshness(
 
 function normalizeAddress(value: string): `0x${string}` {
   return value.toLowerCase() as `0x${string}`;
+}
+
+function sameAddress(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function assertCachedQuoteAccess(params: {
+  cached: CachedQuote;
+  auth: AuthenticatedRequest;
+  requestedMasterAddress: `0x${string}`;
+}): void {
+  const { cached, auth, requestedMasterAddress } = params;
+  if (!sameAddress(cached.masterAddress, requestedMasterAddress)) {
+    throw new ForbiddenError("Quote owner does not match requested masterAddress");
+  }
+  if (auth.auth?.masterAddress && !sameAddress(cached.masterAddress, auth.auth.masterAddress)) {
+    throw new ForbiddenError("Quote owner does not match authenticated user");
+  }
+  if (cached.ownerPrivyUserId && auth.auth?.privyUserId && cached.ownerPrivyUserId !== auth.auth.privyUserId) {
+    throw new ForbiddenError("Quote owner does not match authenticated user");
+  }
 }
 
 function extractPositions(state: any): any[] {
@@ -1074,6 +1103,7 @@ export function tradeRoutes(config: ServerConfig): Router {
       const side = body.side;
       const asset = requireString(body.asset, "asset");
       const masterAddress = requireAddress(body.masterAddress, "masterAddress");
+      const ownerPrivyUserId = (req as AuthenticatedRequest).auth?.privyUserId;
       const amountMode = body.amountMode ?? "base";
       const amount = parsePositiveNumber(body.amount, "amount");
       const leverage = parseLeverage(body.leverage);
@@ -1164,6 +1194,7 @@ export function tradeRoutes(config: ServerConfig): Router {
           masterAddress,
           network: resolvedNetwork,
           createdAt: Date.now(),
+          ownerPrivyUserId,
         }, QUOTE_TTL_MS);
       }
 
@@ -1245,6 +1276,7 @@ export function tradeRoutes(config: ServerConfig): Router {
       cleanQuoteCache();
       const body = req.body as ExecutePreviewRequest;
       quoteId = body.quoteId;
+      const requestedMasterAddress = requireAddress(body.masterAddress, "masterAddress");
 
       if (!quoteId) {
         timing.end({
@@ -1269,17 +1301,11 @@ export function tradeRoutes(config: ServerConfig): Router {
         res.status(404).json({ error: "Quote expired or not found", code: "QUOTE_NOT_FOUND" });
         return;
       }
-      const authAddress = (req as AuthenticatedRequest).auth?.address;
-      if (authAddress && cached.masterAddress.toLowerCase() !== authAddress.toLowerCase()) {
-        timing.end({
-          status: "forbidden",
-          route: "execute_preview",
-          code: "FORBIDDEN",
-          quoteId,
-        });
-        res.status(403).json({ error: "Quote owner does not match authenticated session", code: "FORBIDDEN" });
-        return;
-      }
+      assertCachedQuoteAccess({
+        cached,
+        auth: req as AuthenticatedRequest,
+        requestedMasterAddress,
+      });
 
       if (Date.now() - cached.createdAt > QUOTE_TTL_MS) {
         runtimeState().deleteQuote(quoteId);
@@ -1355,8 +1381,10 @@ export function tradeRoutes(config: ServerConfig): Router {
       });
       res.json(response);
     } catch (err) {
-      const baseCode = err instanceof BadRequestError ? "BAD_REQUEST" : "EXECUTE_PREVIEW_FAILED";
-      const baseStatus = err instanceof BadRequestError ? 400 : 500;
+      const isBadRequest = err instanceof BadRequestError || err instanceof ValidationError;
+      const isForbidden = err instanceof ForbiddenError;
+      const baseCode = isBadRequest ? "BAD_REQUEST" : isForbidden ? "FORBIDDEN" : "EXECUTE_PREVIEW_FAILED";
+      const baseStatus = isBadRequest ? 400 : isForbidden ? 403 : 500;
       const code = toTradeErrorCode(err, baseCode);
       const status = toTradeErrorStatus(err, baseStatus);
       timing.end({
@@ -1368,7 +1396,9 @@ export function tradeRoutes(config: ServerConfig): Router {
         user: shortAddress(cached?.masterAddress),
       });
       res.status(status).json({
-        error: status === 400 ? errorMessage(err) : toTradeErrorMessage(err, "Execute preview failed."),
+        error: status === 400 || status === 403
+          ? errorMessage(err)
+          : toTradeErrorMessage(err, "Execute preview failed."),
         code,
       });
     }
@@ -1382,10 +1412,12 @@ export function tradeRoutes(config: ServerConfig): Router {
     let executionSplitPlan: SplitExecutionPlan | undefined;
     let executionRouteSummary: RouteSummary | undefined;
     let manualAdjusted = false;
+    let quoteTaken = false;
     const clickedAt = Date.now();
     try {
       const body = req.body as ExecuteRequest;
       quoteId = body.quoteId;
+      const requestedMasterAddress = requireAddress(body.masterAddress, "masterAddress");
 
       if (!quoteId) {
         timing.end({
@@ -1398,9 +1430,7 @@ export function tradeRoutes(config: ServerConfig): Router {
       }
       timing.mark("validate");
 
-      // Atomic take: retrieves and deletes the quote in one step to prevent
-      // double-execution from concurrent requests with the same quoteId.
-      cached = runtimeState().takeQuote<CachedQuote>(quoteId) ?? undefined;
+      cached = runtimeState().getQuote<CachedQuote>(quoteId) ?? undefined;
       timing.mark("lookupQuote");
       if (!cached) {
         timing.end({
@@ -1412,19 +1442,14 @@ export function tradeRoutes(config: ServerConfig): Router {
         res.status(404).json({ error: "Quote expired or not found", code: "QUOTE_NOT_FOUND" });
         return;
       }
-      const authAddress = (req as AuthenticatedRequest).auth?.address;
-      if (authAddress && cached.masterAddress.toLowerCase() !== authAddress.toLowerCase()) {
-        timing.end({
-          status: "forbidden",
-          route: "execute",
-          code: "FORBIDDEN",
-          quoteId,
-        });
-        res.status(403).json({ error: "Quote owner does not match authenticated session", code: "FORBIDDEN" });
-        return;
-      }
+      assertCachedQuoteAccess({
+        cached,
+        auth: req as AuthenticatedRequest,
+        requestedMasterAddress,
+      });
 
       if (Date.now() - cached.createdAt > QUOTE_TTL_MS) {
+        runtimeState().deleteQuote(quoteId);
         const service = getClientService(config);
         const signer = await resolveSigner(service, cached.masterAddress, cached.network);
         timing.mark("resolveSigner");
@@ -1460,6 +1485,21 @@ export function tradeRoutes(config: ServerConfig): Router {
           quoteId,
         });
         res.status(410).json({ error: "Quote expired", code: "QUOTE_EXPIRED" });
+        return;
+      }
+
+      // Atomic take after ownership validation: prevents double execution while
+      // avoiding an ownership check that can be abused to consume another user's quote.
+      cached = runtimeState().takeQuote<CachedQuote>(quoteId) ?? undefined;
+      quoteTaken = true;
+      if (!cached) {
+        timing.end({
+          status: "conflict",
+          route: "execute",
+          code: "QUOTE_UNAVAILABLE",
+          quoteId,
+        });
+        res.status(409).json({ error: "Quote is no longer available", code: "QUOTE_UNAVAILABLE" });
         return;
       }
 
@@ -1531,8 +1571,9 @@ export function tradeRoutes(config: ServerConfig): Router {
       });
       res.json(result);
     } catch (err) {
-      const isBadRequest = err instanceof BadRequestError;
-      if (cached && !isBadRequest) {
+      const isBadRequest = err instanceof BadRequestError || err instanceof ValidationError;
+      const isForbidden = err instanceof ForbiddenError;
+      if (cached && quoteTaken && !isBadRequest && !isForbidden) {
         try {
           const service = getClientService(config);
           const signer = await resolveSigner(service, cached.masterAddress, cached.network);
@@ -1563,11 +1604,11 @@ export function tradeRoutes(config: ServerConfig): Router {
           // Indexing failure should not mask execute failure response.
         }
       }
-      if (quoteId && !isBadRequest) {
+      if (quoteId && quoteTaken && !isBadRequest && !isForbidden) {
         runtimeState().deleteQuote(quoteId);
       }
-      const baseCode = isBadRequest ? "BAD_REQUEST" : "EXECUTE_FAILED";
-      const baseStatus = isBadRequest ? 400 : 500;
+      const baseCode = isBadRequest ? "BAD_REQUEST" : isForbidden ? "FORBIDDEN" : "EXECUTE_FAILED";
+      const baseStatus = isBadRequest ? 400 : isForbidden ? 403 : 500;
       const code = toTradeErrorCode(err, baseCode);
       const status = toTradeErrorStatus(err, baseStatus);
       timing.end({
@@ -1582,7 +1623,9 @@ export function tradeRoutes(config: ServerConfig): Router {
         manual: manualAdjusted,
       });
       res.status(status).json({
-        error: status === 400 ? errorMessage(err) : toTradeErrorMessage(err, "Trade execution failed."),
+        error: status === 400 || status === 403
+          ? errorMessage(err)
+          : toTradeErrorMessage(err, "Trade execution failed."),
         code,
       });
     }

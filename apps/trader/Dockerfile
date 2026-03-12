@@ -24,10 +24,13 @@ WORKDIR /app/apps/trader
 RUN npm ci
 
 # 4) Copy trader source and build (server + web)
+ARG VITE_TRADER_PRIVY_APP_ID
+ENV VITE_TRADER_PRIVY_APP_ID=${VITE_TRADER_PRIVY_APP_ID}
 COPY apps/trader/server/ server/
 COPY apps/trader/web/ web/
 COPY apps/trader/shared/ shared/
 COPY apps/trader/vite.config.ts apps/trader/tsconfig.json ./
+RUN test -n "$VITE_TRADER_PRIVY_APP_ID"
 RUN npm run build
 
 # 5) Prune to production-only dependencies

@@ -1,5 +1,5 @@
 /**
- * Browser-side referral operations via injected wallet (MetaMask).
+ * Browser-side referral operations via the active connected wallet.
  * These require master wallet signing — not the agent key.
  */
 import type { Network } from "@shared/types";
@@ -37,7 +37,7 @@ function mapSetReferrerError(error: unknown): string {
   return message;
 }
 
-/** Create a referral code (1-20 chars). Triggers MetaMask signing. */
+/** Create a referral code (1-20 chars). Triggers wallet signing. */
 export async function createReferralCode(
   code: string,
   address: `0x${string}`,
@@ -56,7 +56,7 @@ export async function createReferralCode(
   }
 }
 
-/** Enter someone else's referral code. Triggers MetaMask signing. */
+/** Enter someone else's referral code. Triggers wallet signing. */
 export async function enterReferralCode(
   code: string,
   address: `0x${string}`,
@@ -75,7 +75,7 @@ export async function enterReferralCode(
   }
 }
 
-/** Claim earned referral rewards. Triggers MetaMask signing. */
+/** Claim earned referral rewards. Triggers wallet signing. */
 export async function claimReferralRewards(
   address: `0x${string}`,
   network: Network,

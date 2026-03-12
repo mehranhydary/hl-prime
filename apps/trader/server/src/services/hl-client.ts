@@ -4,6 +4,7 @@ import type { ServerConfig } from "../config.js";
 import type { AgentStore } from "./agent-store.js";
 import type { StoredSignerRecord, SignerStore } from "./signer-store.js";
 import { createSignerStore } from "./signer-store.js";
+import { createPrivyViemAccount } from "./privy.js";
 
 interface ClientKey {
   masterAddress: string;
@@ -20,6 +21,10 @@ interface ManagedClient {
   network: Network;
   connectedAt: number;
 }
+
+type ExecutableSigner =
+  | (StoredSignerRecord & { mode: "local"; agentPrivateKey: `0x${string}` })
+  | (StoredSignerRecord & { mode: "privy"; privyWalletId: string });
 
 function normalizeAddress(value: string): `0x${string}` {
   return value.toLowerCase() as `0x${string}`;
@@ -163,8 +168,16 @@ export class HLClientService {
     const executable = await this.resolveExecutableSigner(masterAddress, network, stored);
 
     const hp = new HyperliquidPrime({
-      privateKey: executable.agentPrivateKey,
       walletAddress: executable.masterAddress,
+      ...(executable.mode === "local"
+        ? { privateKey: executable.agentPrivateKey }
+        : {
+          wallet: createPrivyViemAccount(this.config, {
+            walletId: executable.privyWalletId,
+            address: executable.agentAddress,
+          }),
+          signerAddress: executable.agentAddress,
+        }),
       testnet: network === "testnet",
       logLevel: "warn",
     });
@@ -184,9 +197,21 @@ export class HLClientService {
     masterAddress: string,
     network: Network,
     stored: StoredSignerRecord,
-  ): Promise<StoredSignerRecord & { agentPrivateKey: `0x${string}` }> {
+  ): Promise<ExecutableSigner> {
     if (stored.agentPrivateKey) {
-      return stored as StoredSignerRecord & { agentPrivateKey: `0x${string}` };
+      return {
+        ...stored,
+        mode: "local",
+        agentPrivateKey: stored.agentPrivateKey,
+      };
+    }
+
+    if (stored.privyWalletId && this.config.signerBackend === "privy") {
+      return {
+        ...stored,
+        mode: "privy",
+        privyWalletId: stored.privyWalletId,
+      };
     }
 
     if (this.config.signerBackend === "privy" && this.config.signerLocalFallback && this.localSignerStore) {
@@ -195,8 +220,10 @@ export class HLClientService {
         return {
           ...stored,
           ...local,
+          mode: "local",
           backend: "local",
-        } as StoredSignerRecord & { agentPrivateKey: `0x${string}` };
+          agentPrivateKey: local.agentPrivateKey,
+        };
       }
       throw new Error(
         "Privy signer metadata exists, but no local fallback key is available. " +
@@ -205,8 +232,7 @@ export class HLClientService {
     }
 
     throw new Error(
-      "Privy signer backend is configured without executable local fallback. " +
-      "Set TRADER_SIGNER_LOCAL_FALLBACK=true during migration or complete direct Privy signing integration.",
+      "Signer metadata is missing executable key material and Privy wallet metadata.",
     );
   }
 

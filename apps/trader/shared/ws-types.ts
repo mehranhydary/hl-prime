@@ -40,4 +40,12 @@ export type WSClientMessage = never;
 export interface WSConnectParams {
   address: `0x${string}`;
   network: Network;
+  ticket?: string;
+}
+
+export interface WSTicketResponse {
+  token: string;
+  expiresAt: number;
+  address: `0x${string}`;
+  network: Network;
 }

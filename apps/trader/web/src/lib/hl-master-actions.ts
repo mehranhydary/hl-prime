@@ -700,10 +700,6 @@ export async function runMasterPreTradeActions(params: {
   routeSummary?: RouteSummary;
   collateralPreview?: CollateralPreview;
 }): Promise<void> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-
   const exchange = await createExchangeClientFromInjected(
     params.address,
     params.network,

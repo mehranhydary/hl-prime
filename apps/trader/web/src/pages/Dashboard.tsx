@@ -30,7 +30,7 @@ export function Dashboard() {
           <button
             onClick={connect}
             disabled={isConnecting}
-            className="bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 disabled:opacity-50 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
@@ -50,7 +50,7 @@ export function Dashboard() {
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -125,7 +125,7 @@ export function Dashboard() {
           </div>
           <button
             onClick={() => setShowDeposit(true)}
-            className="bg-accent/10 hover:bg-accent/20 border border-accent/30 px-3 py-1.5 text-xs font-medium text-accent transition-colors"
+            className="app-control bg-accent/10 hover:bg-accent/20 border border-accent/30 px-3 text-xs font-medium text-accent transition-colors"
           >
             Deposit
           </button>

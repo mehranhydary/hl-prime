@@ -51,7 +51,7 @@ export function SetupPage() {
   });
 
   async function handleApprove() {
-    if (!window.ethereum || !address || !agentAddress) return;
+    if (!address || !agentAddress) return;
     setError("");
 
     try {
@@ -128,7 +128,7 @@ export function SetupPage() {
           <p className="text-text-muted text-sm">Connect your wallet to set up agent delegation.</p>
           <button
             onClick={connect}
-            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             Connect Wallet
           </button>
@@ -147,7 +147,7 @@ export function SetupPage() {
           </p>
           <button
             onClick={() => { void auth.signIn(); }}
-            className="bg-accent hover:bg-accent/90 px-6 py-2.5 text-sm font-semibold text-surface-0 transition-colors"
+            className="app-button-md bg-accent hover:bg-accent/90 px-6 text-sm font-semibold text-surface-0 transition-colors"
           >
             Sign In
           </button>
@@ -202,12 +202,15 @@ export function SetupPage() {
       {step === "init" && (
         <div className="space-y-4">
           <p className="text-sm text-text-secondary leading-relaxed">
-            Generate a new agent wallet keypair. The private key will be stored encrypted on the server.
+            Generate a new Privy-managed agent wallet. The app stores only wallet metadata on the server.
           </p>
           <button
-            onClick={() => initMutation.mutate()}
+            onClick={() => initMutation.mutate({
+              masterAddress: address!,
+              network,
+            })}
             disabled={initMutation.isPending}
-            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_#50e3b515]"
+            className="app-button-lg w-full bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_#50e3b515]"
           >
             {initMutation.isPending ? "Generating..." : "Generate Agent Wallet"}
           </button>
@@ -235,7 +238,7 @@ export function SetupPage() {
           </p>
           <button
             onClick={handleApprove}
-            className="w-full py-3 bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_20px_#50e3b515]"
+            className="app-button-lg w-full bg-accent hover:bg-accent/90 text-sm font-semibold text-surface-0 transition-all shadow-[0_0_20px_#50e3b515]"
           >
             Approve Agent
           </button>
@@ -250,7 +253,7 @@ export function SetupPage() {
           <button
             onClick={() => completeMutation.mutate()}
             disabled={completeMutation.isPending}
-            className="w-full py-3 bg-long hover:bg-long/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_rgba(34,197,94,0.15)]"
+            className="app-button-lg w-full bg-long hover:bg-long/90 text-sm font-semibold text-surface-0 disabled:opacity-50 transition-all shadow-[0_0_20px_rgba(34,197,94,0.15)]"
           >
             {completeMutation.isPending ? "Completing..." : "Complete Setup"}
           </button>

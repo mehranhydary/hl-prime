@@ -43,24 +43,31 @@ export class HyperliquidPrime {
   private connected = false;
 
   constructor(config: HyperliquidPrimeConfig) {
+    if (config.privateKey && config.wallet) {
+      throw new HyperliquidPrimeError("Provide either privateKey or wallet, not both.");
+    }
+
     this._config = config;
     this.logger = createLogger({
       level: config.logLevel ?? "info",
       pretty: config.prettyLogs ?? false,
     });
 
-    // Derive wallet address if private key is provided
+    // Derive wallet address if private key is provided. Abstract wallets must pass
+    // walletAddress or signerAddress explicitly because construction is synchronous.
     if (config.privateKey) {
       this.walletAddress =
         config.walletAddress ??
         privateKeyToAccount(config.privateKey).address;
     } else {
-      this.walletAddress = config.walletAddress;
+      this.walletAddress = config.walletAddress ?? config.signerAddress;
     }
 
     this.provider = new NktkasProvider({
       privateKey: config.privateKey,
+      wallet: config.wallet,
       walletAddress: this.walletAddress as `0x${string}` | undefined,
+      signerAddress: config.signerAddress as `0x${string}` | undefined,
       testnet: config.testnet ?? false,
     });
 

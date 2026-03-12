@@ -113,10 +113,14 @@ export class AgentStore {
 // Pending agent store (in-memory, short-lived)
 interface PendingAgent {
   id: string;
-  agentPrivateKey: `0x${string}`;
+  agentPrivateKey?: `0x${string}`;
   agentAddress: `0x${string}`;
   agentName: string;
   createdAt: number;
+  privyWalletId?: string;
+  ownerPrivyUserId?: string;
+  masterAddress?: `0x${string}`;
+  network?: Network;
 }
 
 export class PendingAgentStore {
@@ -138,6 +142,16 @@ export class PendingAgentStore {
     const store = getRuntimeStateStore();
     store.cleanupPendingAgents();
     return store.getPendingAgent(id) ?? undefined;
+  }
+
+  findForMaster(
+    masterAddress: `0x${string}`,
+    network: Network,
+    ownerPrivyUserId?: string,
+  ): PendingAgent | undefined {
+    const store = getRuntimeStateStore();
+    store.cleanupPendingAgents();
+    return store.findPendingAgent(masterAddress, network, ownerPrivyUserId) ?? undefined;
   }
 
   /** Atomic get-and-delete. Preferred over get()+remove() to minimize key exposure window. */

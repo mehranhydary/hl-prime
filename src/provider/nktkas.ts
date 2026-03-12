@@ -1,6 +1,7 @@
 import * as hl from "@nktkas/hyperliquid";
 import { createRequire } from "node:module";
 import { privateKeyToAccount } from "viem/accounts";
+import { getWalletAddress, type AbstractWallet } from "@nktkas/hyperliquid/signing";
 import type { HLProvider } from "./provider.js";
 import { NoWalletError } from "../utils/errors.js";
 import {
@@ -55,7 +56,9 @@ import type {
 
 export interface ProviderConfig {
   privateKey?: `0x${string}`;
+  wallet?: AbstractWallet;
   walletAddress?: `0x${string}`;
+  signerAddress?: `0x${string}`;
   vaultAddress?: `0x${string}`;
   testnet?: boolean;
   l2BookCacheTtlMs?: number;
@@ -109,6 +112,10 @@ export class NktkasProvider implements HLProvider {
   private clearinghouseCache = new Map<string, TimedCache<ClearinghouseState>>();
 
   constructor(config: ProviderConfig) {
+    if (config.privateKey && config.wallet) {
+      throw new Error("ProviderConfig cannot include both privateKey and wallet.");
+    }
+
     const nodeWebSocket = resolveNodeWebSocket();
     this.httpTransport = new hl.HttpTransport({
       isTestnet: config.testnet ?? false,
@@ -124,13 +131,20 @@ export class NktkasProvider implements HLProvider {
     this.subs = new hl.SubscriptionClient({ transport: this.wsTransport });
     this.l2BookCacheTtlMs = config.l2BookCacheTtlMs ?? DEFAULT_L2_BOOK_CACHE_TTL_MS;
     this.spotMetaCacheTtlMs = config.spotMetaCacheTtlMs ?? DEFAULT_SPOT_META_CACHE_TTL_MS;
-    this.signerAddress = config.privateKey
-      ? privateKeyToAccount(config.privateKey).address as `0x${string}`
-      : null;
+    const wallet = config.privateKey
+      ? privateKeyToAccount(config.privateKey)
+      : config.wallet ?? null;
+    this.signerAddress = config.signerAddress
+      ?? (config.privateKey
+        ? privateKeyToAccount(config.privateKey).address as `0x${string}`
+        : null);
 
-    if (config.privateKey) {
-      const wallet = privateKeyToAccount(config.privateKey);
-      const signerAddress = wallet.address.toLowerCase() as `0x${string}`;
+    if (wallet) {
+      const signerAddress =
+        (config.signerAddress?.toLowerCase() as `0x${string}` | undefined)
+        ?? (config.privateKey
+          ? privateKeyToAccount(config.privateKey).address.toLowerCase() as `0x${string}`
+          : undefined);
       // Only use explicit vaultAddress for vault/sub-account routing.
       // walletAddress identifies the logical user for reads/position lookups, but
       // forcing it into defaultVaultAddress can cause "Vault not registered" errors
@@ -146,6 +160,15 @@ export class NktkasProvider implements HLProvider {
         ...(defaultVaultAddress ? { defaultVaultAddress } : {}),
       });
     }
+  }
+
+  static async resolveSignerAddress(config: Pick<ProviderConfig, "privateKey" | "wallet" | "signerAddress">): Promise<`0x${string}` | null> {
+    if (config.signerAddress) return config.signerAddress;
+    if (config.privateKey) {
+      return privateKeyToAccount(config.privateKey).address as `0x${string}`;
+    }
+    if (!config.wallet) return null;
+    return await getWalletAddress(config.wallet);
   }
 
   getSignerAddress(): `0x${string}` | null {

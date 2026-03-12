@@ -158,7 +158,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
   //   1. Updates the collateral preview shown to the user
   //   2. Refreshes the server-side quote TTL so it doesn't expire while adjusting
   useEffect(() => {
-    if (!activeQuote || !legAdjustmentsKey) {
+    if (!activeQuote || !address || !legAdjustmentsKey) {
       setAdjustedPreview(null);
       return;
     }
@@ -167,6 +167,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       try {
         const preview = await tradeExecutePreview({
           quoteId: activeQuote.quoteId,
+          masterAddress: address,
           legAdjustments: latestLegAdjustments.current,
         });
         setAdjustedPreview(preview);
@@ -177,7 +178,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [activeQuote?.quoteId, legAdjustmentsKey]);
+  }, [activeQuote?.quoteId, address, legAdjustmentsKey]);
 
   function toggleLeg(index: number) {
     setLegOverrides((prev) => {
@@ -270,7 +271,10 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       return;
     }
 
-    const executeBody: ExecuteRequest = { quoteId: activeQuote.quoteId };
+    const executeBody: ExecuteRequest = {
+      quoteId: activeQuote.quoteId,
+      masterAddress: address,
+    };
     let executionRouteSummary = activeQuote.routeSummary;
     let executionCollateralPreview = activeQuote.collateralPreview;
 
@@ -278,6 +282,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       if (hasManualLegAdjustments && legAdjustments.length > 0) {
         const preview = await tradeExecutePreview({
           quoteId: activeQuote.quoteId,
+          masterAddress: address,
           legAdjustments,
         });
         executionRouteSummary = preview.routeSummary;
@@ -803,7 +808,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
           <span>Agent setup is required to place orders from this app.</span>
           <button
             onClick={() => navigate("/setup")}
-            className="text-accent hover:text-accent/80 font-medium whitespace-nowrap"
+            className="app-control text-accent hover:text-accent/80 font-medium whitespace-nowrap px-2"
           >
             Open setup
           </button>
@@ -815,7 +820,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
         <button
           onClick={handleExecute}
           disabled={isLoading || !activeQuote || !address}
-          className={`w-full py-3 font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
+          className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
             isBuy
               ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
               : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"
@@ -836,7 +841,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
         <button
           onClick={handleQuickTrade}
           disabled={isLoading || !amount || !address || !agentConfigured}
-          className={`w-full py-3 font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
+          className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
             isBuy
               ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
               : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"

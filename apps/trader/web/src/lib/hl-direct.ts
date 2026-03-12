@@ -1,23 +1,19 @@
 /**
- * Browser-side direct execution via injected wallet (MetaMask).
+ * Browser-side direct execution via the active connected wallet.
  * Used when no agent wallet is configured — the user signs orders directly.
  */
 import type { DirectExecutionLeg, TradeResult, Network } from "@shared/types";
 import { createExchangeClientFromInjected, getErrorChainMessage } from "./wallet-client";
 
 /**
- * Execute trade legs directly using the injected wallet (MetaMask).
- * Each order triggers a MetaMask signing popup.
+ * Execute trade legs directly using the active connected wallet.
+ * Each order triggers a wallet signing prompt.
  */
 export async function executeDirectly(
   legs: DirectExecutionLeg[],
   address: `0x${string}`,
   network: Network,
 ): Promise<TradeResult> {
-  if (!window.ethereum) {
-    throw new Error("No wallet provider found. Install MetaMask or similar.");
-  }
-
   if (legs.length === 0) {
     throw new Error("No execution legs provided");
   }

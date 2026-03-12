@@ -10,7 +10,6 @@ import { parseCookieHeader } from "../utils/cookies.js";
 import { isValidAppAccessToken } from "../middleware/password-gate.js";
 import { getRuntimeStateStore } from "./runtime-state.js";
 
-const SESSION_TOKEN_COOKIE = "trader_session_token";
 const APP_ACCESS_TOKEN_COOKIE = "trader_access_token";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const WS_PATH = "/api/ws";
@@ -34,6 +33,14 @@ interface NetworkState {
   allMidsSub: ISubscription | null;
   /** clearinghouseState subscription per user address (lowercased). */
   userSubs: Map<string, ISubscription>;
+}
+
+interface AuthorizedUpgradeRequest extends IncomingMessage {
+  wsTicket?: {
+    address: string;
+    network: Network;
+    expiresAt: number;
+  };
 }
 
 type ReconnectOptions = NonNullable<WebSocketTransportOptions["reconnect"]>;
@@ -101,22 +108,7 @@ export class WebSocketHub {
     return this.config.allowedOrigins.some((allowed) => normalizeOrigin(allowed) === normalizedOrigin);
   }
 
-  private readSession(request: IncomingMessage): { address: string; expiresAt: number } | null {
-    const cookies = parseCookieHeader(request.headers.cookie);
-    const token = cookies[SESSION_TOKEN_COOKIE];
-    if (!token) return null;
-
-    const session = getRuntimeStateStore().getSession(token);
-    if (!session || session.expiresAt <= Date.now()) return null;
-    return {
-      address: session.address,
-      expiresAt: session.expiresAt,
-    };
-  }
-
-  private validateAuth(request: IncomingMessage, requestedAddress: string | null = null): boolean {
-    if (!this.config.authEnabled) return true;
-
+  private validateAuth(request: AuthorizedUpgradeRequest, requestedAddress: string | null = null): boolean {
     // Enforce the same password-gate check that HTTP routes use via requireAppAccess.
     const cookies = parseCookieHeader(request.headers.cookie);
     const accessToken = cookies[APP_ACCESS_TOKEN_COOKIE];
@@ -124,33 +116,30 @@ export class WebSocketHub {
       return false;
     }
 
-    const session = this.readSession(request);
-    if (!session) return false;
-    if (requestedAddress && session.address.toLowerCase() !== requestedAddress.toLowerCase()) {
+    if (!this.config.authEnabled) return true;
+
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    const ticketToken = url.searchParams.get("ticket");
+    if (!ticketToken) return false;
+    const ticket = getRuntimeStateStore().takeWSTicket(ticketToken);
+    if (!ticket) return false;
+    if (requestedAddress && ticket.address.toLowerCase() !== requestedAddress.toLowerCase()) {
       return false;
     }
-
+    request.wsTicket = ticket;
     return true;
   }
 
   private async handleConnection(ws: WebSocket, request: IncomingMessage): Promise<void> {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-    const address = url.searchParams.get("address");
-    const network = (url.searchParams.get("network") ?? this.config.defaultNetwork) as Network;
+    const authorizedRequest = request as AuthorizedUpgradeRequest;
+    const address = authorizedRequest.wsTicket?.address ?? url.searchParams.get("address");
+    const network = authorizedRequest.wsTicket?.network ?? (url.searchParams.get("network") ?? this.config.defaultNetwork) as Network;
 
     if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
       this.sendMessage(ws, { type: "error", message: "Invalid or missing address parameter" });
       ws.close(1008, "Invalid address");
       return;
-    }
-
-    if (this.config.authEnabled) {
-      const session = this.readSession(request);
-      if (!session || session.address.toLowerCase() !== address.toLowerCase()) {
-        this.sendMessage(ws, { type: "error", message: "Unauthorized address access" });
-        ws.close(1008, "Unauthorized");
-        return;
-      }
     }
 
     const ip = request.socket.remoteAddress ?? "unknown";
@@ -291,6 +280,7 @@ export class WebSocketHub {
   }
 
   private checkHeartbeats(): void {
+    getRuntimeStateStore().cleanupWSTickets();
     for (const client of this.clients) {
       if (!client.alive) {
         client.ws.terminate();
