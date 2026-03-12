@@ -27,16 +27,22 @@ function readBearerToken(req: Request): string | null {
 }
 
 function readRequestedAddress(req: AuthenticatedRequest): `0x${string}` | undefined {
+  // Check both masterAddress (trade/agent routes) and userAddress (swap routes)
+  // so wallet-ownership validation covers all endpoints uniformly.
   const bodyAddress = typeof req.body?.masterAddress === "string"
     ? req.body.masterAddress
-    : undefined;
+    : typeof req.body?.userAddress === "string"
+      ? req.body.userAddress
+      : undefined;
   const queryAddress = typeof req.query?.masterAddress === "string"
     ? req.query.masterAddress
-    : undefined;
+    : typeof req.query?.userAddress === "string"
+      ? req.query.userAddress
+      : undefined;
   const requestedAddress = bodyAddress ?? queryAddress;
   if (!requestedAddress) return undefined;
   if (!isAddress(requestedAddress)) {
-    throw new Error("Invalid masterAddress format");
+    throw new Error("Invalid address format");
   }
   return requestedAddress.toLowerCase() as `0x${string}`;
 }
@@ -99,7 +105,7 @@ export function sessionAuth(config: Pick<ServerConfig, "authEnabled" | "privy">)
       const requestedAddress = readRequestedAddress(authReq);
       if (requestedAddress && !linkedWalletAddresses.includes(requestedAddress)) {
         res.status(403).json({
-          error: "masterAddress does not belong to the authenticated Privy user",
+          error: "Requested address does not belong to the authenticated Privy user",
           code: "FORBIDDEN",
         });
         return;
@@ -115,7 +121,7 @@ export function sessionAuth(config: Pick<ServerConfig, "authEnabled" | "privy">)
       next();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid access token";
-      if (message === "Invalid masterAddress format") {
+      if (message === "Invalid address format") {
         res.status(400).json({ error: message, code: "BAD_REQUEST" });
         return;
       }
