@@ -1,12 +1,15 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
 import { useAgentStatus } from "../hooks/use-agent-status";
 import { useNetwork } from "../lib/network-context";
+import { useTheme, type Theme } from "../lib/theme-context";
+import { lock as lockAccess } from "../lib/access-gate";
 import { agentInit, agentComplete } from "../lib/api";
 import { createExchangeClientFromInjected, getErrorChainMessage } from "../lib/wallet-client";
+import type { Network } from "@shared/types";
 
 type SetupStep = "init" | "approve" | "complete" | "done";
 
@@ -24,7 +27,7 @@ function isDepositRequiredError(message: string): boolean {
 export function SetupPage() {
   const { address, isConnected, connect } = useWallet();
   const auth = useAuthSession();
-  const { network } = useNetwork();
+  const { network, setNetwork } = useNetwork();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: agentStatusData, isLoading: statusLoading } = useAgentStatus(address, network);
@@ -172,60 +175,14 @@ export function SetupPage() {
   }
 
   if (agentStatusData?.configured) {
-    const truncated = agentStatusData.agentAddress
-      ? `${agentStatusData.agentAddress.slice(0, 6)}...${agentStatusData.agentAddress.slice(-4)}`
-      : "—";
-
     return (
-      <div className="px-4 py-4 pb-24">
-        <h1 className="text-xl font-semibold text-text-primary font-heading mb-2">Settings</h1>
-        <p className="text-text-muted text-sm mb-6">Your trading agent is active.</p>
-
-        <div className="bg-surface-2 border border-border p-4 space-y-4">
-          {/* Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-muted">Status</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-long">
-              <span className="w-1.5 h-1.5 rounded-full bg-long" />
-              Active
-            </span>
-          </div>
-
-          {/* Agent address */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-muted">Agent Address</span>
-            <button
-              onClick={() => {
-                if (agentStatusData.agentAddress) {
-                  void navigator.clipboard.writeText(agentStatusData.agentAddress);
-                }
-              }}
-              className="text-xs text-text-secondary hover:text-accent transition-colors"
-              title="Copy full address"
-            >
-              {truncated}
-            </button>
-          </div>
-
-          {/* Network */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-muted">Network</span>
-            <span className="text-xs text-text-secondary capitalize">{network}</span>
-          </div>
-
-          {/* Master wallet */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-muted">Master Wallet</span>
-            <span className="text-xs text-text-secondary">
-              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "—"}
-            </span>
-          </div>
-        </div>
-
-        <p className="text-xs text-text-dim mt-4 leading-relaxed">
-          The agent wallet can place orders on your behalf but cannot withdraw funds.
-        </p>
-      </div>
+      <SettingsView
+        agentAddress={agentStatusData.agentAddress}
+        masterAddress={address}
+        network={network}
+        setNetwork={setNetwork}
+        navigate={navigate}
+      />
     );
   }
 
@@ -344,6 +301,164 @@ export function SetupPage() {
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Settings View (agent already configured) ── */
+
+const THEME_OPTIONS: { key: Theme; label: string; icon: React.ReactNode }[] = [
+  {
+    key: "green",
+    label: "Green",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.115 5.19l.319 1.913A6 6 0 008.11 10.36L9.75 12l-.387.775c-.217.433-.132.956.21 1.298l1.348 1.348c.21.21.329.497.329.795v1.089c0 .426.24.815.622 1.006l.153.076c.433.217.956.132 1.298-.21l.723-.723a8.7 8.7 0 002.288-4.042 1.087 1.087 0 00-.358-1.099l-1.33-1.108c-.251-.209-.553-.334-.869-.378l-2.095-.263a1.5 1.5 0 01-.451-.116l-.353-.176a2.625 2.625 0 01-1.14-1.14l-.794-1.588A2.646 2.646 0 006.115 5.19zM20.25 12c0 4.556-3.694 8.25-8.25 8.25S3.75 16.556 3.75 12 7.444 3.75 12 3.75s8.25 3.694 8.25 8.25z" />
+      </svg>
+    ),
+  },
+  {
+    key: "light",
+    label: "Light",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+      </svg>
+    ),
+  },
+  {
+    key: "dark",
+    label: "Dark",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+      </svg>
+    ),
+  },
+];
+
+function SettingsView({
+  agentAddress,
+  masterAddress,
+  network,
+  setNetwork,
+  navigate,
+}: {
+  agentAddress?: `0x${string}`;
+  masterAddress: `0x${string}` | null;
+  network: Network;
+  setNetwork: (n: Network) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const { theme, setTheme } = useTheme();
+
+  const truncated = agentAddress
+    ? `${agentAddress.slice(0, 6)}...${agentAddress.slice(-4)}`
+    : "—";
+
+  function handleLock() {
+    lockAccess();
+    navigate("/", { replace: true });
+  }
+
+  return (
+    <div className="px-4 py-4 pb-24 space-y-4">
+      <h1 className="text-xl font-semibold text-text-primary font-heading mb-2">Settings</h1>
+
+      {/* ── Agent Wallet ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-4">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Agent Wallet</h2>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-muted">Status</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-long">
+            <span className="w-1.5 h-1.5 rounded-full bg-long" />
+            Active
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-muted">Agent Address</span>
+          <button
+            onClick={() => {
+              if (agentAddress) void navigator.clipboard.writeText(agentAddress);
+            }}
+            className="text-xs text-text-secondary hover:text-accent transition-colors"
+            title="Copy full address"
+          >
+            {truncated}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-muted">Master Wallet</span>
+          <span className="text-xs text-text-secondary">
+            {masterAddress ? `${masterAddress.slice(0, 6)}...${masterAddress.slice(-4)}` : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Network ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Network</h2>
+        <div className="flex gap-2">
+          {(["mainnet", "testnet"] as const).map((n) => (
+            <button
+              key={n}
+              onClick={() => setNetwork(n)}
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                network === n
+                  ? "bg-accent text-surface-0"
+                  : "bg-surface-3 text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {n === "mainnet" ? "Mainnet" : "Testnet"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Color Scheme ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Color Scheme</h2>
+        <div className="flex gap-2">
+          {THEME_OPTIONS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTheme(t.key)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium transition-colors ${
+                theme === t.key
+                  ? "bg-accent text-surface-0"
+                  : "bg-surface-3 text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Lock ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Security</h2>
+        <button
+          onClick={handleLock}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-3 hover:bg-surface-3/80 border border-border text-sm text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          Lock App
+        </button>
+        <p className="text-xs text-text-dim leading-relaxed">
+          Locks the app and requires the password to re-enter.
+        </p>
+      </div>
+
+      <p className="text-xs text-text-dim leading-relaxed">
+        The agent wallet can place orders on your behalf but cannot withdraw funds.
+      </p>
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { BottomNav } from "./components/BottomNav";
 import { NetworkProvider, useNetwork } from "./lib/network-context";
 import { WalletProvider, useWallet } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
+import { AgentApprovalProvider } from "./lib/agent-approval-context";
 import { useAuthSession } from "./hooks/use-auth-session";
 import { setAuthNetwork, syncPrivyAuth } from "./lib/auth";
 
@@ -142,28 +143,30 @@ export function App() {
         <AuthSync />
         <AuthCacheSync />
         <NetworkProvider>
-          <AppRoutes />
-          <Toaster
-            position="bottom-center"
-            containerStyle={{ bottom: 72 }}
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: "var(--color-surface-2)",
-                color: "var(--color-text-primary)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "2px",
-                fontSize: "13px",
-                maxWidth: "400px",
-              },
-              success: {
-                iconTheme: { primary: "var(--color-long)", secondary: "var(--color-surface-0)" },
-              },
-              error: {
-                iconTheme: { primary: "var(--color-short)", secondary: "var(--color-surface-0)" },
-              },
-            }}
-          />
+          <AgentApprovalProvider>
+            <AppRoutes />
+            <Toaster
+              position="bottom-center"
+              containerStyle={{ bottom: 72 }}
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: "var(--color-surface-2)",
+                  color: "var(--color-text-primary)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "2px",
+                  fontSize: "13px",
+                  maxWidth: "400px",
+                },
+                success: {
+                  iconTheme: { primary: "var(--color-long)", secondary: "var(--color-surface-0)" },
+                },
+                error: {
+                  iconTheme: { primary: "var(--color-short)", secondary: "var(--color-surface-0)" },
+                },
+              }}
+            />
+          </AgentApprovalProvider>
         </NetworkProvider>
       </WalletProvider>
     </ThemeProvider>
