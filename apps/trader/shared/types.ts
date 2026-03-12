@@ -35,6 +35,10 @@ export interface AgentStatusResponse {
   configured: boolean;
   agentAddress?: `0x${string}`;
   network: Network;
+  /** Whether the agent address was found in the on-chain extraAgents list. */
+  approvedOnChain?: boolean;
+  /** Approval expiry timestamp (ms epoch) from on-chain data. */
+  validUntil?: number;
 }
 
 // ========== Account ==========

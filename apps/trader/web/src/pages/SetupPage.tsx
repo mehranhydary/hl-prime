@@ -178,6 +178,8 @@ export function SetupPage() {
     return (
       <SettingsView
         agentAddress={agentStatusData.agentAddress}
+        approvedOnChain={agentStatusData.approvedOnChain}
+        validUntil={agentStatusData.validUntil}
         masterAddress={address}
         network={network}
         setNetwork={setNetwork}
@@ -339,12 +341,16 @@ const THEME_OPTIONS: { key: Theme; label: string; icon: React.ReactNode }[] = [
 
 function SettingsView({
   agentAddress,
+  approvedOnChain,
+  validUntil,
   masterAddress,
   network,
   setNetwork,
   navigate,
 }: {
   agentAddress?: `0x${string}`;
+  approvedOnChain?: boolean;
+  validUntil?: number;
   masterAddress: `0x${string}` | null;
   network: Network;
   setNetwork: (n: Network) => void;
@@ -371,11 +377,32 @@ function SettingsView({
 
         <div className="flex items-center justify-between">
           <span className="text-sm text-text-muted">Status</span>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-long">
-            <span className="w-1.5 h-1.5 rounded-full bg-long" />
-            Active
-          </span>
+          {approvedOnChain === true ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-long">
+              <span className="w-1.5 h-1.5 rounded-full bg-long" />
+              Active
+            </span>
+          ) : approvedOnChain === false ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-short">
+              <span className="w-1.5 h-1.5 rounded-full bg-short" />
+              Not Approved On-Chain
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-text-muted">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted" />
+              Unverified
+            </span>
+          )}
         </div>
+
+        {validUntil != null && validUntil > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-muted">Expires</span>
+            <span className={`text-xs ${validUntil < Date.now() ? "text-short" : "text-text-secondary"}`}>
+              {new Date(validUntil).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <span className="text-sm text-text-muted">Agent Address</span>

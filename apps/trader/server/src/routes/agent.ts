@@ -222,16 +222,34 @@ export function agentRoutes(config: ServerConfig): Router {
 
       const configured = await agentStore.exists(masterAddress, network);
       let agentAddress: `0x${string}` | undefined;
+      let approvedOnChain: boolean | undefined;
+      let validUntil: number | undefined;
 
       if (configured) {
         const stored = await agentStore.load(masterAddress, network);
         agentAddress = stored?.agentAddress;
+
+        // Verify on-chain approval (non-fatal)
+        if (agentAddress) {
+          try {
+            const agents = await service.listAgentsFor(masterAddress, network);
+            const match = agents.find(
+              (a) => a.address.toLowerCase() === agentAddress!.toLowerCase(),
+            );
+            approvedOnChain = !!match;
+            validUntil = match?.validUntil;
+          } catch {
+            // On-chain check failed — leave fields undefined
+          }
+        }
       }
 
       const response: AgentStatusResponse = {
         configured,
         agentAddress,
         network,
+        approvedOnChain,
+        validUntil,
       };
 
       res.json(response);

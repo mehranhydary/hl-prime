@@ -9,6 +9,7 @@ export function useTradeHistory(address: `0x${string}` | null, network: Network,
     queryKey: ["trade-history", address, network, limit],
     queryFn: () => tradeHistory(address!, network, limit),
     enabled: !!address && auth.isAuthenticated,
+    staleTime: 10_000,
     refetchInterval: 20_000,
   });
 }

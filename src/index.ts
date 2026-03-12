@@ -473,6 +473,12 @@ export class HyperliquidPrime {
     return this.provider.extraAgents(user);
   }
 
+  /** List approved agent wallets for any user address (no wallet required). */
+  async listAgentsFor(user: `0x${string}`): Promise<{ address: `0x${string}`; name: string; validUntil: number }[]> {
+    this.ensureConnected();
+    return this.provider.extraAgents(user);
+  }
+
   /** Set abstraction mode for the user. Master signs. */
   async setAbstraction(
     abstraction: "dexAbstraction" | "unifiedAccount" | "portfolioMargin" | "disabled",

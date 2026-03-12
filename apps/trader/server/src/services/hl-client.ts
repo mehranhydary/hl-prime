@@ -138,6 +138,15 @@ export class HLClientService {
     }
   }
 
+  /** Fetch on-chain approved agents for any master address (read-only, no agent key). */
+  async listAgentsFor(
+    masterAddress: `0x${string}`,
+    network: Network,
+  ): Promise<{ address: `0x${string}`; name: string; validUntil: number }[]> {
+    const hp = await this.getPublicClient(network);
+    return hp.listAgentsFor(masterAddress);
+  }
+
   async hasClient(masterAddress: string, network: Network): Promise<boolean> {
     const key = clientId({ masterAddress, network });
     if (this.clients.has(key)) return true;

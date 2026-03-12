@@ -14,6 +14,7 @@ export function useReferralData(address: `0x${string}` | null, network: Network)
     queryKey: ["referral", address, network],
     queryFn: () => referralData(address!, network),
     enabled: !!address && auth.isAuthenticated,
+    staleTime: 10_000,
     refetchInterval: 30_000,
     retry: 1,
   });
