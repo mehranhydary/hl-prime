@@ -9,6 +9,7 @@ import { passwordGateRoutes, requireAppAccess, requireWebAppAccess } from "./mid
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
 import { tradeRoutes } from "./routes/trade.js";
+import { swapRoutes } from "./routes/swap.js";
 import { healthRoutes } from "./routes/health.js";
 import { marketRoutes } from "./routes/market.js";
 import { referralRoutes } from "./routes/referral.js";
@@ -68,6 +69,11 @@ export function createApp(config: ServerConfig) {
     windowMs: 60_000,
     max: 120,
   }));
+  app.use("/api/swap", memoryRateLimit({
+    keyPrefix: "swap",
+    windowMs: 60_000,
+    max: 60,
+  }));
 
   app.use("/api", healthRoutes(config));
   app.use("/api/access", passwordGateRoutes(config));
@@ -82,6 +88,7 @@ export function createApp(config: ServerConfig) {
   app.use("/api/agent", agentRoutes(config));
   app.use("/api/account", accountRoutes(config));
   app.use("/api/trade", tradeRoutes(config));
+  app.use("/api/swap", swapRoutes(config));
   app.use("/api/market", marketRoutes(config));
   app.use("/api/referral", referralRoutes(config));
 

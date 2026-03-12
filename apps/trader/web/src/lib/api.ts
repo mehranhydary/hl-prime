@@ -15,6 +15,10 @@ import type {
   ClosePositionRequest,
   TradeResult,
   TradeHistoryResponse,
+  SwapQuoteRequest,
+  SwapQuoteResponse,
+  SwapExecuteRequest,
+  SwapResult,
   HealthResponse,
   CandleData,
   CandleInterval,
@@ -185,6 +189,21 @@ export const tradeHistory = (masterAddress: string, network: string, limit = 50)
   fetchJson<TradeHistoryResponse>(
     `/trade/history?masterAddress=${masterAddress}&network=${network}&limit=${limit}`,
   );
+
+// Swap
+export const swapQuote = (body: SwapQuoteRequest) =>
+  fetchJson<SwapQuoteResponse>("/swap/quote", {
+    method: "POST",
+    body: JSON.stringify(body),
+    retryAuth: true,
+  });
+
+export const swapExecute = (body: SwapExecuteRequest) =>
+  fetchJson<SwapResult>("/swap/execute", {
+    method: "POST",
+    body: JSON.stringify(body),
+    retryAuth: true,
+  });
 
 // Market Data
 export const marketCandles = (coin: string, interval: CandleInterval, network: string) =>

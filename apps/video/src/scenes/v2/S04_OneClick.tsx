@@ -1,17 +1,122 @@
-import React from "react";
+import React, { useState } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate, Img } from "remotion";
 import { colors, fonts } from "../../styles/tokens";
-import { hlTokenIcon } from "../../lib/mock-data";
+import {
+  MARKET_ICON_ASSETS,
+  getBaseToken,
+  needsLightIconBackplate,
+  tokenIconFallbackUrl,
+  tokenIconUrl,
+} from "./market-icon-set";
 
 const CLAMP = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
+const ASSETS = MARKET_ICON_ASSETS;
+const ICON_SIZE = 44;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
-const ASSETS = [
-  "BTC", "ETH", "SOL", "xyz:TSLA", "xyz:NVDA", "xyz:GOLD",
-  "xyz:AAPL", "xyz:SILVER", "DOGE", "LINK", "AVAX", "ARB",
-  "xyz:META", "xyz:AMZN", "xyz:GOOGL", "xyz:MSFT",
-];
+type OneClickAssetProps = {
+  coin: string;
+  frame: number;
+  fps: number;
+  index: number;
+  total: number;
+  explodeProgress: number;
+  spreadProgress: number;
+};
 
-const ICON_SIZE = 52;
+const OneClickAsset: React.FC<OneClickAssetProps> = ({
+  coin,
+  frame,
+  fps,
+  index,
+  total,
+  explodeProgress,
+  spreadProgress,
+}) => {
+  const [src, setSrc] = useState(() => tokenIconUrl(coin));
+  const [isHidden, setIsHidden] = useState(false);
+  const showLightBackplate = needsLightIconBackplate(coin);
+
+  const normalizedIndex = (index + 0.5) / total;
+  const angle = index * GOLDEN_ANGLE;
+  const finalRadius = 140 + Math.sqrt(normalizedIndex) * 240;
+  const orbitRadius = 8 + normalizedIndex * 12;
+
+  const spreadX = Math.cos(angle) * finalRadius * spreadProgress;
+  const spreadY = Math.sin(angle) * finalRadius * 0.72 * spreadProgress;
+  const floatX = Math.cos(angle + frame * 0.02) * orbitRadius;
+  const floatY = Math.sin(angle + frame * 0.02) * orbitRadius * 0.75;
+
+  // After click: explode farther out in the same radial direction.
+  const explodeDistance = 820 + finalRadius * 0.9;
+  const explodeX = Math.cos(angle) * explodeDistance * explodeProgress;
+  const explodeY = Math.sin(angle) * explodeDistance * 0.92 * explodeProgress;
+
+  const x = spreadX + floatX + explodeX;
+  const y = spreadY + floatY + explodeY;
+  const scale = 1 + explodeProgress * 0.45;
+  const spinDirection = index % 2 === 0 ? 1 : -1;
+  const spinY = explodeProgress * (900 + normalizedIndex * 540) * spinDirection;
+  const circleOpacity = interpolate(explodeProgress, [0, 0.5, 1], [1, 0.82, 0], CLAMP);
+  const enterScale = spring({ fps, frame: Math.max(0, frame - (index % 10)), config: { damping: 16, mass: 0.35 } });
+
+  if (isHidden) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        transform: `perspective(1200px) translate(${x - ICON_SIZE / 2}px, ${y - ICON_SIZE / 2}px) scale(${enterScale * scale}) rotateY(${spinY}deg)`,
+        opacity: circleOpacity,
+        width: ICON_SIZE,
+        height: ICON_SIZE,
+        borderRadius: "50%",
+        overflow: "hidden",
+        backgroundColor: colors.surface2,
+        border: `2px solid ${colors.border}`,
+        zIndex: 5,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transformStyle: "preserve-3d",
+        willChange: "transform, opacity",
+      }}
+    >
+      <div
+        style={{
+          width: showLightBackplate ? ICON_SIZE * 0.82 : ICON_SIZE,
+          height: showLightBackplate ? ICON_SIZE * 0.82 : ICON_SIZE,
+          borderRadius: "50%",
+          backgroundColor: showLightBackplate ? "#ffffff" : "transparent",
+          padding: showLightBackplate ? Math.max(4, ICON_SIZE * 0.09) : 0,
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Img
+          src={src}
+          alt={getBaseToken(coin)}
+          style={{ width: "100%", height: "100%", display: "block", objectFit: "contain" }}
+          onError={() => {
+            const fallback = tokenIconFallbackUrl(coin);
+            if (fallback && src !== fallback) {
+              setSrc(fallback);
+              return;
+            }
+
+            setIsHidden(true);
+          }}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const V2S04_OneClick: React.FC = () => {
   const frame = useCurrentFrame();
@@ -19,7 +124,6 @@ export const V2S04_OneClick: React.FC = () => {
 
   // Phase 1: Icons start clustered at center (from S03), then spread outward first.
   const spreadProgress = spring({ fps, frame, config: { damping: 18, mass: 0.45 } });
-  const spreadDistance = interpolate(spreadProgress, [0, 1], [0, 260], CLAMP);
 
   // Phase 2: "In 1 click" appears only after the spread-out beat.
   const textIntroFrame = Math.max(0, frame - 18);
@@ -83,7 +187,7 @@ export const V2S04_OneClick: React.FC = () => {
         <span
           style={{
             fontFamily: fonts.heading,
-            fontSize: 140,
+            fontSize: 72,
             color: colors.accent,
             textShadow: `0 0 40px rgba(80, 227, 181, 0.4)`,
           }}
@@ -103,50 +207,17 @@ export const V2S04_OneClick: React.FC = () => {
 
       {/* Asset circles — explode outward from center on click */}
       {ASSETS.map((coin, i) => {
-        const baseAngle = (i / ASSETS.length) * Math.PI * 2;
-        // First spread outward, then keep subtle orbiting motion.
-        const spreadX = Math.cos(baseAngle) * spreadDistance;
-        const spreadY = Math.sin(baseAngle) * spreadDistance * 0.74;
-        const floatX = Math.cos(baseAngle + frame * 0.02) * 22;
-        const floatY = Math.sin(baseAngle + frame * 0.02) * 16;
-
-        // After click: explode farther out in same radial direction.
-        const explodeDistance = 1200;
-        const explodeX = Math.cos(baseAngle) * explodeDistance * explodeProgress;
-        const explodeY = Math.sin(baseAngle) * explodeDistance * explodeProgress;
-
-        const x = spreadX + floatX + explodeX;
-        const y = spreadY + floatY + explodeY;
-
-        // Fade out as they fly away
-        const circleOpacity = interpolate(explodeProgress, [0, 0.5, 1], [1, 0.8, 0], CLAMP);
-
         return (
-          <div
+          <OneClickAsset
             key={coin}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: `translate(${x - ICON_SIZE / 2}px, ${y - ICON_SIZE / 2}px) scale(${1 + explodeProgress * 0.5})`,
-              opacity: circleOpacity,
-              width: ICON_SIZE,
-              height: ICON_SIZE,
-              borderRadius: "50%",
-              overflow: "hidden",
-              backgroundColor: colors.surface2,
-              border: `2px solid ${colors.border}`,
-              zIndex: 5,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Img
-              src={hlTokenIcon(coin)}
-              style={{ width: ICON_SIZE, height: ICON_SIZE, display: "block", objectFit: "cover" }}
-            />
-          </div>
+            coin={coin}
+            frame={frame}
+            fps={fps}
+            index={i}
+            total={ASSETS.length}
+            explodeProgress={explodeProgress}
+            spreadProgress={spreadProgress}
+          />
         );
       })}
 

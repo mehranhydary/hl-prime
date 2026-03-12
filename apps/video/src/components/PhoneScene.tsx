@@ -44,8 +44,9 @@ export const PhoneScene: React.FC<Props> = ({
   paddingRight: padRight = 0,
   children,
 }) => {
-  // Base phone width so full phone fits in 1080px height with padding
-  const basePhoneW = 360;
+  // Slightly oversized so the demo phone reads better across scenes
+  // without needing scene-specific zoom adjustments.
+  const basePhoneW = 378;
   // Screen area is inset by bezel on each side — content must scale to fit this
   const bezel = basePhoneW * 0.025;
   const screenW = basePhoneW - bezel * 2;

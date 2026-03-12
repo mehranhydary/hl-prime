@@ -19,6 +19,8 @@ interface Props {
   buttonScale?: number;
   /** Hide the action button (when scene renders its own animated button) */
   hideButton?: boolean;
+  /** Hide the collapsed quote row when a separate expanding quote box is rendered below */
+  hideQuoteSection?: boolean;
 }
 
 export const MockTradeForm: React.FC<Props> = ({
@@ -30,6 +32,7 @@ export const MockTradeForm: React.FC<Props> = ({
   buttonText,
   buttonScale = 1,
   hideButton = false,
+  hideQuoteSection = false,
 }) => {
   const amountStr = MOCK_TRADE.amount.slice(0, visibleDigits);
   const leveragePercent = ((leverageValue - 1) / (maxLeverage - 1)) * 100;
@@ -247,42 +250,43 @@ export const MockTradeForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Quote section (collapsed) */}
-      <div
-        style={{
-          border: `1px solid ${colors.border}`,
-          borderRadius: 4,
-          padding: "10px 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: colors.textPrimary,
-              fontFamily: fonts.body,
-            }}
-          >
-            Quote
-          </span>
-          <span
-            style={{
-              fontSize: 11,
-              color: colors.textDim,
-              fontFamily: fonts.body,
-            }}
-          >
-            {hasAmount ? "" : "Enter amount above"}
-          </span>
+      {!hideQuoteSection && (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 4,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: colors.textPrimary,
+                fontFamily: fonts.body,
+              }}
+            >
+              Quote
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                color: colors.textDim,
+                fontFamily: fonts.body,
+              }}
+            >
+              {hasAmount ? "" : "Enter amount above"}
+            </span>
+          </div>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2">
+            <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="2">
-          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
+      )}
 
       {/* Max Slippage */}
       <div

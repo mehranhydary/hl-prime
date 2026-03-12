@@ -17,44 +17,126 @@ import { fadeIn, pressScale } from "../../lib/animations";
 
 const CLAMP = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
+const PHONE_HEADER_HEIGHT = 99;
+const AMOUNT_INPUT_CONTENT_Y = 584;
+const LEVERAGE_TRACK_CONTENT_Y = 655;
+const QUOTE_HEADER_CONTENT_Y = 900;
+const QUOTE_ROUTE_CONTENT_Y = 1060;
+const QUOTE_METRICS_CONTENT_Y = 1210;
+const SWAP_ROW_CONTENT_Y = 1415;
+const ACTION_BUTTON_CONTENT_Y = 1527;
+const FILL_RESULT_CONTENT_Y = 1670;
+const LEVERAGE_TRACK_LEFT = 16;
+const LEVERAGE_TRACK_WIDTH = 361;
+const LEVERAGE_CURSOR_OFFSET_Y = 30;
+const MIN_LEVERAGE = 1;
+const MAX_LEVERAGE = 20;
+const SCROLL_FRAMES = [0, 35, 70, 110, 160, 200, 240, 270];
+const SCROLL_VALUES = [0, 0, -200, -360, -800, -1000, -1080, -1240];
+const LEVERAGE_FRAMES = [0, 78, 105];
+const LEVERAGE_VALUES = [5, 5, 20];
+
+const sampleTimeline = (targetFrame: number, frames: number[], values: number[]) => {
+  if (frames.length === 0 || frames.length !== values.length) {
+    throw new Error("Timeline frames and values must be non-empty and the same length");
+  }
+
+  if (targetFrame <= frames[0]) {
+    return values[0];
+  }
+
+  for (let i = 1; i < frames.length; i++) {
+    if (targetFrame <= frames[i]) {
+      const progress = (targetFrame - frames[i - 1]) / (frames[i] - frames[i - 1]);
+      return values[i - 1] + (values[i] - values[i - 1]) * progress;
+    }
+  }
+
+  return values[values.length - 1];
+};
+
+const phoneYForContent = (contentY: number, targetFrame: number) => {
+  return PHONE_HEADER_HEIGHT + contentY + sampleTimeline(targetFrame, SCROLL_FRAMES, SCROLL_VALUES);
+};
+
+const cursorYForContent = (contentY: number, targetFrame: number) => {
+  return Math.min(620, Math.max(160, phoneYForContent(contentY, targetFrame)));
+};
+
+const sliderXForFrame = (targetFrame: number) => {
+  const leverageValue = sampleTimeline(targetFrame, LEVERAGE_FRAMES, LEVERAGE_VALUES);
+  const leverageProgress = (leverageValue - MIN_LEVERAGE) / (MAX_LEVERAGE - MIN_LEVERAGE);
+
+  return LEVERAGE_TRACK_LEFT + leverageProgress * LEVERAGE_TRACK_WIDTH;
+};
+
+const sliderCursorYForFrame = (targetFrame: number) => {
+  return phoneYForContent(LEVERAGE_TRACK_CONTENT_Y, targetFrame) + LEVERAGE_CURSOR_OFFSET_Y;
+};
+
+const CAPTION_STEPS = [
+  { title: "NVDA", subtitle: "Open the trading page", startFrame: 15 },
+  { title: "Enter amount", subtitle: "$5,000 with 20x leverage", startFrame: 40 },
+  { title: "Get a quote", subtitle: "Best price across all venues", startFrame: 115 },
+  { title: "Collateral swap", subtitle: "Auto-convert to right collateral", startFrame: 158 },
+  { title: "Execute!", subtitle: "Order filled across venues", startFrame: 220 },
+] as const;
+
 // Cursor keyframes for the full NVDA trading flow
 const CURSOR_KEYFRAMES: CursorKeyframe[] = [
   // Enter — drift toward the page
-  { frame: 10, x: 300, y: 300 },
-  // Focus on NVDA header
-  { frame: 25, x: 200, y: 200 },
+  { frame: 18, x: 275, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 18) - 90 },
   // Move to amount input and click
-  { frame: 35, x: 120, y: 483 },
-  { frame: 38, x: 120, y: 483, click: true },
-  { frame: 42, x: 130, y: 483 },
+  { frame: 35, x: 120, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 35) },
+  { frame: 38, x: 120, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 38), click: true },
+  { frame: 42, x: 130, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 42) },
   // Watch amount being typed
-  { frame: 65, x: 140, y: 483 },
+  { frame: 50, x: 135, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 50) },
+  { frame: 65, x: 140, y: cursorYForContent(AMOUNT_INPUT_CONTENT_Y, 65) },
   // Move to leverage slider
-  { frame: 75, x: 92, y: 554 },
-  { frame: 78, x: 92, y: 554, click: true },
+  { frame: 75, x: sliderXForFrame(75), y: sliderCursorYForFrame(75) },
+  { frame: 78, x: sliderXForFrame(78), y: sliderCursorYForFrame(78), click: true },
   // Drag slider to 20x
-  { frame: 100, x: 377, y: 554, click: true },
-  { frame: 105, x: 377, y: 554 },
+  { frame: 90, x: sliderXForFrame(90), y: sliderCursorYForFrame(90), click: true },
+  { frame: 100, x: sliderXForFrame(100), y: sliderCursorYForFrame(100), click: true },
+  { frame: 105, x: sliderXForFrame(105), y: sliderCursorYForFrame(105) },
   // Scroll to see quote generation
-  { frame: 120, x: 200, y: 550 },
+  { frame: 108, x: 228, y: 596 },
+  { frame: 112, x: 236, y: 618 },
+  { frame: 116, x: 236, y: 618, click: true },
+  { frame: 124, x: 234, y: 572, click: true },
+  { frame: 132, x: 230, y: 498, click: true },
+  { frame: 136, x: 226, y: 474 },
   // Watch quote expand
-  { frame: 150, x: 210, y: 600 },
+  { frame: 140, x: 210, y: cursorYForContent(QUOTE_HEADER_CONTENT_Y, 140) },
+  { frame: 145, x: 218, y: cursorYForContent(QUOTE_ROUTE_CONTENT_Y, 145) },
+  { frame: 150, x: 225, y: cursorYForContent(QUOTE_METRICS_CONTENT_Y, 150) },
+  // Scroll to swap step
+  { frame: 154, x: 236, y: 596 },
+  { frame: 158, x: 244, y: 618 },
+  { frame: 162, x: 244, y: 618, click: true },
+  { frame: 172, x: 242, y: 570, click: true },
+  { frame: 182, x: 236, y: 512, click: true },
+  { frame: 186, x: 230, y: 494 },
   // Watch swap step
-  { frame: 175, x: 200, y: 640 },
+  { frame: 190, x: 220, y: cursorYForContent(SWAP_ROW_CONTENT_Y, 190) },
   // Move to Long NVDA button
-  { frame: 200, x: 196, y: 610 },
-  { frame: 210, x: 196, y: 606 },
+  { frame: 200, x: 214, y: cursorYForContent(ACTION_BUTTON_CONTENT_Y, 200) },
+  { frame: 210, x: 196, y: cursorYForContent(ACTION_BUTTON_CONTENT_Y, 210) },
   // Click Long NVDA
-  { frame: 215, x: 196, y: 606, click: true },
-  { frame: 220, x: 196, y: 606 },
+  { frame: 215, x: 196, y: cursorYForContent(ACTION_BUTTON_CONTENT_Y, 215), click: true },
+  { frame: 220, x: 196, y: cursorYForContent(ACTION_BUTTON_CONTENT_Y, 220) },
   // Watch fill result
-  { frame: 245, x: 210, y: 580 },
-  { frame: 265, x: 210, y: 560 },
+  { frame: 245, x: 222, y: cursorYForContent(FILL_RESULT_CONTENT_Y, 245) },
+  { frame: 265, x: 222, y: cursorYForContent(FILL_RESULT_CONTENT_Y, 265) },
 ];
 
 export const V2S10_NvdaTrade: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const activeCaptionIndex = CAPTION_STEPS.reduce((activeIndex, step, index) => {
+    return frame >= step.startFrame ? index : activeIndex;
+  }, 0);
 
   // Phone enters from right (frames 0-20)
   const phoneEnter = spring({ fps, frame, config: { damping: 14, mass: 0.5 } });
@@ -75,28 +157,40 @@ export const V2S10_NvdaTrade: React.FC = () => {
     spring({ fps, frame: frame - 190, config: { damping: 15, mass: 0.7 } }),
     [0, 1], [0, 1], CLAMP,
   );
-  const zoomOutFinal = frame < 240 ? 0 : interpolate(
-    spring({ fps, frame: frame - 240, config: { damping: 14, mass: 0.6 } }),
+  const zoomOutFinal = frame < 225 ? 0 : interpolate(
+    spring({ fps, frame: frame - 225, config: { damping: 14, mass: 0.6 } }),
     [0, 1], [0, 1], CLAMP,
   );
 
-  const zoom = 1.2
-    + zoomInForm * 0.8
-    - zoomOutQuote * 0.5
-    + zoomInButton * 0.4
-    - zoomOutFinal * 0.3;
+  const zoom = 1.38
+    + zoomInForm * 0.42
+    - zoomOutQuote * 0.18
+    + zoomInButton * 0.22
+    - zoomOutFinal * 0.08;
 
-  const focusY =
-    interpolate(zoomInForm, [0, 1], [0, -40], CLAMP)
-    + interpolate(zoomOutQuote, [0, 1], [0, 40], CLAMP)
-    + interpolate(zoomInButton, [0, 1], [0, -30], CLAMP)
-    + interpolate(zoomOutFinal, [0, 1], [0, 30], CLAMP);
+  // Keep the zoomed phone lifted while the cursor is working lower controls
+  // so the pointer and its target stay inside the final video crop.
+  const focusY = interpolate(
+    frame,
+    [0, 35, 75, 110, 140, 160, 190, 215, 245, 270],
+    [0, 20, 84, 116, 90, 120, 96, 112, 100, 82],
+    CLAMP,
+  );
+
+  // Lift the phone during lower-screen interactions so the cursor and fill state
+  // don't ride the bottom crop edge of the render.
+  const phoneOffsetY = 320 + interpolate(
+    frame,
+    [0, 130, 180, 220, 270],
+    [0, 0, -35, -90, -70],
+    CLAMP,
+  );
 
   // Content scroll — progressive reveal
   const scrollOffset = interpolate(
     frame,
-    [0, 35, 70, 110, 160, 200, 240],
-    [0, 0, -200, -360, -800, -1000, -1080],
+    SCROLL_FRAMES,
+    SCROLL_VALUES,
     CLAMP,
   );
 
@@ -105,7 +199,7 @@ export const V2S10_NvdaTrade: React.FC = () => {
   const visibleDigits = Math.floor(digits);
 
   // Leverage: drag from 5 to 20x (frames 78-105)
-  const leverageValue = interpolate(frame, [0, 78, 105], [5, 5, 20], CLAMP);
+  const leverageValue = interpolate(frame, LEVERAGE_FRAMES, LEVERAGE_VALUES, CLAMP);
 
   // Quote generation (frames 110-160)
   const isLoading = frame >= 110 && frame < 125;
@@ -145,7 +239,7 @@ export const V2S10_NvdaTrade: React.FC = () => {
 
   return (
     <>
-      <PhoneScene alignment="right" paddingRight={80} offsetY={340} zoom={zoom} focusX={0} focusY={focusY}>
+      <PhoneScene alignment="right" paddingRight={80} offsetY={phoneOffsetY} zoom={zoom} focusX={0} focusY={focusY}>
         <div
           style={{
             width: "100%",
@@ -249,6 +343,7 @@ export const V2S10_NvdaTrade: React.FC = () => {
                 leverageValue={leverageValue}
                 longActive={true}
                 hideButton={frame >= 110}
+                hideQuoteSection={frame >= 110}
               />
 
               {/* Quote box */}
@@ -290,22 +385,46 @@ export const V2S10_NvdaTrade: React.FC = () => {
               {frame >= 110 && (
                 <div
                   style={{
-                    backgroundColor: colors.long,
-                    padding: "12px 0",
-                    borderRadius: 4,
-                    textAlign: "center",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: "white",
-                    fontFamily: fonts.body,
-                    boxShadow: isFilled
-                      ? `0 0 30px ${colors.long}40`
-                      : `0 0 20px ${colors.long}20`,
-                    transform: `scale(${buttonScale})`,
-                    opacity: isExecuting ? executingPulse : 1,
+                    position: "relative",
+                    overflow: "visible",
                   }}
                 >
-                  {buttonText}
+                  {isFilled && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        top: -96,
+                        height: 132,
+                        pointerEvents: "none",
+                        zIndex: 2,
+                      }}
+                    >
+                      <Confetti triggerFrame={255} originX={180} originY={96} />
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      backgroundColor: colors.long,
+                      padding: "12px 0",
+                      borderRadius: 4,
+                      textAlign: "center",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "white",
+                      fontFamily: fonts.body,
+                      boxShadow: isFilled
+                        ? `0 0 30px ${colors.long}40`
+                        : `0 0 20px ${colors.long}20`,
+                      transform: `scale(${buttonScale})`,
+                      opacity: isExecuting ? executingPulse : 1,
+                    }}
+                  >
+                    {buttonText}
+                  </div>
                 </div>
               )}
 
@@ -318,9 +437,6 @@ export const V2S10_NvdaTrade: React.FC = () => {
             </div>
           </div>
           <MockBottomNav />
-
-          {/* Confetti on fill */}
-          {frame >= 255 && <Confetti triggerFrame={255} originX={196} originY={600} />}
 
           <AnimatedCursor keyframes={CURSOR_KEYFRAMES} />
         </div>
@@ -341,50 +457,16 @@ export const V2S10_NvdaTrade: React.FC = () => {
           pointerEvents: "none",
         }}
       >
-        {/* Phase labels */}
-        {frame < 70 && (
+        {CAPTION_STEPS.filter((step) => frame >= step.startFrame).map((step, index) => (
           <CaptionBlock
+            key={step.title}
             frame={frame}
-            title="NVDA"
-            subtitle="Open the trading page"
-            startFrame={15}
+            title={step.title}
+            subtitle={step.subtitle}
+            startFrame={step.startFrame}
+            active={index === activeCaptionIndex}
           />
-        )}
-        {frame >= 35 && frame < 110 && (
-          <CaptionBlock
-            frame={frame}
-            title="Enter amount"
-            subtitle="$5,000 with 20x leverage"
-            startFrame={40}
-            fadeOutFrame={105}
-          />
-        )}
-        {frame >= 110 && frame < 190 && (
-          <CaptionBlock
-            frame={frame}
-            title="Get a quote"
-            subtitle="Best price across all venues"
-            startFrame={115}
-            fadeOutFrame={185}
-          />
-        )}
-        {frame >= 155 && frame < 215 && (
-          <CaptionBlock
-            frame={frame}
-            title="Collateral swap"
-            subtitle="Auto-convert to right collateral"
-            startFrame={158}
-            fadeOutFrame={210}
-          />
-        )}
-        {frame >= 215 && (
-          <CaptionBlock
-            frame={frame}
-            title="Execute!"
-            subtitle="Order filled across venues"
-            startFrame={220}
-          />
-        )}
+        ))}
       </div>
     </>
   );
@@ -396,26 +478,28 @@ const CaptionBlock: React.FC<{
   title: string;
   subtitle: string;
   startFrame: number;
-  fadeOutFrame?: number;
-}> = ({ frame, title, subtitle, startFrame, fadeOutFrame }) => {
+  active: boolean;
+}> = ({ frame, title, subtitle, startFrame, active }) => {
   const enterOpacity = interpolate(frame, [startFrame, startFrame + 10], [0, 1], CLAMP);
   const enterY = interpolate(frame, [startFrame, startFrame + 15], [20, 0], CLAMP);
-  const exitOpacity = fadeOutFrame
-    ? interpolate(frame, [fadeOutFrame, fadeOutFrame + 10], [1, 0], CLAMP)
-    : 1;
+  const blockScale = active ? 1 : 0.92;
+  const titleColor = active ? colors.accent : colors.textSecondary;
+  const subtitleColor = active ? colors.textSecondary : colors.textDim;
+  const blockOpacity = active ? 1 : 0.52;
 
   return (
     <div
       style={{
-        opacity: enterOpacity * exitOpacity,
-        transform: `translateY(${enterY}px)`,
+        opacity: enterOpacity * blockOpacity,
+        transform: `translateY(${enterY}px) scale(${blockScale})`,
+        transformOrigin: "left center",
       }}
     >
       <div
         style={{
           fontFamily: fonts.heading,
           fontSize: 56,
-          color: colors.accent,
+          color: titleColor,
           lineHeight: 1.2,
           marginBottom: 8,
         }}
@@ -426,7 +510,7 @@ const CaptionBlock: React.FC<{
         style={{
           fontFamily: fonts.body,
           fontSize: 32,
-          color: colors.textSecondary,
+          color: subtitleColor,
           lineHeight: 1.4,
         }}
       >

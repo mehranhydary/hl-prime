@@ -1,81 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate } from "remotion";
 import { colors, fonts } from "../../styles/tokens";
+import {
+  getBaseToken,
+  MARKET_ICON_ASSETS,
+  needsLightIconBackplate,
+  tokenIconFallbackUrl,
+  tokenIconUrl,
+} from "./market-icon-set";
 
 const CLAMP = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
-
-const tokenIconUrl = (coin: string): string => `https://app.hyperliquid.xyz/coins/${coin}.svg`;
-const tokenIconFallbackUrl = (coin: string): string | null => {
-  const idx = coin.indexOf(":");
-  if (idx <= 0) return null;
-  const base = coin.slice(idx + 1);
-  return `https://app.hyperliquid.xyz/coins/${base}.svg`;
-};
-
-// Snapshot from Hyperliquid info API `type: "perpDexs"` (fetched on 2026-03-07),
-// filtered to coins whose icon URL returns `image/svg+xml` on 2026-03-07.
-// Prioritize HIP-3 coins first, keep every icon unique, then fall back to native.
-const HIP3_MARKETS_BY_DEPLOYER = {
-  xyz: [
-    "xyz:AAPL", "xyz:ALUMINIUM", "xyz:AMD", "xyz:AMZN", "xyz:BABA", "xyz:CL",
-    "xyz:COIN", "xyz:CRCL", "xyz:CRWV", "xyz:EUR", "xyz:GOLD", "xyz:GOOGL",
-    "xyz:HOOD", "xyz:HYUNDAI", "xyz:INTC", "xyz:JPY", "xyz:KR200", "xyz:META",
-    "xyz:MSFT", "xyz:MSTR", "xyz:MU", "xyz:NFLX", "xyz:NVDA", "xyz:ORCL",
-    "xyz:PALLADIUM", "xyz:PLATINUM", "xyz:PLTR", "xyz:RIVN", "xyz:SILVER",
-    "xyz:SKHX", "xyz:SMSN", "xyz:SNDK", "xyz:TSLA", "xyz:TSM", "xyz:URANIUM",
-    "xyz:USAR", "xyz:XYZ100",
-  ],
-  flx: [
-    "flx:COIN", "flx:COPPER", "flx:CRCL", "flx:GOLD", "flx:NVDA", "flx:OIL",
-    "flx:SILVER", "flx:TSLA", "flx:XMR",
-  ],
-  vntl: [
-    "vntl:ANTHROPIC", "vntl:BIOTECH", "vntl:DEFENSE", "vntl:ENERGY", "vntl:INFOTECH",
-    "vntl:MAG7", "vntl:NUCLEAR", "vntl:OPENAI", "vntl:ROBOT", "vntl:SEMIS", "vntl:SPACEX",
-  ],
-  hyna: [
-    "hyna:BTC", "hyna:ETH", "hyna:HYPE", "hyna:SOL", "hyna:XRP", "hyna:ZEC",
-  ],
-  km: [
-    "km:BABA", "km:SMALL2000", "km:TSLA", "km:US500", "km:USBOND", "km:USOIL", "km:USTECH",
-  ],
-  cash: [
-    "cash:AMZN", "cash:GOLD", "cash:GOOGL", "cash:HOOD", "cash:META", "cash:NVDA",
-    "cash:SILVER", "cash:TSLA", "cash:USA500",
-  ],
-} as const;
-
-const NATIVE_FALLBACK_MARKETS = [
-  "BTC", "ETH", "SOL", "DOGE", "LINK", "AVAX", "ARB", "XRP", "SUI", "LTC", "BNB", "BCH", "HYPE",
-];
-
-const orderedHip3Markets = (): string[] => {
-  const buckets = Object.values(HIP3_MARKETS_BY_DEPLOYER).map((coins) => [...coins]);
-  const ordered: string[] = [];
-  let hasMore = true;
-
-  while (hasMore) {
-    hasMore = false;
-    for (const bucket of buckets) {
-      const next = bucket.shift();
-      if (next) {
-        ordered.push(next);
-        hasMore = true;
-      }
-    }
-  }
-
-  return ordered;
-};
-
-const ICON_ASSETS = [...new Set([...orderedHip3Markets(), ...NATIVE_FALLBACK_MARKETS])];
 
 const SCENE_WIDTH = 1920;
 const SCENE_HEIGHT = 1080;
 const TYPEWRITER_TEXT = "An app that lets you trade on Hyperliquid";
 const TEXT_SAFE_WIDTH = 1420;
 const TEXT_SAFE_HEIGHT = 220;
-const ICON_COUNT = Math.min(44, ICON_ASSETS.length);
+const ICON_COUNT = Math.min(50, MARKET_ICON_ASSETS.length);
 
 type ScatterIcon = {
   coin: string;
@@ -86,6 +27,15 @@ type ScatterIcon = {
   ampX: number;
   ampY: number;
   speed: number;
+};
+
+type ScatterTokenProps = {
+  convergeProgress: number;
+  frame: number;
+  fps: number;
+  icon: ScatterIcon;
+  iconIndex: number;
+  iconsOpacity: number;
 };
 
 const seeded = (n: number) => {
@@ -113,7 +63,7 @@ const buildScatterField = (): ScatterIcon[] => {
     });
 
     if (!insideSafeTextZone && !overlapsExisting) {
-      const coin = ICON_ASSETS[icons.length];
+      const coin = MARKET_ICON_ASSETS[icons.length];
       if (!coin) break;
       icons.push({
         coin,
@@ -134,6 +84,86 @@ const buildScatterField = (): ScatterIcon[] => {
 };
 
 const SCATTER_ICONS = buildScatterField();
+
+const ScatterToken: React.FC<ScatterTokenProps> = ({
+  convergeProgress,
+  frame,
+  fps,
+  icon,
+  iconIndex,
+  iconsOpacity,
+}) => {
+  const [src, setSrc] = useState(() => tokenIconUrl(icon.coin));
+  const [isHidden, setIsHidden] = useState(false);
+  const showLightBackplate = needsLightIconBackplate(icon.coin);
+
+  const driftX = Math.sin(frame * icon.speed + icon.phase) * icon.ampX;
+  const driftY = Math.cos(frame * icon.speed * 0.9 + icon.phase) * icon.ampY;
+  const x = interpolate(convergeProgress, [0, 1], [icon.x + driftX, 0], CLAMP);
+  const y = interpolate(convergeProgress, [0, 1], [icon.y + driftY, 0], CLAMP);
+
+  // Staggered entrance
+  const enterDelay = 8 + (iconIndex % 12);
+  const enterScale = frame < enterDelay
+    ? 0
+    : spring({ fps, frame: frame - enterDelay, config: { damping: 14, mass: 0.3 } });
+  const pulse = 1 + Math.sin(frame * 0.04 + icon.phase) * 0.06;
+
+  if (isHidden) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        transform: `translate(${x - icon.size / 2}px, ${y - icon.size / 2}px) scale(${enterScale * pulse})`,
+        opacity: iconsOpacity,
+        width: icon.size,
+        height: icon.size,
+        borderRadius: "50%",
+        overflow: "hidden",
+        backgroundColor: colors.surface2,
+        border: `2px solid ${colors.border}`,
+        boxShadow: `0 0 20px rgba(80, 227, 181, 0.15)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          width: showLightBackplate ? icon.size * 0.82 : icon.size,
+          height: showLightBackplate ? icon.size * 0.82 : icon.size,
+          borderRadius: "50%",
+          backgroundColor: showLightBackplate ? "#ffffff" : "transparent",
+          padding: showLightBackplate ? Math.max(4, icon.size * 0.09) : 0,
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <img
+          src={src}
+          alt={getBaseToken(icon.coin)}
+          style={{ width: "100%", height: "100%", display: "block", objectFit: "contain" }}
+          onError={() => {
+            const fallback = tokenIconFallbackUrl(icon.coin);
+            if (fallback && src !== fallback) {
+              setSrc(fallback);
+              return;
+            }
+
+            setIsHidden(true);
+          }}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const V2S03_LongOrShort: React.FC = () => {
   const frame = useCurrentFrame();
@@ -204,57 +234,16 @@ export const V2S03_LongOrShort: React.FC = () => {
 
       {/* Scattered icons across scene, with center text kept clear */}
       {SCATTER_ICONS.map((icon, i) => {
-        const driftX = Math.sin(frame * icon.speed + icon.phase) * icon.ampX;
-        const driftY = Math.cos(frame * icon.speed * 0.9 + icon.phase) * icon.ampY;
-        const x = interpolate(convergeProgress, [0, 1], [icon.x + driftX, 0], CLAMP);
-        const y = interpolate(convergeProgress, [0, 1], [icon.y + driftY, 0], CLAMP);
-
-        // Staggered entrance
-        const enterDelay = 8 + (i % 12);
-        const enterScale = frame < enterDelay
-          ? 0
-          : spring({ fps, frame: frame - enterDelay, config: { damping: 14, mass: 0.3 } });
-        const pulse = 1 + Math.sin(frame * 0.04 + icon.phase) * 0.06;
-
         return (
-          <div
+          <ScatterToken
             key={`${icon.coin}-${i}`}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: `translate(${x - icon.size / 2}px, ${y - icon.size / 2}px) scale(${enterScale * pulse})`,
-              opacity: iconsOpacity,
-              width: icon.size,
-              height: icon.size,
-              borderRadius: "50%",
-              overflow: "hidden",
-              backgroundColor: colors.surface2,
-              border: `2px solid ${colors.border}`,
-              boxShadow: `0 0 20px rgba(80, 227, 181, 0.15)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <img
-              src={tokenIconUrl(icon.coin)}
-              alt={icon.coin}
-              style={{ width: icon.size, height: icon.size, display: "block", objectFit: "cover" }}
-              onError={(e) => {
-                const el = e.currentTarget;
-                const fallback = tokenIconFallbackUrl(icon.coin);
-                if (fallback && el.src !== fallback) {
-                  el.src = fallback;
-                  return;
-                }
-                const finalFallback = tokenIconUrl("HYPE");
-                if (el.src !== finalFallback) {
-                  el.src = finalFallback;
-                }
-              }}
-            />
-          </div>
+            convergeProgress={convergeProgress}
+            frame={frame}
+            fps={fps}
+            icon={icon}
+            iconIndex={i}
+            iconsOpacity={iconsOpacity}
+          />
         );
       })}
     </AbsoluteFill>

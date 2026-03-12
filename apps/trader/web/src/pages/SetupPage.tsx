@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
+import { useAgentStatus } from "../hooks/use-agent-status";
 import { useNetwork } from "../lib/network-context";
 import { agentInit, agentComplete } from "../lib/api";
 import { createExchangeClientFromInjected, getErrorChainMessage } from "../lib/wallet-client";
@@ -26,6 +27,7 @@ export function SetupPage() {
   const { network } = useNetwork();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: agentStatusData, isLoading: statusLoading } = useAgentStatus(address, network);
 
   const [step, setStep] = useState<SetupStep>("init");
   const [agentAddress, setAgentAddress] = useState<string>("");
@@ -152,6 +154,77 @@ export function SetupPage() {
             Sign In
           </button>
         </div>
+      </div>
+    );
+  }
+
+  /* ── Agent already configured → show settings view ── */
+
+  if (statusLoading) {
+    return (
+      <div className="px-4 py-8">
+        <div className="animate-pulse space-y-3">
+          <div className="h-6 bg-surface-1 w-32" />
+          <div className="h-20 bg-surface-1" />
+        </div>
+      </div>
+    );
+  }
+
+  if (agentStatusData?.configured) {
+    const truncated = agentStatusData.agentAddress
+      ? `${agentStatusData.agentAddress.slice(0, 6)}...${agentStatusData.agentAddress.slice(-4)}`
+      : "—";
+
+    return (
+      <div className="px-4 py-4 pb-24">
+        <h1 className="text-xl font-semibold text-text-primary font-heading mb-2">Settings</h1>
+        <p className="text-text-muted text-sm mb-6">Your trading agent is active.</p>
+
+        <div className="bg-surface-2 border border-border p-4 space-y-4">
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-muted">Status</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-long">
+              <span className="w-1.5 h-1.5 rounded-full bg-long" />
+              Active
+            </span>
+          </div>
+
+          {/* Agent address */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-muted">Agent Address</span>
+            <button
+              onClick={() => {
+                if (agentStatusData.agentAddress) {
+                  void navigator.clipboard.writeText(agentStatusData.agentAddress);
+                }
+              }}
+              className="text-xs text-text-secondary hover:text-accent transition-colors"
+              title="Copy full address"
+            >
+              {truncated}
+            </button>
+          </div>
+
+          {/* Network */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-muted">Network</span>
+            <span className="text-xs text-text-secondary capitalize">{network}</span>
+          </div>
+
+          {/* Master wallet */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-muted">Master Wallet</span>
+            <span className="text-xs text-text-secondary">
+              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "—"}
+            </span>
+          </div>
+        </div>
+
+        <p className="text-xs text-text-dim mt-4 leading-relaxed">
+          The agent wallet can place orders on your behalf but cannot withdraw funds.
+        </p>
       </div>
     );
   }

@@ -213,6 +213,7 @@ export const S05_QuoteExecute: React.FC = () => {
                 leverageValue={20}
                 longActive={true}
                 hideButton={true}
+                hideQuoteSection={true}
               />
 
               {/* Quote box with shimmer */}

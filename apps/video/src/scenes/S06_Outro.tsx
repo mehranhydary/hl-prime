@@ -153,6 +153,7 @@ export const S06_Outro: React.FC = () => {
                     leverageValue={20}
                     longActive={true}
                     hideButton={true}
+                    hideQuoteSection={true}
                   />
 
                   {/* Quote box — fully expanded */}

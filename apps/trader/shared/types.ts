@@ -386,6 +386,39 @@ export interface TradeHistoryResponse {
   items: TradeHistoryItem[];
 }
 
+// ========== Swap ==========
+
+export interface SwapQuoteRequest {
+  network: Network;
+  userAddress: `0x${string}`;
+  fromToken: string;
+  toToken: string;
+  amount: number;
+}
+
+export interface SwapQuoteResponse {
+  spotMarket: string;
+  estimatedReceive: number;
+  estimatedCostBps: number;
+  fromTokenBalance: number;
+  insufficientBalance: boolean;
+  warnings: string[];
+}
+
+export interface SwapExecuteRequest extends SwapQuoteRequest {
+  maxSlippageBps?: number; // Default: 50
+}
+
+export interface SwapResult {
+  success: boolean;
+  fromToken: string;
+  toToken: string;
+  amountIn: string;
+  filled: string;
+  executedPrice: string;
+  error?: string;
+}
+
 // ========== Market Data ==========
 
 export type CandleInterval =

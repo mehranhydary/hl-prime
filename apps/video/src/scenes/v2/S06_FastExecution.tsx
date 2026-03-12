@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate } from "remotion";
 import { colors, fonts } from "../../styles/tokens";
+import { Confetti } from "../../components/Confetti";
 
 const CLAMP = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
@@ -34,32 +35,47 @@ export const V2S06_FastExecution: React.FC = () => {
     ? interpolate(countdownFrame, [0, 3, 9, 12], [0, 1, 1, 0], CLAMP)
     : 0;
 
-  // Phase 3: Flash "Orders Opened!" (frames 66-80)
-  const flashProgress = frame < 66
+  // Phase 3: Large center button reveal after the countdown.
+  const buttonProgress = frame < 66
     ? 0
     : spring({ fps, frame: frame - 66, config: { damping: 12, mass: 0.3 } });
-  const flashScale = interpolate(flashProgress, [0, 1], [0.5, 1], CLAMP);
-  const flashOpacity = frame >= 66 ? interpolate(frame, [66, 70, 78, 82], [0, 1, 1, 0], CLAMP) : 0;
+  const buttonScale = interpolate(buttonProgress, [0, 1], [0.6, 1], CLAMP);
+  const buttonOpacity = interpolate(frame, [66, 72], [0, 1], CLAMP);
 
-  // Phase 4: Long NVDA button (frames 78-105)
-  const buttonProgress = frame < 78
+  // Phase 4: Cursor slides in and clicks the button.
+  const cursorProgress = frame < 72
     ? 0
-    : spring({ fps, frame: frame - 78, config: { damping: 14, mass: 0.4 } });
-  const buttonScale = interpolate(buttonProgress, [0, 1], [0, 1], CLAMP);
+    : spring({ fps, frame: frame - 72, config: { damping: 14, mass: 0.35 } });
+  const cursorX = interpolate(cursorProgress, [0, 1], [1500, 1070], CLAMP);
+  const cursorY = interpolate(cursorProgress, [0, 1], [900, 575], CLAMP);
+  const cursorOpacity = interpolate(cursorProgress, [0, 0.3], [0, 1], CLAMP);
 
-  // Button click at frame 88
-  const isClicking = frame >= 88 && frame <= 92;
+  // Button click after cursor settles.
+  const isClicking = frame >= 82 && frame <= 86;
   const clickScale = isClicking
-    ? interpolate(frame, [88, 90, 92], [1, 0.95, 1], CLAMP)
+    ? interpolate(frame, [82, 84, 86], [1, 0.94, 1], CLAMP)
     : 1;
 
   // Glow after click
-  const clickGlow = frame >= 90
-    ? interpolate(frame, [90, 95], [0, 1], CLAMP)
+  const clickGlow = frame >= 84
+    ? interpolate(frame, [84, 90], [0, 1], CLAMP)
     : 0;
 
+  // Phase 5: Success page appears after the click completes.
+  const successProgress = frame < 88
+    ? 0
+    : spring({ fps, frame: frame - 88, config: { damping: 15, mass: 0.35 } });
+  const successScale = interpolate(successProgress, [0, 1], [0.86, 1], CLAMP);
+  const successOpacity = frame >= 88
+    ? interpolate(frame, [88, 92, 101, 105], [0, 1, 1, 0], CLAMP)
+    : 0;
+  const successY = interpolate(successProgress, [0, 1], [120, 0], CLAMP);
+
+  // Fade the button scene out as the success page comes in.
+  const buttonSceneOpacity = interpolate(frame, [88, 92], [1, 0], CLAMP);
+
   // Exit
-  const exitOpacity = interpolate(frame, [95, 105], [1, 0], CLAMP);
+  const exitOpacity = interpolate(frame, [101, 105], [1, 0], CLAMP);
 
   return (
     <AbsoluteFill
@@ -109,45 +125,32 @@ export const V2S06_FastExecution: React.FC = () => {
         </div>
       )}
 
-      {/* "Orders Opened!" flash */}
-      {frame >= 66 && frame < 82 && (
-        <div
-          style={{
-            position: "absolute",
-            fontFamily: fonts.heading,
-            fontSize: 80,
-            color: colors.long,
-            transform: `scale(${flashScale})`,
-            opacity: flashOpacity,
-            textShadow: `0 0 40px rgba(34, 197, 94, 0.5)`,
-          }}
-        >
-          Orders Opened!
-        </div>
-      )}
-
       {/* Long NVDA button */}
-      {frame >= 78 && (
+      {frame >= 66 && (
         <div
           style={{
             position: "absolute",
-            bottom: 300,
-            transform: `scale(${buttonScale * clickScale})`,
+            left: "50%",
+            top: "50%",
+            transform: `translate(-50%, -50%) scale(${buttonScale * clickScale})`,
             backgroundColor: colors.long,
-            padding: "20px 80px",
-            borderRadius: 12,
+            padding: "28px 120px",
+            borderRadius: 18,
             boxShadow: clickGlow > 0
-              ? `0 0 ${40 * clickGlow}px rgba(34, 197, 94, 0.5)`
-              : `0 4px 20px rgba(0,0,0,0.3)`,
+              ? `0 0 ${52 * clickGlow}px rgba(34, 197, 94, 0.5)`
+              : `0 10px 30px rgba(0,0,0,0.3)`,
             cursor: "pointer",
+            opacity: buttonOpacity * buttonSceneOpacity,
+            zIndex: 20,
           }}
         >
           <span
             style={{
               fontFamily: fonts.body,
-              fontSize: 36,
+              fontSize: 48,
               fontWeight: 700,
               color: "white",
+              letterSpacing: "0.02em",
             }}
           >
             Long NVDA
@@ -156,14 +159,14 @@ export const V2S06_FastExecution: React.FC = () => {
       )}
 
       {/* Click cursor on button */}
-      {frame >= 82 && frame < 95 && (
+      {frame >= 72 && frame < 92 && (
         <div
           style={{
             position: "absolute",
-            bottom: 270,
-            left: "50%",
-            transform: "translateX(40px)",
+            left: cursorX,
+            top: cursorY,
             zIndex: 100,
+            opacity: cursorOpacity * buttonSceneOpacity,
             filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
           }}
         >
@@ -191,6 +194,96 @@ export const V2S06_FastExecution: React.FC = () => {
             />
           )}
         </div>
+      )}
+
+      {/* Success page after click */}
+      {frame >= 88 && (
+        <>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 30,
+              pointerEvents: "none",
+            }}
+          >
+            <Confetti triggerFrame={90} count={54} originX={960} originY={360} />
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: "fit-content",
+              maxWidth: 820,
+              padding: "28px 34px 24px",
+              borderRadius: 28,
+              backgroundColor: colors.surface1,
+              border: `1px solid ${colors.border}`,
+              boxShadow: "0 24px 80px rgba(0,0,0,0.35)",
+              transform: `translate(-50%, -50%) translateY(${successY}px) scale(${successScale})`,
+              boxSizing: "border-box",
+              zIndex: 40,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: 68,
+                  height: 68,
+                  borderRadius: "50%",
+                  backgroundColor: colors.longMuted,
+                  border: `2px solid ${colors.long}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 0 40px rgba(34, 197, 94, 0.2)",
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={colors.long} strokeWidth="2.5">
+                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+
+              <div
+                style={{
+                  fontFamily: fonts.heading,
+                  fontSize: 66,
+                  color: colors.long,
+                  lineHeight: 1.05,
+                  textAlign: "left",
+                  textShadow: "0 0 34px rgba(34, 197, 94, 0.28)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Position opened
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontFamily: fonts.body,
+                fontSize: 28,
+                color: colors.textSecondary,
+                lineHeight: 1.35,
+                textAlign: "left",
+              }}
+            >
+              Long NVDA routed and filled
+            </div>
+          </div>
+        </>
       )}
     </AbsoluteFill>
   );

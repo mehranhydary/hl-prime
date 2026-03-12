@@ -11,6 +11,7 @@ import { TradePage } from "./pages/TradePage";
 import { SetupPage } from "./pages/SetupPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ReferralsPage } from "./pages/ReferralsPage";
+import { SwapPage } from "./pages/SwapPage";
 import { useAccessGate } from "./hooks/use-access-gate";
 import { useRealtimeUpdates } from "./hooks/use-realtime";
 import { Header } from "./components/Header";
@@ -103,6 +104,7 @@ function AppShell() {
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/referrals" element={<ReferralsPage />} />
           <Route path="/setup" element={<SetupPage />} />
+          <Route path="/swap" element={<SwapPage />} />
           <Route path="/trade/:asset" element={<TradePage />} />
           <Route path="*" element={<Navigate to="/markets" replace />} />
         </Routes>

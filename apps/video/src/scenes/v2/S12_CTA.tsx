@@ -10,6 +10,13 @@ const URL_TEXT = "app.hlprime.xyz";
 export const V2S12_CTA: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const urlTextStyle = {
+    fontFamily: fonts.heading,
+    fontSize: 88,
+    color: colors.accent,
+    letterSpacing: "0.01em",
+    whiteSpace: "nowrap" as const,
+  };
 
   // "Try it out on" slides up (frames 0-15)
   const line1Progress = spring({ fps, frame, config: { damping: 16, mass: 0.4 } });
@@ -56,7 +63,7 @@ export const V2S12_CTA: React.FC = () => {
         <span
           style={{
             fontFamily: fonts.body,
-            fontSize: 48,
+            fontSize: 88,
             color: colors.textSecondary,
             letterSpacing: "0.04em",
           }}
@@ -66,18 +73,27 @@ export const V2S12_CTA: React.FC = () => {
         <div
           style={{
             position: "relative",
-            display: "inline-flex",
+            display: "inline-block",
             alignItems: "baseline",
-            minHeight: 100,
-            minWidth: 640,
+            paddingBottom: 12,
           }}
         >
           <span
             style={{
-              fontFamily: fonts.heading,
-              fontSize: 88,
-              color: colors.accent,
-              letterSpacing: "0.01em",
+              ...urlTextStyle,
+              visibility: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            {URL_TEXT}
+          </span>
+
+          <span
+            style={{
+              ...urlTextStyle,
+              position: "absolute",
+              left: 0,
+              top: 0,
               opacity: urlOpacity,
               textShadow: glowPhase > 0
                 ? `0 0 ${30 * glowPhase}px rgba(80, 227, 181, ${0.4 * glowPhase})`

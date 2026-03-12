@@ -134,6 +134,7 @@ export const S06_QuoteGeneration: React.FC = () => {
             longActive={true}
             showExecute={true}
             buttonText={`Long ${MOCK_TRADE.asset}`}
+            hideQuoteSection={true}
           />
 
           {/* Quote box */}

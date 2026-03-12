@@ -90,6 +90,10 @@ function fmtPrice(n: number): string {
   return n.toFixed(4);
 }
 
+function fmtUsd(n: number): string {
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /** Format change percentage */
 function fmtChange(pct: number): string {
   const sign = pct >= 0 ? "+" : "";
@@ -147,8 +151,10 @@ export const MOCK_ADDRESS = "0x7A3f...8e21";
 const nvdaPrice = fmtPrice(latestPrice("xyz:NVDA"));
 const nvdaPriceNum = latestPrice("xyz:NVDA");
 const nvdaChange = priceChange24h("xyz:NVDA");
-// $5,000 amount × 20x leverage = $100,000 notional
-const nvdaNotional = 100000;
+const nvdaOrderValue = 5000;
+const nvdaLeverage = 20;
+const nvdaNotional = nvdaOrderValue;
+const nvdaMarginRequired = Number((nvdaOrderValue / nvdaLeverage).toFixed(2));
 const nvdaSize = (nvdaNotional / nvdaPriceNum).toFixed(6);
 const nvdaSizeShort = (nvdaNotional / nvdaPriceNum).toFixed(2);
 
@@ -157,8 +163,8 @@ export const MOCK_TRADE = {
   coin: "xyz:NVDA" as ChartAssetKey,
   assetName: "NVIDIA",
   side: "long" as const,
-  amount: "5000",
-  leverage: 20,
+  amount: String(nvdaOrderValue),
+  leverage: nvdaLeverage,
   currentPrice: nvdaPrice,
   priceChange: fmtChange(nvdaChange.change),
   fundingRate: "0.0018%",
@@ -170,12 +176,16 @@ export const MOCK_TRADE = {
 
 // ─── Quote (multi-venue: 4 legs, 2 active — matches real HL Prime UI) ───
 
-const kmSize = (parseFloat(nvdaSize) * 0.142).toFixed(6);
-const cashSize = (parseFloat(nvdaSize) * 0.858).toFixed(6);
+const KM_ROUTE_PROPORTION = 0.142;
+const CASH_ROUTE_PROPORTION = 0.858;
+const kmSize = (parseFloat(nvdaSize) * KM_ROUTE_PROPORTION).toFixed(6);
+const cashSize = (parseFloat(nvdaSize) * CASH_ROUTE_PROPORTION).toFixed(6);
+const kmCollateralRequired = Number((nvdaMarginRequired * KM_ROUTE_PROPORTION).toFixed(2));
+const cashCollateralRequired = Number((nvdaMarginRequired - kmCollateralRequired).toFixed(2));
 
 export const MOCK_QUOTE: MockQuote = {
   baseSize: nvdaSize,
-  usdNotional: `~$${(nvdaNotional - 33).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+  usdNotional: `~${fmtUsd(nvdaNotional)}`,
   legs: [
     {
       coin: "xyz:NVDA",
@@ -202,7 +212,7 @@ export const MOCK_QUOTE: MockQuote = {
     {
       coin: "km:NVDA",
       deployer: "km",
-      proportion: 0.142,
+      proportion: KM_ROUTE_PROPORTION,
       size: kmSize,
       price: `$${nvdaPrice}`,
       collateral: "USDH",
@@ -213,7 +223,7 @@ export const MOCK_QUOTE: MockQuote = {
     {
       coin: "cash:NVDA",
       deployer: "cash",
-      proportion: 0.858,
+      proportion: CASH_ROUTE_PROPORTION,
       size: cashSize,
       price: `$${nvdaPrice}`,
       collateral: "USDT",
@@ -223,7 +233,7 @@ export const MOCK_QUOTE: MockQuote = {
     },
   ],
   leverage: "20x",
-  marginRequired: "$250.00",
+  marginRequired: fmtUsd(nvdaMarginRequired),
   estimatedAvgPrice: `$${nvdaPrice}`,
   impactBps: "0.73 bps",
   fundingRate: "0.0018%",
@@ -256,21 +266,21 @@ export interface MockCollateralSwap {
 
 export const MOCK_COLLATERAL_PREP: MockCollateralSwap[] = [
   {
-    fromToken: "USDH",
+    fromToken: "USDC",
     toToken: "USDT",
-    amount: "~$432.94",
-    need: "$432.94",
+    amount: `~${fmtUsd(cashCollateralRequired)}`,
+    need: fmtUsd(cashCollateralRequired),
     have: "$0.00",
     impactBps: "0.5 bps est",
-    fromIconUrl: collateralIcon("usdh"),
+    fromIconUrl: collateralIcon("usdc"),
     toIconUrl: collateralIcon("usdt"),
   },
   {
     fromToken: "USDC",
     toToken: "USDH",
-    amount: "~$70.50",
-    need: "$71.74",
-    have: "$1.24",
+    amount: `~${fmtUsd(kmCollateralRequired)}`,
+    need: fmtUsd(kmCollateralRequired),
+    have: "$0.00",
     impactBps: "0.3 bps est",
     fromIconUrl: collateralIcon("usdc"),
     toIconUrl: collateralIcon("usdh"),
@@ -280,7 +290,7 @@ export const MOCK_COLLATERAL_PREP: MockCollateralSwap[] = [
 export const MOCK_SWAP = {
   fromToken: "USDC",
   toToken: "USDT",
-  amount: "$175.00",
+  amount: fmtUsd(cashCollateralRequired),
   fromIconUrl: collateralIcon("usdc"),
   toIconUrl: collateralIcon("usdt"),
   reason: "cash:NVDA requires USDT collateral",

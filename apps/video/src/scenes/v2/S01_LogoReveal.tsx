@@ -18,14 +18,18 @@ export const V2S01_LogoReveal: React.FC = () => {
 
   // Subtle glow pulse after reveal (frames 40+)
   const pulsePhase = frame > 40 ? Math.sin((frame - 40) * 0.1) * 0.15 + 0.85 : 1;
-  const finalGlow = glowIntensity * pulsePhase;
+  const glowFadeOut = interpolate(frame, [56, 70], [1, 0], CLAMP);
+  const finalGlow = glowIntensity * pulsePhase * glowFadeOut;
 
   // Phase 2: Everything zooms in (frames 65-90) — scale up + fade out
   const zoomOutProgress = frame < 65
     ? 0
     : spring({ fps, frame: frame - 65, config: { damping: 12, mass: 0.5 } });
-  const exitScale = interpolate(zoomOutProgress, [0, 1], [1, 3], CLAMP);
-  const exitOpacity = interpolate(frame, [70, 88], [1, 0], CLAMP);
+  const exitScale = interpolate(zoomOutProgress, [0, 1], [1, 2.2], CLAMP);
+  const exitOpacity = interpolate(frame, [68, 84], [1, 0], CLAMP);
+  const textShadow = finalGlow > 0.02
+    ? `0 0 ${24 * finalGlow}px rgba(80, 227, 181, ${0.4 * finalGlow}), 0 0 ${48 * finalGlow}px rgba(80, 227, 181, ${0.18 * finalGlow})`
+    : "none";
 
   return (
     <AbsoluteFill
@@ -42,10 +46,12 @@ export const V2S01_LogoReveal: React.FC = () => {
           fontFamily: fonts.logo,
           fontSize: 360,
           color: colors.accent,
-          transform: `scale(${logoScale * exitScale})`,
+          transform: `translateZ(0) scale(${logoScale * exitScale})`,
           opacity: exitOpacity,
-          textShadow: `0 0 ${50 * finalGlow}px rgba(80, 227, 181, ${0.6 * finalGlow}), 0 0 ${100 * finalGlow}px rgba(80, 227, 181, ${0.3 * finalGlow})`,
+          textShadow,
           lineHeight: 1,
+          transformOrigin: "center center",
+          willChange: "transform, opacity",
         }}
       >
         P

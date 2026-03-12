@@ -10,14 +10,17 @@ export const V2S02_SayHello: React.FC = () => {
 
   // Whole line slides in from left (frames 0-15)
   const lineProgress = spring({ fps, frame, config: { damping: 18, mass: 0.4 } });
-  const lineX = interpolate(lineProgress, [0, 1], [-600, 0], CLAMP);
+  const lineX = interpolate(lineProgress, [0, 1], [-520, 0], CLAMP);
   const lineOpacity = interpolate(lineProgress, [0, 0.3], [0, 1], CLAMP);
 
   // Glow on "Prime" (frames 15-30)
-  const primeGlow = interpolate(frame, [15, 30], [0, 1], CLAMP);
+  const primeGlow = interpolate(frame, [18, 30], [0, 1], CLAMP);
 
   // Exit fade (frames 40-50)
   const exitOpacity = interpolate(frame, [40, 50], [1, 0], CLAMP);
+  const primeShadow = primeGlow > 0.02
+    ? `0 0 ${18 * primeGlow}px rgba(80, 227, 181, ${0.32 * primeGlow}), 0 0 ${32 * primeGlow}px rgba(80, 227, 181, ${0.14 * primeGlow})`
+    : "none";
 
   return (
     <AbsoluteFill
@@ -34,8 +37,9 @@ export const V2S02_SayHello: React.FC = () => {
           display: "flex",
           alignItems: "baseline",
           gap: 20,
-          transform: `translateX(${lineX}px)`,
+          transform: `translate3d(${lineX}px, 0, 0)`,
           opacity: lineOpacity,
+          willChange: "transform, opacity",
         }}
       >
         <span
@@ -54,7 +58,7 @@ export const V2S02_SayHello: React.FC = () => {
             fontSize: 88,
             color: colors.accent,
             letterSpacing: "0.02em",
-            textShadow: `0 0 ${50 * primeGlow}px rgba(80, 227, 181, ${0.5 * primeGlow}), 0 0 ${100 * primeGlow}px rgba(80, 227, 181, ${0.2 * primeGlow})`,
+            textShadow: primeShadow,
           }}
         >
           Prime
