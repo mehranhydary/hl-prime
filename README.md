@@ -1,10 +1,10 @@
-# Hyperliquid Prime
+# Hyperliquid Prime (hl-prime)
 
 A TypeScript SDK that acts as a **prime broker layer** on top of Hyperliquid's perp markets — both native (ETH, BTC) and HIP-3 deployer markets (xyz's TSLA, Hyena's ETH). When multiple venues list the same asset with different collateral types (USDC, USDH, USDT0), Hyperliquid Prime automatically discovers all markets, compares liquidity/funding/cost, and routes to the best execution — presenting a single unified trading interface.
 
 ## The Problem
 
-Hyperliquid has native perpetual markets (ETH, BTC, SOL) and HIP-3, which allows anyone to deploy additional perp markets. This means ETH can be traded on both the native HL market *and* third-party deployers like Hyena — each with different liquidity depth and funding rates. Similarly, TSLA exists across multiple HIP-3 venues (xyz, flx, km, cash) with different collateral types. Traders are left manually comparing across fragmented markets.
+Hyperliquid has native perpetual markets (ETH, BTC, SOL) and HIP-3, which allows anyone to deploy additional perp markets. This means ETH can be traded on both the native HL market _and_ third-party deployers like Hyena — each with different liquidity depth and funding rates. Similarly, TSLA exists across multiple HIP-3 venues (xyz, flx, km, cash) with different collateral types. Traders are left manually comparing across fragmented markets.
 
 ## What Hyperliquid Prime Does
 
@@ -212,6 +212,7 @@ When you call `hp.quoteSplit("TSLA", "buy", 200)`, the router:
 5. **Defers collateral estimation** to `executeSplit()` so balances and swap costs are resolved from live account state at execution time
 
 On execution, the system automatically:
+
 - Enables **DEX abstraction** (Hyperliquid's unified account mode)
 - **Transfers** USDC from perp to spot if needed
 - **Swaps** USDC → target tokens (e.g., USDH) via spot market
@@ -262,6 +263,7 @@ const hp = new HyperliquidPrime({
 The builder fee only applies to orders placed through `execute()`, `executeSplit()`, and their convenience wrappers (`long`, `short`, `longSplit`, `shortSplit`). Raw provider calls via `hp.api` are never affected.
 
 CLI flag to disable:
+
 ```bash
 HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 ```
@@ -270,27 +272,27 @@ HP_PRIVATE_KEY=0x... hp long TSLA 50 --no-builder-fee
 
 ### Read-Only Methods
 
-| Method                           | Description                                  |
-| -------------------------------- | -------------------------------------------- |
-| `getMarkets(asset)`              | All perp markets for an asset (native + HIP-3) |
-| `getAggregatedMarkets()`         | Asset groups with multiple markets            |
-| `getAggregatedBook(asset)`       | Merged orderbook across all markets           |
-| `getFundingComparison(asset)`    | Funding rates compared across markets         |
-| `quote(asset, side, size, options?)`       | Routing quote for single best market          |
-| `quoteSplit(asset, side, size, options?)`  | Split quote across multiple markets           |
+| Method                                             | Description                                                |
+| -------------------------------------------------- | ---------------------------------------------------------- |
+| `getMarkets(asset)`                                | All perp markets for an asset (native + HIP-3)             |
+| `getAggregatedMarkets()`                           | Asset groups with multiple markets                         |
+| `getAggregatedBook(asset)`                         | Merged orderbook across all markets                        |
+| `getFundingComparison(asset)`                      | Funding rates compared across markets                      |
+| `quote(asset, side, size, options?)`               | Routing quote for single best market                       |
+| `quoteSplit(asset, side, size, options?)`          | Split quote across multiple markets                        |
 | `estimateSplitCollateral(splitPlan, userAddress?)` | Read-only collateral requirement estimate for a split plan |
 
 ### Trading Methods (wallet required)
 
-| Method                    | Description                                       |
-| ------------------------- | ------------------------------------------------- |
-| `execute(plan)`           | Execute a single-market quote                     |
-| `executeSplit(plan)`      | Execute a split quote (handles collateral swaps)  |
-| `long(asset, size, options?)`       | Quote + execute a long on best market             |
-| `short(asset, size, options?)`      | Quote + execute a short on best market            |
-| `longSplit(asset, size, options?)`  | Split quote + execute a long across markets       |
-| `shortSplit(asset, size, options?)` | Split quote + execute a short across markets      |
-| `close(asset)`            | Close all positions for an asset                  |
+| Method                              | Description                                      |
+| ----------------------------------- | ------------------------------------------------ |
+| `execute(plan)`                     | Execute a single-market quote                    |
+| `executeSplit(plan)`                | Execute a split quote (handles collateral swaps) |
+| `long(asset, size, options?)`       | Quote + execute a long on best market            |
+| `short(asset, size, options?)`      | Quote + execute a short on best market           |
+| `longSplit(asset, size, options?)`  | Split quote + execute a long across markets      |
+| `shortSplit(asset, size, options?)` | Split quote + execute a short across markets     |
+| `close(asset)`                      | Close all positions for an asset                 |
 
 ### Trade Options
 
@@ -298,35 +300,36 @@ Most quote/one-step methods accept optional trade options:
 
 ```typescript
 interface TradeExecutionOptions {
-  leverage?: number; // Positive number, e.g. 5 for 5x
-  isCross?: boolean; // Default true (cross); false = isolated
+	leverage?: number // Positive number, e.g. 5 for 5x
+	isCross?: boolean // Default true (cross); false = isolated
 }
 ```
 
 Notes:
+
 - `isCross` requires `leverage` (margin mode is only set when leverage is explicitly requested).
 - If `leverage` is omitted, the SDK does not call `setLeverage` and uses exchange/account defaults.
 - Quotes may include `warnings` (e.g. partial market data, leverage clamping, or collateral fallback to USDC).
 
 ### Position & Balance
 
-| Method                  | Description                        |
-| ----------------------- | ---------------------------------- |
-| `getPositions()`        | `WithWarnings<LogicalPosition[]>` |
+| Method                  | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `getPositions()`        | `WithWarnings<LogicalPosition[]>`              |
 | `getGroupedPositions()` | `WithWarnings<Map<string, LogicalPosition[]>>` |
-| `getBalance()`          | Account margin summary             |
+| `getBalance()`          | Account margin summary                         |
 
 `getPositions()` and `getGroupedPositions()` return `{ data, warnings }`. Handle warnings to detect partial/degraded reads.
 
 ### Agent, Abstraction & Referral
 
-| Method                                 | Description                                                   |
-| -------------------------------------- | ------------------------------------------------------------- |
-| `approveAgent(agentAddress, agentName?)` | Approve an agent wallet to trade for the account (master signs) |
-| `listAgents()`                         | List approved agent wallets                                   |
-| `setAbstraction(mode)`                 | Set abstraction mode as master (`dexAbstraction`, `unifiedAccount`, `portfolioMargin`, `disabled`) |
-| `agentSetAbstraction(mode)`            | Set abstraction mode as agent (`"i"`, `"u"`, `"p"`)          |
-| `getReferral(user)`                    | Fetch referral state/rewards for any user                     |
+| Method                                   | Description                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `approveAgent(agentAddress, agentName?)` | Approve an agent wallet to trade for the account (master signs)                                    |
+| `listAgents()`                           | List approved agent wallets                                                                        |
+| `setAbstraction(mode)`                   | Set abstraction mode as master (`dexAbstraction`, `unifiedAccount`, `portfolioMargin`, `disabled`) |
+| `agentSetAbstraction(mode)`              | Set abstraction mode as agent (`"i"`, `"u"`, `"p"`)                                                |
+| `getReferral(user)`                      | Fetch referral state/rewards for any user                                                          |
 
 ### Lifecycle
 
@@ -397,11 +400,13 @@ Hyperliquid Prime includes an [OpenClaw](https://openclaw.ai) skill for AI-assis
 ### Installation
 
 Install the skill via ClawHub:
+
 ```bash
 clawhub install mehranhydary/hl-prime
 ```
 
 Or manually clone to your OpenClaw skills directory:
+
 ```bash
 cd ~/.openclaw/skills
 git clone https://github.com/mehranhydary/hl-prime.git hyperliquid-prime
@@ -425,6 +430,7 @@ Once the skill is installed, you can trade via conversational commands:
 ### How It Works
 
 The OpenClaw skill provides:
+
 - **Natural language market discovery** — "Find all markets for AAPL"
 - **Intelligent routing guidance** — AI explains which market is best and why
 - **Split order optimization** — "Split 200 TSLA across venues for lowest cost"
