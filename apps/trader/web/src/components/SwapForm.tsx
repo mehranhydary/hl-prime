@@ -98,6 +98,9 @@ export function SwapForm({ balance }: SwapFormProps) {
   async function handleSwap() {
     if (!address || !isValidAmount) return;
 
+    const swapId = `swap-${fromToken}-${toToken}-${Date.now()}`;
+    toast.loading(`Swapping ${parsedAmount.toFixed(2)} ${fromToken} → ${toToken}...`, { id: swapId });
+
     try {
       const result = await executeMutation.mutateAsync({
         network,
@@ -107,14 +110,18 @@ export function SwapForm({ balance }: SwapFormProps) {
         amount: parsedAmount,
       });
 
-      if (result.success) {
-        toast.success(`Swapped ${result.filled} ${toToken}`);
+      const filled = parseFloat(result.filled);
+      const didFill = result.success && Number.isFinite(filled) && filled > 0;
+
+      if (didFill) {
+        toast.success(`Swapped ${result.filled} ${toToken} @ ${result.executedPrice}`, { id: swapId });
         setAmount("");
       } else {
-        toast.error(result.error ?? "Swap failed");
+        const reason = result.error ?? "Order did not fill — try again or adjust amount";
+        toast.error(reason, { id: swapId });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Swap execution failed");
+      toast.error(err instanceof Error ? err.message : "Swap execution failed", { id: swapId });
     }
   }
 

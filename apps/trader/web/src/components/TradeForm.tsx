@@ -15,8 +15,28 @@ import {
 } from "../lib/display";
 import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest, ExecutePreviewResponse } from "@shared/types";
 import { useNavigate } from "react-router-dom";
-import { runMasterPreTradeActions, isBuilderFeeAlreadyApproved } from "../lib/hl-master-actions";
+import { runMasterPreTradeActions, isBuilderFeeAlreadyApproved, type PreTradeProgress } from "../lib/hl-master-actions";
 import { ApiError, tradeExecutePreview } from "../lib/api";
+
+function createSwapProgressToasts(): PreTradeProgress {
+  return {
+    onSwapStart(fromToken, toToken, amount) {
+      toast.loading(`Swapping ~${amount.toFixed(2)} ${fromToken} → ${toToken}...`, {
+        id: `swap-${fromToken}-${toToken}`,
+      });
+    },
+    onSwapComplete(fromToken, toToken, filled) {
+      toast.success(`Swapped ${filled} ${toToken}`, {
+        id: `swap-${fromToken}-${toToken}`,
+      });
+    },
+    onSwapError(fromToken, toToken, error) {
+      toast.error(`${fromToken} → ${toToken}: ${error}`, {
+        id: `swap-${fromToken}-${toToken}`,
+      });
+    },
+  };
+}
 
 interface TradeFormProps {
   asset: string;
@@ -305,6 +325,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
           network,
           routeSummary: executionRouteSummary,
           collateralPreview: executionCollateralPreview,
+          progress: createSwapProgressToasts(),
         });
       }
     } catch (error) {
@@ -354,6 +375,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
             network,
             routeSummary: activeQuote.routeSummary,
             collateralPreview: activeQuote.collateralPreview,
+            progress: createSwapProgressToasts(),
           });
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
