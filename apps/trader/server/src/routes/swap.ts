@@ -17,6 +17,7 @@ import {
   requireString,
   ValidationError,
 } from "../utils/validation.js";
+import { audit } from "../utils/audit.js";
 
 const SUPPORTED_STABLES = new Set([
   "USDC",
@@ -409,6 +410,15 @@ export function swapRoutes(config: ServerConfig): Router {
 
       const status = result.statuses[0];
       if (typeof status === "object" && "filled" in status) {
+        audit({
+          event: "swap.execute",
+          ip: req.ip,
+          privyUserId: req.auth?.privyUserId,
+          wallet: userAddress,
+          network,
+          success: true,
+          meta: { fromToken, toToken, amount, filled: status.filled.totalSz },
+        });
         const response: SwapResult = {
           success: true,
           fromToken,
@@ -419,6 +429,16 @@ export function swapRoutes(config: ServerConfig): Router {
         };
         res.json(response);
       } else if (typeof status === "object" && "error" in status) {
+        audit({
+          event: "swap.execute_failed",
+          ip: req.ip,
+          privyUserId: req.auth?.privyUserId,
+          wallet: userAddress,
+          network,
+          success: false,
+          error: status.error,
+          meta: { fromToken, toToken, amount },
+        });
         const response: SwapResult = {
           success: false,
           fromToken,
@@ -430,6 +450,16 @@ export function swapRoutes(config: ServerConfig): Router {
         };
         res.json(response);
       } else {
+        audit({
+          event: "swap.execute_failed",
+          ip: req.ip,
+          privyUserId: req.auth?.privyUserId,
+          wallet: userAddress,
+          network,
+          success: false,
+          error: "Order did not fill",
+          meta: { fromToken, toToken, amount },
+        });
         const response: SwapResult = {
           success: false,
           fromToken,

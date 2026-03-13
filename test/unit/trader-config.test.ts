@@ -10,6 +10,9 @@ describe("loadConfig", () => {
     process.env.TRADER_STORE_PASSPHRASE = "test-passphrase-1234";
     process.env.TRADER_ALLOWED_ORIGINS = "http://localhost:3000";
     process.env.TRADER_APP_PASSWORD = "test-app-password";
+    // Privy env vars required when authEnabled=true (the default)
+    process.env.TRADER_PRIVY_APP_ID = "test-privy-app-id";
+    process.env.TRADER_PRIVY_JWT_VERIFICATION_KEY = "test-privy-jwt-key";
   });
 
   afterEach(() => {
@@ -177,6 +180,8 @@ describe("loadConfig", () => {
     delete process.env.TRADER_STORE_PASSPHRASE;
     process.env.TRADER_SIGNER_BACKEND = "privy";
     process.env.TRADER_SIGNER_LOCAL_FALLBACK = "false";
+    process.env.TRADER_PRIVY_APP_SECRET = "test-privy-app-secret";
+    process.env.TRADER_PRIVY_AUTHORIZATION_KEY = "test-privy-auth-key";
     const config = loadConfig();
     expect(config.storePassphrase).toBeNull();
   });

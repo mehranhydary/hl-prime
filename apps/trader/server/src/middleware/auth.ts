@@ -6,6 +6,7 @@ import type { ServerConfig } from "../config.js";
 import { getRuntimeStateStore } from "../services/runtime-state.js";
 import { extractLinkedExternalWalletAddresses, getPrivyUser, verifyPrivyAccessToken } from "../services/privy.js";
 import { parseNetwork, ValidationError } from "../utils/validation.js";
+import { audit } from "../utils/audit.js";
 
 const WS_TICKET_TTL_MS = 30_000;
 
@@ -104,6 +105,12 @@ export function sessionAuth(config: Pick<ServerConfig, "authEnabled" | "privy">)
       const linkedWalletAddresses = extractLinkedExternalWalletAddresses(user);
       const requestedAddress = readRequestedAddress(authReq);
       if (requestedAddress && !linkedWalletAddresses.includes(requestedAddress)) {
+        audit({
+          event: "auth.forbidden",
+          ip: req.ip,
+          privyUserId: verified.userId,
+          wallet: requestedAddress,
+        });
         res.status(403).json({
           error: "Requested address does not belong to the authenticated Privy user",
           code: "FORBIDDEN",
@@ -125,6 +132,7 @@ export function sessionAuth(config: Pick<ServerConfig, "authEnabled" | "privy">)
         res.status(400).json({ error: message, code: "BAD_REQUEST" });
         return;
       }
+      audit({ event: "auth.session_failed", ip: req.ip, error: message });
       res.status(401).json({ error: message, code: "AUTH_FAILED" });
     }
   };

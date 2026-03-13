@@ -9,6 +9,8 @@ export interface ServerConfig {
   storePassphrase: string | null;
   appPassword: string;
   appPasswordTtlMs: number;
+  /** Enable the password gate (app-wide access barrier). Default: true. */
+  passwordGateEnabled: boolean;
   defaultNetwork: Network;
   stableTokens: string[];
   defaultBuilderAddress: `0x${string}`;
@@ -28,6 +30,8 @@ export interface ServerConfig {
   runtimeStateBackend: "memory" | "sqlite";
   /** Runtime state sqlite path when backend=sqlite. */
   runtimeStateSqlitePath: string;
+  /** IP allowlist. Empty = all IPs allowed. */
+  allowedIps: string[];
   /** Signer backend. */
   signerBackend: "local" | "privy";
   /** Emergency fallback to local encrypted signer store while primary backend is privy. */
@@ -121,6 +125,11 @@ export function loadConfig(): ServerConfig {
     : [];
   const devInsecure = parseBooleanEnv(process.env.TRADER_DEV_INSECURE, false);
   const authEnabled = parseBooleanEnv(process.env.TRADER_AUTH_ENABLED, true);
+  const passwordGateEnabled = parseBooleanEnv(process.env.TRADER_PASSWORD_GATE_ENABLED, true);
+  const allowedIpsRaw = process.env.TRADER_ALLOWED_IPS;
+  const allowedIps = allowedIpsRaw
+    ? allowedIpsRaw.split(",").map((ip) => ip.trim()).filter(Boolean)
+    : [];
   const productionRuntime = isProductionRuntime();
   const signerBackend = (process.env.TRADER_SIGNER_BACKEND ?? "local").trim().toLowerCase() === "privy"
     ? "privy"
@@ -221,6 +230,12 @@ export function loadConfig(): ServerConfig {
       "TRADER_ENABLE_DEBUG_ROUTES=true is not allowed in production runtime (NODE_ENV=production/Railway).",
     );
   }
+  if (!passwordGateEnabled && !authEnabled) {
+    throw new Error(
+      "TRADER_PASSWORD_GATE_ENABLED=false requires TRADER_AUTH_ENABLED=true. " +
+      "At least one authentication layer must be active.",
+    );
+  }
 
   const portRaw = process.env.TRADER_PORT ?? process.env.PORT ?? "4400";
   const parsedPort = parseInt(portRaw, 10);
@@ -260,6 +275,7 @@ export function loadConfig(): ServerConfig {
     storePassphrase: passphrase,
     appPassword,
     appPasswordTtlMs,
+    passwordGateEnabled,
     defaultNetwork: (process.env.TRADER_DEFAULT_NETWORK as Network) ?? "mainnet",
     stableTokens,
     defaultBuilderAddress: (process.env.TRADER_BUILDER_ADDRESS as `0x${string}`) ??
@@ -272,6 +288,7 @@ export function loadConfig(): ServerConfig {
     allowedOrigins,
     authEnabled,
     devInsecure,
+    allowedIps,
     runtimeStateBackend,
     runtimeStateSqlitePath,
     signerBackend,

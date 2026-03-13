@@ -34,6 +34,7 @@ import {
   requireString,
   ValidationError,
 } from "../utils/validation.js";
+import { audit } from "../utils/audit.js";
 
 interface CachedQuote {
   id: string;
@@ -1534,6 +1535,20 @@ export function tradeRoutes(config: ServerConfig): Router {
       const signer = await resolveSigner(service, cached.masterAddress, cached.network);
       timing.mark("resolveSigner");
 
+      audit({
+        event: result.success ? "trade.execute" : "trade.execute_failed",
+        ip: req.ip,
+        privyUserId: (req as AuthenticatedRequest).auth?.privyUserId,
+        wallet: cached.masterAddress,
+        network: cached.network,
+        asset: cached.asset,
+        side: cached.side,
+        usdNotional: cached.resolvedUsdNotional,
+        success: result.success,
+        error: result.error,
+        meta: { quoteId, legs: splitPlanToExecute.legs.length, manual: manualAdjusted },
+      });
+
       const historyItem = createHistoryItem({
         clickedAt,
         network: cached.network,
@@ -1682,6 +1697,20 @@ export function tradeRoutes(config: ServerConfig): Router {
       const result = toTradeResult(receipt);
       const signer = await resolveSigner(service, masterAddress, resolvedNetwork);
       timing.mark("resolveSigner");
+
+      audit({
+        event: result.success ? "trade.quick" : "trade.quick_failed",
+        ip: req.ip,
+        privyUserId: (req as AuthenticatedRequest).auth?.privyUserId,
+        wallet: masterAddress,
+        network: resolvedNetwork,
+        asset,
+        side,
+        usdNotional: resolvedUsdNotional,
+        success: result.success,
+        error: result.error,
+        meta: { legs: splitPlan!.legs.length },
+      });
 
       await tradeHistoryStore(config).append(createHistoryItem({
         clickedAt,
@@ -1968,6 +1997,18 @@ export function tradeRoutes(config: ServerConfig): Router {
           : [],
       );
       const result = toCloseTradeResult(receipts);
+
+      audit({
+        event: result.success ? "trade.close" : "trade.close_failed",
+        ip: req.ip,
+        privyUserId: (req as AuthenticatedRequest).auth?.privyUserId,
+        wallet: masterAddress,
+        network: resolvedNetwork,
+        asset: closeTarget,
+        success: result.success,
+        error: result.error,
+        meta: { legs: result.legs.length, agentFallback: usedAgentFallback },
+      });
 
       const requestedBaseSize = receipts.reduce(
         (sum, receipt) => sum + toFiniteNumber(String(receipt?.requestedSize ?? "0")),

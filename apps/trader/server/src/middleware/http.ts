@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { audit } from "../utils/audit.js";
 
 interface RateLimitOptions {
   windowMs: number;
@@ -68,6 +69,7 @@ function contentSecurityPolicy(insecure = false): string {
     `connect-src ${connectSrc}`,
     "worker-src 'self'",
     "manifest-src 'self'",
+    "upgrade-insecure-requests",
   ].join("; ");
 }
 
@@ -81,7 +83,9 @@ export function securityHeaders(insecure = false) {
   return (_req: Request, res: Response, next: NextFunction): void => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
     res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     res.setHeader("Content-Security-Policy", contentSecurityPolicy(insecure));
     if (!insecure) {
@@ -157,6 +161,11 @@ export function memoryRateLimit(options: RateLimitOptions) {
       }
       const retryAfterSec = Math.max(1, Math.ceil((state.resetAt - now) / 1000));
       res.setHeader("Retry-After", String(retryAfterSec));
+      audit({
+        event: "rate_limit.exceeded",
+        ip: req.ip,
+        meta: { prefix: options.keyPrefix, path: req.originalUrl },
+      });
       res.status(429).json({
         error: "Too many requests",
         code: "RATE_LIMITED",
@@ -165,5 +174,27 @@ export function memoryRateLimit(options: RateLimitOptions) {
     }
 
     next();
+  };
+}
+
+/**
+ * IP allowlist middleware. When `allowedIps` is non-empty, only requests
+ * originating from one of the listed IPs are permitted. All others receive
+ * a 403 with no further detail to avoid information leakage.
+ */
+export function ipAllowlist(allowedIps: string[]) {
+  if (allowedIps.length === 0) {
+    return (_req: Request, _res: Response, next: NextFunction): void => { next(); };
+  }
+
+  const allowed = new Set(allowedIps.map((ip) => ip.trim()));
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const clientIp = req.ip ?? req.socket.remoteAddress ?? "";
+    if (allowed.has(clientIp)) {
+      next();
+      return;
+    }
+    audit({ event: "ip_blocked", ip: clientIp });
+    res.status(403).json({ error: "Forbidden", code: "IP_BLOCKED" });
   };
 }

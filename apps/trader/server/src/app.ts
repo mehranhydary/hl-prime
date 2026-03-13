@@ -4,8 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ServerConfig } from "./config.js";
 import { authRoutes, sessionAuth } from "./middleware/auth.js";
-import { memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
+import { ipAllowlist, memoryRateLimit, requestLogger, securityHeaders } from "./middleware/http.js";
 import { passwordGateRoutes, requireAppAccess, requireWebAppAccess } from "./middleware/password-gate.js";
+import { anomalyDetection } from "./middleware/anomaly.js";
 import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
 import { tradeRoutes } from "./routes/trade.js";
@@ -34,6 +35,7 @@ export function createApp(config: ServerConfig) {
 
   app.use(requestLogger());
   app.use(securityHeaders(config.devInsecure));
+  app.use(ipAllowlist(config.allowedIps));
 
   app.use(cors({
     origin: config.devInsecure ? true : config.allowedOrigins,
@@ -67,21 +69,26 @@ export function createApp(config: ServerConfig) {
   app.use("/api/trade", memoryRateLimit({
     keyPrefix: "trade",
     windowMs: 60_000,
-    max: 120,
+    max: 60,
+    backoff: true,
   }));
   app.use("/api/swap", memoryRateLimit({
     keyPrefix: "swap",
     windowMs: 60_000,
-    max: 60,
+    max: 30,
+    backoff: true,
   }));
 
   app.use("/api", healthRoutes(config));
-  app.use("/api/access", passwordGateRoutes(config));
-  app.use("/api", requireAppAccess(config));
+  if (config.passwordGateEnabled) {
+    app.use("/api/access", passwordGateRoutes(config));
+    app.use("/api", requireAppAccess(config));
+  }
   app.use("/api/auth", authRoutes(config));
 
   if (config.authEnabled) {
     app.use("/api", sessionAuth(config));
+    app.use("/api", anomalyDetection());
     console.log("Privy bearer-token auth enabled");
   }
 
@@ -95,24 +102,30 @@ export function createApp(config: ServerConfig) {
   const webDist = path.join(process.cwd(), "dist", "web");
   const webIndex = path.join(webDist, "index.html");
   if (fs.existsSync(webIndex)) {
-    const gateWebRoutes = requireWebAppAccess(config);
     app.get("/index.html", (_req, res) => {
       res.redirect(302, "/");
     });
 
     app.use(express.static(webDist, { index: false }));
 
-    app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
-      const reqPath = normalizeWebPath(req.path);
-      if (PUBLIC_WEB_PATHS.has(reqPath)) {
-        res.sendFile(webIndex);
-        return;
-      }
+    if (config.passwordGateEnabled) {
+      const gateWebRoutes = requireWebAppAccess(config);
+      app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
+        const reqPath = normalizeWebPath(req.path);
+        if (PUBLIC_WEB_PATHS.has(reqPath)) {
+          res.sendFile(webIndex);
+          return;
+        }
 
-      gateWebRoutes(req, res, () => {
+        gateWebRoutes(req, res, () => {
+          res.sendFile(webIndex);
+        });
+      });
+    } else {
+      app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
         res.sendFile(webIndex);
       });
-    });
+    }
   }
 
   // Global catch-all error handler — prevents unhandled errors from leaking

@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { ServerConfig } from "../config.js";
 import { clearAuthCookie, readCookie, setAuthCookie } from "../utils/cookies.js";
 import { getRuntimeStateStore } from "../services/runtime-state.js";
+import { audit } from "../utils/audit.js";
 
 const APP_ACCESS_TOKEN_HEADER = "x-trader-access-token";
 const APP_ACCESS_TOKEN_COOKIE = "trader_access_token";
@@ -125,10 +126,12 @@ export function passwordGateRoutes(config: ServerConfig): Router {
     }
 
     if (!passwordMatches(body.password, config.appPassword)) {
+      audit({ event: "password_gate.verify_failed", ip: req.ip });
       res.status(401).json({ error: "Invalid password", code: "APP_AUTH_FAILED" });
       return;
     }
 
+    audit({ event: "password_gate.verify", ip: req.ip, success: true });
     const expiresAt = Date.now() + config.appPasswordTtlMs;
     const accessGrantId = randomBytes(16).toString("hex");
     stateStore().putAccessGrant(accessGrantId, expiresAt);
@@ -151,6 +154,7 @@ export function passwordGateRoutes(config: ServerConfig): Router {
         stateStore().deleteAccessGrant(payload.id);
       }
     }
+    audit({ event: "password_gate.logout", ip: req.ip });
     clearAuthCookie(res, {
       name: APP_ACCESS_TOKEN_COOKIE,
       secure: secureCookie,

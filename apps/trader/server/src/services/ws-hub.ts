@@ -110,10 +110,12 @@ export class WebSocketHub {
 
   private validateAuth(request: AuthorizedUpgradeRequest, requestedAddress: string | null = null): boolean {
     // Enforce the same password-gate check that HTTP routes use via requireAppAccess.
-    const cookies = parseCookieHeader(request.headers.cookie);
-    const accessToken = cookies[APP_ACCESS_TOKEN_COOKIE];
-    if (!accessToken || !isValidAppAccessToken(accessToken, this.config.appPassword)) {
-      return false;
+    if (this.config.passwordGateEnabled) {
+      const cookies = parseCookieHeader(request.headers.cookie);
+      const accessToken = cookies[APP_ACCESS_TOKEN_COOKIE];
+      if (!accessToken || !isValidAppAccessToken(accessToken, this.config.appPassword)) {
+        return false;
+      }
     }
 
     if (!this.config.authEnabled) return true;
