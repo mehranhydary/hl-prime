@@ -6,7 +6,7 @@ import { useAuthSession } from "../hooks/use-auth-session";
 import { useAgentStatus } from "../hooks/use-agent-status";
 import { useNetwork } from "../lib/network-context";
 import { useTheme, type Theme } from "../lib/theme-context";
-import { lock as lockAccess } from "../lib/access-gate";
+import { lock as lockAccess, PASSWORD_GATE_ENABLED } from "../lib/access-gate";
 import { agentInit, agentComplete } from "../lib/api";
 import { createExchangeClientFromInjected, getErrorChainMessage } from "../lib/wallet-client";
 import type { Network } from "@shared/types";
@@ -467,21 +467,23 @@ function SettingsView({
       </div>
 
       {/* ── Lock ── */}
-      <div className="bg-surface-2 border border-border p-4 space-y-3">
-        <h2 className="text-xs uppercase tracking-wider text-text-muted">Security</h2>
-        <button
-          onClick={handleLock}
-          className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-3 hover:bg-surface-3/80 border border-border text-sm text-text-secondary hover:text-text-primary transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-          Lock App
-        </button>
-        <p className="text-xs text-text-dim leading-relaxed">
-          Locks the app and requires the password to re-enter.
-        </p>
-      </div>
+      {PASSWORD_GATE_ENABLED && (
+        <div className="bg-surface-2 border border-border p-4 space-y-3">
+          <h2 className="text-xs uppercase tracking-wider text-text-muted">Security</h2>
+          <button
+            onClick={handleLock}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-3 hover:bg-surface-3/80 border border-border text-sm text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            Lock App
+          </button>
+          <p className="text-xs text-text-dim leading-relaxed">
+            Locks the app and requires the password to re-enter.
+          </p>
+        </div>
+      )}
 
       <p className="text-xs text-text-dim leading-relaxed">
         The agent wallet can place orders on your behalf but cannot withdraw funds.
