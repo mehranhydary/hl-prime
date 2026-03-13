@@ -3,33 +3,31 @@ import { swapQuote, swapExecute } from "../lib/api";
 import { useAgentApprovalModal, isAgentApprovalError } from "../lib/agent-approval-context";
 import type { SwapQuoteRequest, SwapExecuteRequest } from "@shared/types";
 
-function refreshSwapRelatedQueries(queryClient: ReturnType<typeof useQueryClient>): void {
-  const keys = [
-    ["bootstrap"],
-    ["portfolio"],
-    ["swap-quote"], // Also invalidate quotes so they refresh with new balances
-  ] as const;
+const BALANCE_QUERY_KEYS = [
+  ["bootstrap"],
+  ["portfolio"],
+  ["swap-quote"],
+] as const;
 
-  // Immediate refresh
-  for (const queryKey of keys) {
+/**
+ * Refresh balance-related queries with staggered retries.
+ * Call this only after a confirmed fill — not on every mutation success.
+ */
+export function refreshBalancesAfterSwap(queryClient: ReturnType<typeof useQueryClient>): void {
+  for (const queryKey of BALANCE_QUERY_KEYS) {
     queryClient.invalidateQueries({ queryKey });
     queryClient.refetchQueries({ queryKey, type: "active" });
   }
 
-  // Refresh again after delays to catch async balance updates
-  setTimeout(() => {
-    for (const queryKey of keys) {
-      queryClient.invalidateQueries({ queryKey });
-      queryClient.refetchQueries({ queryKey, type: "active" });
-    }
-  }, 1_000);
-
-  setTimeout(() => {
-    for (const queryKey of keys) {
-      queryClient.invalidateQueries({ queryKey });
-      queryClient.refetchQueries({ queryKey, type: "active" });
-    }
-  }, 2_500);
+  // Staggered retries to catch async on-chain balance updates
+  for (const delayMs of [1_000, 2_500]) {
+    setTimeout(() => {
+      for (const queryKey of BALANCE_QUERY_KEYS) {
+        queryClient.invalidateQueries({ queryKey });
+        queryClient.refetchQueries({ queryKey, type: "active" });
+      }
+    }, delayMs);
+  }
 }
 
 export function useSwapQuote(params: SwapQuoteRequest & { enabled: boolean }) {
@@ -49,16 +47,12 @@ export function useSwapQuote(params: SwapQuoteRequest & { enabled: boolean }) {
 }
 
 export function useSwapExecute() {
-  const queryClient = useQueryClient();
   const { showApprovalModal } = useAgentApprovalModal();
 
   return useMutation({
     mutationFn: (body: SwapExecuteRequest) => swapExecute(body),
-    onSuccess: () => {
-      refreshSwapRelatedQueries(queryClient);
-    },
+    // Balance refresh is done by the component only on confirmed fills.
     onError: (error) => {
-      // Auto-show approval modal if agent is not approved
       if (isAgentApprovalError(error)) {
         showApprovalModal();
       }

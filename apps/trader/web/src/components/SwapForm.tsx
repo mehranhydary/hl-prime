@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
-import { useSwapQuote, useSwapExecute } from "../hooks/use-swap";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSwapQuote, useSwapExecute, refreshBalancesAfterSwap } from "../hooks/use-swap";
 import { useWallet } from "../hooks/use-wallet";
 import { useNetwork } from "../lib/network-context";
 import { collateralIconUrl } from "../lib/display";
@@ -33,6 +34,7 @@ function getTokenBalance(balance: UnifiedBalance | null, token: string): number 
 export function SwapForm({ balance }: SwapFormProps) {
   const { address } = useWallet();
   const { network } = useNetwork();
+  const queryClient = useQueryClient();
 
   const [fromToken, setFromToken] = useState<SupportedToken>("USDC");
   const [toToken, setToToken] = useState<SupportedToken>("USDE");
@@ -116,6 +118,7 @@ export function SwapForm({ balance }: SwapFormProps) {
       if (didFill) {
         toast.success(`Swapped ${result.filled} ${toToken} @ ${result.executedPrice}`, { id: swapId });
         setAmount("");
+        refreshBalancesAfterSwap(queryClient);
       } else {
         const reason = result.error ?? "Order did not fill — try again or adjust amount";
         toast.error(reason, { id: swapId });
