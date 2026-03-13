@@ -13,6 +13,7 @@ import { PortfolioPage } from "./pages/PortfolioPage";
 import { ReferralsPage } from "./pages/ReferralsPage";
 import { SwapPage } from "./pages/SwapPage";
 import { useAccessGate } from "./hooks/use-access-gate";
+import { PASSWORD_GATE_ENABLED } from "./lib/access-gate";
 import { useRealtimeUpdates } from "./hooks/use-realtime";
 import { Header } from "./components/Header";
 import { BottomNav } from "./components/BottomNav";
@@ -121,7 +122,10 @@ function AppRoutes() {
       {/* Landing page — no app chrome */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/v2" element={<LandingPage2 />} />
-      <Route path="/unlock" element={<PasswordGatePage />} />
+      <Route
+        path="/unlock"
+        element={PASSWORD_GATE_ENABLED ? <PasswordGatePage /> : <Navigate to="/markets" replace />}
+      />
 
       {/* App routes — mobile shell */}
       <Route

@@ -1,3 +1,6 @@
+export const PASSWORD_GATE_ENABLED =
+  (import.meta.env.VITE_TRADER_PASSWORD_GATE_ENABLED ?? "true").toLowerCase() !== "false";
+
 const STORAGE_KEY = "hl-prime:app-access:v2";
 
 interface StoredAccess {
@@ -49,7 +52,7 @@ function isAccessValid(): boolean {
 
 function snapshot(): AccessSnapshot {
   return {
-    isUnlocked: isAccessValid(),
+    isUnlocked: !PASSWORD_GATE_ENABLED || isAccessValid(),
     expiresAt: accessExpiresAt,
   };
 }
