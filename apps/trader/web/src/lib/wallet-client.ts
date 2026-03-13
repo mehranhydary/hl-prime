@@ -35,6 +35,10 @@ function configFor(network: Network) {
   return CHAIN_CONFIG[network];
 }
 
+// Hyperliquid EIP-712 domain chain IDs used only for signing.
+// These are NOT real EVM chains the wallet can switch to.
+const HL_SIGNING_ONLY_CHAIN_IDS = new Set([1337]);
+
 function normalizeAddress(address: string): `0x${string}` {
   return address.toLowerCase() as `0x${string}`;
 }
@@ -109,11 +113,14 @@ function createWalletAdapter(expectedAddress: `0x${string}`): ConnectedWalletAda
       const targetDomainChainId = parseDomainChainId(params.domain);
       const initialChainId = await readActiveChainId(wallet);
 
+      // Skip chain switching for Hyperliquid EIP-712 domain chain IDs (e.g. 1337).
+      // HL uses these in the signing domain but the wallet stays on Arbitrum.
       let switched = false;
       if (
         targetDomainChainId !== null &&
         Number.isFinite(targetDomainChainId) &&
-        initialChainId !== targetDomainChainId
+        initialChainId !== targetDomainChainId &&
+        !HL_SIGNING_ONLY_CHAIN_IDS.has(targetDomainChainId)
       ) {
         await switchWalletChain(wallet, targetDomainChainId);
         switched = true;
