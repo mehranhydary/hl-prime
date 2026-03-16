@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "build": "npm run build:server && npm run build:web",
     "build:server": "npm --prefix ../.. run build && tsc -p server/tsconfig.json",
-    "build:web": "vite build",
+    "build:web": "vite build && tsx scripts/prerender.ts",
     "start": "npm run build:server && node server/dist/server/src/index.js",
     "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p tsconfig.json"
   },
