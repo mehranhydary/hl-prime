@@ -14,13 +14,15 @@ const BALANCE_QUERY_KEYS = [
  * Call this only after a confirmed fill — not on every mutation success.
  */
 export function refreshBalancesAfterSwap(queryClient: ReturnType<typeof useQueryClient>): void {
+  // Invalidate all matching queries (not just active ones) so other pages
+  // see fresh data when navigated to, instead of stale cached balances.
   for (const queryKey of BALANCE_QUERY_KEYS) {
     queryClient.invalidateQueries({ queryKey });
     queryClient.refetchQueries({ queryKey, type: "active" });
   }
 
   // Staggered retries to catch async on-chain balance updates
-  for (const delayMs of [1_000, 2_500]) {
+  for (const delayMs of [1_000, 2_500, 5_000]) {
     setTimeout(() => {
       for (const queryKey of BALANCE_QUERY_KEYS) {
         queryClient.invalidateQueries({ queryKey });

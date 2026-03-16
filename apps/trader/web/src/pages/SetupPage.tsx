@@ -520,7 +520,7 @@ function SettingsView({
                   : "bg-surface-3 text-text-muted hover:text-text-secondary"
               }`}
             >
-              {modeChanging ? "..." : opt.label}
+              {opt.label}
             </button>
           ))}
         </div>
