@@ -33,6 +33,7 @@ ENV VITE_TRADER_PASSWORD_GATE_ENABLED=${VITE_TRADER_PASSWORD_GATE_ENABLED}
 COPY apps/trader/server/ server/
 COPY apps/trader/web/ web/
 COPY apps/trader/shared/ shared/
+COPY apps/trader/scripts/ scripts/
 COPY apps/trader/vite.config.ts apps/trader/tsconfig.json ./
 RUN test -n "$VITE_TRADER_PRIVY_APP_ID"
 RUN npm run build
