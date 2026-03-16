@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "../hooks/use-wallet";
 import { useAuthSession } from "../hooks/use-auth-session";
@@ -9,7 +9,8 @@ import { useTheme, type Theme } from "../lib/theme-context";
 import { lock as lockAccess, PASSWORD_GATE_ENABLED } from "../lib/access-gate";
 import { agentInit, agentComplete } from "../lib/api";
 import { createExchangeClientFromInjected, getErrorChainMessage } from "../lib/wallet-client";
-import type { Network } from "@shared/types";
+import type { AbstractionMode, Network } from "@shared/types";
+import { useBootstrap } from "../hooks/use-bootstrap";
 
 type SetupStep = "init" | "approve" | "complete" | "done";
 
@@ -42,6 +43,7 @@ export function SetupPage() {
     maxFeeRate: string;
   } | null>(null);
   const [error, setError] = useState<string>("");
+  const [abstraction, setAbstraction] = useState<"unifiedAccount" | "portfolioMargin">("unifiedAccount");
 
   const initMutation = useMutation({
     mutationFn: agentInit,
@@ -77,7 +79,7 @@ export function SetupPage() {
       try {
         await exchange.userSetAbstraction({
           user: address,
-          abstraction: "unifiedAccount",
+          abstraction,
         });
       } catch (err) {
         const message = getErrorChainMessage(err);
@@ -265,6 +267,53 @@ export function SetupPage() {
               <span className="text-xs text-text-secondary capitalize">{network}</span>
             </div>
           </div>
+          {/* Account Mode */}
+          <div className="bg-surface-2 border border-border p-4 space-y-3">
+            <h3 className="text-xs uppercase tracking-wider text-text-muted">Account Mode</h3>
+            <label
+              className={`flex items-start gap-3 p-3 cursor-pointer border transition-colors ${
+                abstraction === "unifiedAccount"
+                  ? "border-accent bg-accent/5"
+                  : "border-border hover:border-text-dim"
+              }`}
+            >
+              <input
+                type="radio"
+                name="abstraction"
+                checked={abstraction === "unifiedAccount"}
+                onChange={() => setAbstraction("unifiedAccount")}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <p className="text-sm font-medium text-text-primary">Unified Account</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Standard mode. Trade perps with USDC collateral.
+                </p>
+              </div>
+            </label>
+            <label
+              className={`flex items-start gap-3 p-3 cursor-pointer border transition-colors ${
+                abstraction === "portfolioMargin"
+                  ? "border-accent bg-accent/5"
+                  : "border-border hover:border-text-dim"
+              }`}
+            >
+              <input
+                type="radio"
+                name="abstraction"
+                checked={abstraction === "portfolioMargin"}
+                onChange={() => setAbstraction("portfolioMargin")}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <p className="text-sm font-medium text-text-primary">Portfolio Margin</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Earn yield on idle assets, use HYPE/BTC as collateral. Accounts under $500K.
+                </p>
+              </div>
+            </label>
+          </div>
+
           <p className="text-sm text-text-secondary leading-relaxed">
             Your wallet will be asked to sign approval transactions. The agent can trade but cannot withdraw.
           </p>
@@ -357,10 +406,38 @@ function SettingsView({
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const { data: bootstrapData } = useBootstrap(masterAddress, network);
+  const currentMode: AbstractionMode = bootstrapData?.abstractionMode ?? null;
+
+  const [modeChanging, setModeChanging] = useState(false);
+  const [modeError, setModeError] = useState("");
 
   const truncated = agentAddress
     ? `${agentAddress.slice(0, 6)}...${agentAddress.slice(-4)}`
     : "—";
+
+  async function handleModeChange(newMode: "unifiedAccount" | "portfolioMargin") {
+    if (!masterAddress || modeChanging) return;
+    setModeError("");
+    setModeChanging(true);
+    try {
+      const exchange = await createExchangeClientFromInjected(masterAddress, network);
+      await exchange.userSetAbstraction({
+        user: masterAddress,
+        abstraction: newMode,
+      });
+      queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["earn"] });
+    } catch (err) {
+      const message = getErrorChainMessage(err);
+      if (!isNonFatalSetupError(message)) {
+        setModeError(message || "Failed to change account mode");
+      }
+    } finally {
+      setModeChanging(false);
+    }
+  }
 
   function handleLock() {
     lockAccess();
@@ -425,6 +502,44 @@ function SettingsView({
         </div>
       </div>
 
+      {/* ── Account Mode ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Account Mode</h2>
+        <div className="flex gap-2">
+          {([
+            { key: "unifiedAccount" as const, label: "Unified" },
+            { key: "portfolioMargin" as const, label: "Portfolio Margin" },
+          ]).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => handleModeChange(opt.key)}
+              disabled={modeChanging || currentMode === opt.key}
+              className={`flex-1 py-2 text-xs font-medium transition-colors disabled:opacity-60 ${
+                currentMode === opt.key
+                  ? "bg-accent text-surface-0"
+                  : "bg-surface-3 text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {modeChanging ? "..." : opt.label}
+            </button>
+          ))}
+        </div>
+        {currentMode === "portfolioMargin" && (
+          <p className="text-xs text-text-dim">
+            Earn yield on idle USDC, HYPE, BTC. View rates on the{" "}
+            <Link to="/earn" className="text-accent hover:underline">Earn</Link> page.
+          </p>
+        )}
+        {currentMode && !["unifiedAccount", "portfolioMargin"].includes(currentMode) && (
+          <p className="text-xs text-text-dim">
+            Current mode: <span className="text-text-secondary">{currentMode}</span>
+          </p>
+        )}
+        {modeError && (
+          <p className="text-xs text-short">{modeError}</p>
+        )}
+      </div>
+
       {/* ── Network ── */}
       <div className="bg-surface-2 border border-border p-4 space-y-3">
         <h2 className="text-xs uppercase tracking-wider text-text-muted">Network</h2>
@@ -464,6 +579,29 @@ function SettingsView({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── Quick Links ── */}
+      <div className="bg-surface-2 border border-border p-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-wider text-text-muted">Quick Links</h2>
+        <Link
+          to="/earn"
+          className="flex items-center justify-between py-2 text-sm text-text-secondary hover:text-accent transition-colors"
+        >
+          <span>Earn / Portfolio Margin</span>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </Link>
+        <Link
+          to="/referrals"
+          className="flex items-center justify-between py-2 text-sm text-text-secondary hover:text-accent transition-colors border-t border-border"
+        >
+          <span>Referrals</span>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </Link>
       </div>
 
       {/* ── Lock ── */}

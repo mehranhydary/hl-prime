@@ -12,6 +12,7 @@ import { SetupPage } from "./pages/SetupPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ReferralsPage } from "./pages/ReferralsPage";
 import { SwapPage } from "./pages/SwapPage";
+import { EarnPage } from "./pages/EarnPage";
 import { useAccessGate } from "./hooks/use-access-gate";
 import { PASSWORD_GATE_ENABLED } from "./lib/access-gate";
 import { useRealtimeUpdates } from "./hooks/use-realtime";
@@ -67,6 +68,7 @@ const AUTHENTICATED_QUERY_KEYS = new Set([
   "bootstrap",
   "portfolio",
   "referral",
+  "earn",
   "trade-history",
   "candles",
 ]);
@@ -105,6 +107,7 @@ function AppShell() {
           <Route path="/markets" element={<Dashboard />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/referrals" element={<ReferralsPage />} />
+          <Route path="/earn" element={<EarnPage />} />
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/swap" element={<SwapPage />} />
           <Route path="/trade/:asset" element={<TradePage />} />

@@ -75,6 +75,7 @@ export interface BootstrapResponse {
   assets: DedupedAsset[];
   positions: GroupedPosition[];
   agentConfigured: boolean;
+  abstractionMode?: AbstractionMode;
 }
 
 export interface GroupedPosition {
@@ -437,6 +438,50 @@ export interface CandleData {
   low: number;
   close: number;
   volume: number;
+}
+
+// ========== Earn / Portfolio Margin ==========
+
+export type AbstractionMode =
+  | "dexAbstraction"
+  | "unifiedAccount"
+  | "portfolioMargin"
+  | "disabled"
+  | null;
+
+export interface EarnTokenPosition {
+  tokenIndex: number;
+  tokenName: string;
+  amount: number;
+  valueUsd: number;
+  apy: number;
+}
+
+export interface EarnUserState {
+  health: string;
+  healthFactor: number | null;
+  supplies: EarnTokenPosition[];
+  borrows: EarnTokenPosition[];
+  totalSuppliedUsd: number;
+  totalBorrowedUsd: number;
+}
+
+export interface EarnReserveRow {
+  tokenIndex: number;
+  tokenName: string;
+  supplyApy: number;
+  borrowApy: number;
+  utilization: number;
+  ltv: number;
+  totalSupplied: number;
+  totalBorrowed: number;
+  oraclePrice: number;
+}
+
+export interface EarnResponse {
+  abstractionMode: AbstractionMode;
+  userState: EarnUserState | null;
+  reserves: EarnReserveRow[];
 }
 
 // ========== Health ==========

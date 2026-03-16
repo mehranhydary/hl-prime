@@ -14,6 +14,7 @@ import { swapRoutes } from "./routes/swap.js";
 import { healthRoutes } from "./routes/health.js";
 import { marketRoutes } from "./routes/market.js";
 import { referralRoutes } from "./routes/referral.js";
+import { earnRoutes } from "./routes/earn.js";
 import { getRuntimeStateStore } from "./services/runtime-state.js";
 
 const PUBLIC_WEB_PATHS = new Set(["/", "/v2", "/unlock"]);
@@ -78,6 +79,11 @@ export function createApp(config: ServerConfig) {
     max: 30,
     backoff: true,
   }));
+  app.use("/api/earn", memoryRateLimit({
+    keyPrefix: "earn",
+    windowMs: 60_000,
+    max: 30,
+  }));
 
   app.use("/api", healthRoutes(config));
   if (config.passwordGateEnabled) {
@@ -98,6 +104,7 @@ export function createApp(config: ServerConfig) {
   app.use("/api/swap", swapRoutes(config));
   app.use("/api/market", marketRoutes(config));
   app.use("/api/referral", referralRoutes(config));
+  app.use("/api/earn", earnRoutes(config));
 
   const webDist = path.join(process.cwd(), "dist", "web");
   const webIndex = path.join(webDist, "index.html");

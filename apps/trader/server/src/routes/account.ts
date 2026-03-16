@@ -664,7 +664,7 @@ export function accountRoutes(config: ServerConfig): Router {
         console.warn("Failed to fetch bootstrap master clearinghouse state:", err);
       }
 
-      const NATIVE_ALLOW = new Set(["BTC", "ETH", "SOL", "HYPE"]);
+      const NATIVE_ALLOW = new Set(["BTC", "ETH", "SOL", "HYPE", "TAO"]);
       let allGroups: any[] = [];
       try {
         const groups = publicHp.markets.getAllGroups();
@@ -785,7 +785,15 @@ export function accountRoutes(config: ServerConfig): Router {
         marketCount: marketCountByBase.get(p.baseAsset.toUpperCase()) ?? 1,
       }));
 
-      const response: BootstrapResponse = { balance, assets, positions, agentConfigured };
+      // Fetch abstraction mode (non-blocking)
+      let abstractionMode: BootstrapResponse["abstractionMode"] = undefined;
+      try {
+        abstractionMode = await publicHp.getAbstractionMode(masterAddress);
+      } catch {
+        // Non-critical — leave undefined if unavailable.
+      }
+
+      const response: BootstrapResponse = { balance, assets, positions, agentConfigured, abstractionMode };
       res.json(response);
     } catch (err) {
       if (err instanceof ValidationError) {

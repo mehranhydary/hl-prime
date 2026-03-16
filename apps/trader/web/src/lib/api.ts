@@ -23,6 +23,7 @@ import type {
   CandleData,
   CandleInterval,
   ReferralDataResponse,
+  EarnResponse,
 } from "@shared/types";
 
 import {
@@ -215,6 +216,12 @@ export const marketCandles = (coin: string, interval: CandleInterval, network: s
 export const referralData = (masterAddress: string, network: string) =>
   fetchJson<ReferralDataResponse>(
     `/referral?masterAddress=${masterAddress}&network=${network}`,
+  );
+
+// Earn / Portfolio Margin
+export const earnData = (masterAddress: string, network: string) =>
+  fetchJson<EarnResponse>(
+    `/earn?masterAddress=${masterAddress}&network=${network}`,
   );
 
 // Health

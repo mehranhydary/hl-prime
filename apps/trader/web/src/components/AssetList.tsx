@@ -81,6 +81,7 @@ const ASSET_NAMES: Record<string, string> = {
   TLT: "US Treasuries",
   PURR: "Purr",
   HYPE: "Hyperliquid",
+  TAO: "Bittensor",
   JEFF: "Jeff",
   kPEPE: "Pepe (1K)",
   kBONK: "Bonk (1K)",

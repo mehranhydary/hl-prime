@@ -347,6 +347,35 @@ export const ReferralResponseSchema = z.object({
   })),
 });
 
+// --- Borrow/Lend (Portfolio Margin) ---
+
+const BorrowLendBasisSchema = z.object({
+  basis: numericStr,
+  value: numericStr,
+});
+
+export const BorrowLendTokenStateSchema = z.object({
+  borrow: BorrowLendBasisSchema,
+  supply: BorrowLendBasisSchema,
+});
+
+export const BorrowLendUserStateSchema = z.object({
+  tokenToState: z.array(z.tuple([z.number(), BorrowLendTokenStateSchema])),
+  health: z.string(),
+  healthFactor: z.number().nullable().optional().transform((v) => v ?? null),
+});
+
+export const BorrowLendReserveStateSchema = z.object({
+  borrowYearlyRate: numericStr,
+  supplyYearlyRate: numericStr,
+  balance: numericStr,
+  utilization: numericStr,
+  oraclePx: numericStr,
+  ltv: numericStr,
+  totalSupplied: numericStr,
+  totalBorrowed: numericStr,
+});
+
 // --- Subscription events ---
 
 export const L2BookUpdateSchema = z.object({

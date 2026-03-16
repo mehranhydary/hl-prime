@@ -25,7 +25,7 @@ import type {
 import type { ExecutionReceipt, SplitExecutionReceipt } from "./execution/types.js";
 import type { LogicalPosition } from "./position/types.js";
 import type { CollateralPlan } from "./collateral/types.js";
-import type { ReferralResponse } from "./provider/types.js";
+import type { ReferralResponse, AbstractionMode, BorrowLendUserState, BorrowLendReserveState } from "./provider/types.js";
 import type { Logger } from "./logging/logger.js";
 import type { WithWarnings } from "./types/result.js";
 
@@ -497,6 +497,34 @@ export class HyperliquidPrime {
     return this.provider.agentSetAbstraction({ abstraction });
   }
 
+  // === Borrow/Lend (Portfolio Margin) ===
+
+  /** Get the user's current abstraction mode. */
+  async getAbstractionMode(user?: string): Promise<AbstractionMode> {
+    this.ensureConnected();
+    const addr = user ?? this.ensureWallet();
+    return this.provider.userAbstraction(addr);
+  }
+
+  /** Get the user's borrow/lend state (supplied, borrowed, health). */
+  async getBorrowLendState(user?: string): Promise<BorrowLendUserState> {
+    this.ensureConnected();
+    const addr = user ?? this.ensureWallet();
+    return this.provider.borrowLendUserState(addr);
+  }
+
+  /** Get reserve state for a specific token index. */
+  async getReserveState(tokenIndex: number): Promise<BorrowLendReserveState> {
+    this.ensureConnected();
+    return this.provider.borrowLendReserveState(tokenIndex);
+  }
+
+  /** Get all borrow/lend reserve states at once. */
+  async getAllReserveStates(): Promise<[number, BorrowLendReserveState][]> {
+    this.ensureConnected();
+    return this.provider.allBorrowLendReserveStates();
+  }
+
   // === Referral ===
 
   /** Get referral data for any user (public read, no wallet needed). */
@@ -622,7 +650,7 @@ export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, S
 export { isSplitQuote } from "./router/types.js";
 export type { ExecutionReceipt, SplitExecutionReceipt, LegReceipt } from "./execution/types.js";
 export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
-export type { ReferralResponse, ReferralUserState } from "./provider/types.js";
+export type { ReferralResponse, ReferralUserState, AbstractionMode, BorrowLendUserState, BorrowLendTokenState, BorrowLendReserveState } from "./provider/types.js";
 export type { LogicalPosition, ManagedPositionState, RiskProfile } from "./position/types.js";
 export type { TradeExecutionOptions } from "./router/types.js";
 export type { Logger } from "./logging/logger.js";

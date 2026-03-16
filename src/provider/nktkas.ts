@@ -25,6 +25,8 @@ import {
   AllMidsUpdateSchema,
   TradeSchema,
   UserEventSchema,
+  BorrowLendUserStateSchema,
+  BorrowLendReserveStateSchema,
 } from "./schemas.js";
 import type {
   Meta,
@@ -52,6 +54,9 @@ import type {
   Candle,
   CandleInterval,
   ReferralResponse,
+  AbstractionMode,
+  BorrowLendUserState,
+  BorrowLendReserveState,
 } from "./types.js";
 
 export interface ProviderConfig {
@@ -400,6 +405,38 @@ export class NktkasProvider implements HLProvider {
   async referral(user: string): Promise<ReferralResponse> {
     const raw = await this.info.referral({ user: asHexAddress(user) });
     return ReferralResponseSchema.parse(raw) as ReferralResponse;
+  }
+
+  // --- Borrow/Lend (Portfolio Margin) methods ---
+
+  async userAbstraction(user: string): Promise<AbstractionMode> {
+    // The nktkas SDK only exposes `userDexAbstraction` which returns boolean|null.
+    // Use a raw transport call to the `userAbstraction` info type which returns the
+    // actual mode string (e.g. "portfolioMargin", "unifiedAccount").
+    const raw = await this.httpTransport.request("info", {
+      type: "userAbstraction" as any,
+      user: asHexAddress(user),
+    });
+    if (typeof raw === "string") return raw as AbstractionMode;
+    return null;
+  }
+
+  async borrowLendUserState(user: string): Promise<BorrowLendUserState> {
+    const raw = await this.info.borrowLendUserState({ user: asHexAddress(user) });
+    return BorrowLendUserStateSchema.parse(raw);
+  }
+
+  async borrowLendReserveState(token: number): Promise<BorrowLendReserveState> {
+    const raw = await this.info.borrowLendReserveState({ token });
+    return BorrowLendReserveStateSchema.parse(raw);
+  }
+
+  async allBorrowLendReserveStates(): Promise<[number, BorrowLendReserveState][]> {
+    const raw = await this.info.allBorrowLendReserveStates();
+    return (raw as [number, unknown][]).map(([tokenId, state]) => [
+      tokenId,
+      BorrowLendReserveStateSchema.parse(state),
+    ]);
   }
 
   // --- Subscription methods ---

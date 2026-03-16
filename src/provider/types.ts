@@ -266,6 +266,37 @@ export interface ReferralResponse {
   rewardHistory: { earned: string; vlm: string; referralVlm: string; time: number }[];
 }
 
+// Borrow/Lend types (Portfolio Margin)
+
+export type AbstractionMode =
+  | "dexAbstraction"
+  | "unifiedAccount"
+  | "portfolioMargin"
+  | "disabled"
+  | null;
+
+export interface BorrowLendTokenState {
+  borrow: { basis: string; value: string };
+  supply: { basis: string; value: string };
+}
+
+export interface BorrowLendUserState {
+  tokenToState: [number, BorrowLendTokenState][];
+  health: string;
+  healthFactor: number | null;
+}
+
+export interface BorrowLendReserveState {
+  borrowYearlyRate: string;
+  supplyYearlyRate: string;
+  balance: string;
+  utilization: string;
+  oraclePx: string;
+  ltv: string;
+  totalSupplied: string;
+  totalBorrowed: string;
+}
+
 // Subscription event types
 export interface L2BookUpdate {
   coin: string;

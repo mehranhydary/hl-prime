@@ -23,6 +23,9 @@ import type {
   Candle,
   CandleInterval,
   ReferralResponse,
+  AbstractionMode,
+  BorrowLendUserState,
+  BorrowLendReserveState,
 } from "./types.js";
 
 export interface HLProvider {
@@ -50,6 +53,12 @@ export interface HLProvider {
   fundingHistory(coin: string, startTime: number, endTime?: number): Promise<FundingRecord[]>;
   candleSnapshot(coin: string, interval: CandleInterval, startTime: number, endTime?: number): Promise<Candle[]>;
   referral(user: string): Promise<ReferralResponse>;
+
+  // Borrow/Lend (Portfolio Margin)
+  userAbstraction(user: string): Promise<AbstractionMode>;
+  borrowLendUserState(user: string): Promise<BorrowLendUserState>;
+  borrowLendReserveState(token: number): Promise<BorrowLendReserveState>;
+  allBorrowLendReserveStates(): Promise<[number, BorrowLendReserveState][]>;
 
   // Subscriptions
   subscribeL2Book(coin: string, cb: (data: L2BookUpdate) => void): Promise<() => Promise<void>>;
