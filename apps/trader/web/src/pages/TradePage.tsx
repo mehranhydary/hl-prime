@@ -8,7 +8,7 @@ import { useCandles } from "../hooks/use-candles";
 import { TradeForm } from "../components/TradeForm";
 import { CandleChart } from "../components/CandleChart";
 import { MarketInfo } from "../components/MarketInfo";
-import { displayCoin, tokenIconUrl, tokenIconFallbackUrl, showIconFallback } from "../lib/display";
+import { displayCoin, displayAsset, tokenIconUrl, tokenIconFallbackUrl, showIconFallback } from "../lib/display";
 import type { CandleInterval } from "@shared/types";
 
 function formatPrice(price: number): string {
@@ -122,7 +122,7 @@ export function TradePage() {
             )}
           </div>
           <div>
-            <div className="text-lg font-semibold text-text-primary">{asset}</div>
+            <div className="text-lg font-semibold text-text-primary">{displayAsset(assetData?.baseAsset ?? asset?.toUpperCase() ?? "")}</div>
           </div>
         </div>
 

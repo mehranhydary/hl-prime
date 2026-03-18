@@ -279,6 +279,7 @@ export interface CollateralPreview {
   requirements: CollateralPreviewRequirement[];
   totalSwapCostBps: number;
   swapsNeeded: boolean;
+  bridgeRequired: number;
   abstractionEnabled: boolean;
 }
 
@@ -422,6 +423,153 @@ export interface SwapResult {
   filled: string;
   executedPrice: string;
   error?: string;
+}
+
+// ========== Bridge ==========
+
+export interface SupportedBridgeChain {
+  chainId: number;
+  name: string;
+  displayName: string;
+  usdcAddress: string;
+  usdcDecimals: number;
+  supportsPermit: boolean;
+  rpcUrl?: string;
+  iconUrl?: string;
+  logoUrl?: string;
+  explorerUrl?: string;
+}
+
+export interface BridgeQuoteRequest {
+  userAddress: `0x${string}`;
+  originChainId: number;
+  amount: string;
+  destinationAddress?: `0x${string}`;
+  slippageTolerance?: number;
+}
+
+export interface BridgeFeeBreakdown {
+  gas: string;
+  relayer: string;
+  totalUsd: string;
+  app?: string;
+}
+
+export interface BridgeStep {
+  id: "approve" | "deposit" | "authorize" | string;
+  chainId: number;
+  to: string;
+  data: string;
+  value: string;
+  requestId?: string;
+  checkEndpoint?: string;
+  gas?: string;
+  maxFeePerGas?: string;
+  maxPriorityFeePerGas?: string;
+}
+
+export interface BridgeQuote {
+  requestId: string;
+  steps: BridgeStep[];
+  fees: BridgeFeeBreakdown;
+  outputAmount: string;
+  outputAmountRaw: string;
+  originChainId: number;
+  originCurrency: string;
+  destinationChainId: number;
+  destinationCurrency: string;
+  timeEstimateSec: number;
+}
+
+export type BridgeStatus = "pending" | "depositing" | "waiting" | "success" | "failure" | "refund";
+
+export interface BridgeStatusResponse {
+  requestId: string;
+  status: BridgeStatus;
+  rawStatus: string;
+  isTerminal: boolean;
+  originChainId?: number;
+  destinationChainId?: number;
+  txHashes: string[];
+  details?: string;
+  updatedAt?: number;
+}
+
+export interface BridgeChainsResponse {
+  chains: SupportedBridgeChain[];
+  destinationChainId: number;
+  destinationCurrency: string;
+}
+
+export interface BridgeChainBalance {
+  chainId: number;
+  name: string;
+  displayName: string;
+  usdcAddress: string;
+  usdcDecimals: number;
+  balance: string;
+  balanceRaw: string;
+  supportsPermit: boolean;
+  rpcUrl?: string;
+  iconUrl?: string;
+  logoUrl?: string;
+  explorerUrl?: string;
+}
+
+export interface BridgeBalancesResponse {
+  balances: BridgeChainBalance[];
+  refreshedAt: number;
+}
+
+export type BridgeTradeStatus = "not-started" | "pending" | "success" | "failure";
+
+export interface BridgeHistoryItem {
+  requestId: string;
+  createdAt: number;
+  updatedAt: number;
+  network: Network;
+  masterAddress: `0x${string}`;
+  destinationAddress: `0x${string}`;
+  originChainId: number;
+  originChainName: string;
+  originCurrency: string;
+  destinationChainId: number;
+  destinationCurrency: string;
+  amount: string;
+  outputAmount?: string;
+  feeUsd?: string;
+  timeEstimateSec?: number;
+  status: BridgeStatus;
+  txHashes: string[];
+  tradeStatus: BridgeTradeStatus;
+  error?: string;
+  tradeError?: string;
+}
+
+export interface BridgeHistoryUpsertRequest {
+  requestId: string;
+  createdAt?: number;
+  network: Network;
+  masterAddress: `0x${string}`;
+  destinationAddress: `0x${string}`;
+  originChainId: number;
+  originChainName: string;
+  originCurrency: string;
+  destinationChainId: number;
+  destinationCurrency: string;
+  amount: string;
+  outputAmount?: string;
+  feeUsd?: string;
+  timeEstimateSec?: number;
+  status: BridgeStatus;
+  txHashes?: string[];
+  tradeStatus?: BridgeTradeStatus;
+  error?: string;
+  tradeError?: string;
+}
+
+export interface BridgeHistoryResponse {
+  items: BridgeHistoryItem[];
 }
 
 // ========== Market Data ==========

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useQuote, useExecute, useQuickTrade } from "../hooks/use-trade";
 import { useWallet } from "../hooks/use-wallet";
+import { pickSuggestedBridgeBalance, useBridgeBalances } from "../hooks/use-bridge";
 import { useNetwork } from "../lib/network-context";
 import { useBootstrap } from "../hooks/use-bootstrap";
 import {
@@ -17,6 +18,7 @@ import type { QuoteResponse, ExecuteLegAdjustment, ExecuteRequest, ExecutePrevie
 import { useNavigate } from "react-router-dom";
 import { runMasterPreTradeActions, isBuilderFeeAlreadyApproved, type PreTradeProgress } from "../lib/hl-master-actions";
 import { ApiError, tradeExecutePreview } from "../lib/api";
+import { BridgeModal } from "./BridgeModal";
 
 function createSwapProgressToasts(): PreTradeProgress {
   return {
@@ -49,6 +51,11 @@ interface LegOverride {
   weight: number; // raw weight; effective proportion = weight / sum(enabled weights)
 }
 
+interface TradeExecutionOutcome {
+  success: boolean;
+  error?: string;
+}
+
 const QUOTE_DEBOUNCE_MS = 250;
 
 function getEffectiveProportions(overrides: LegOverride[]): number[] {
@@ -62,9 +69,10 @@ function getEffectiveProportions(overrides: LegOverride[]): number[] {
 
 export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) {
   const navigate = useNavigate();
-  const { address } = useWallet();
+  const { address, activeChainId } = useWallet();
   const { network } = useNetwork();
   const bootstrap = useBootstrap(address, network);
+  const bridgeBalances = useBridgeBalances(address, network === "mainnet");
   const agentConfigured = bootstrap.data?.agentConfigured ?? false;
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -79,6 +87,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
   const [legOverrides, setLegOverrides] = useState<LegOverride[]>([]);
   const [preTradeError, setPreTradeError] = useState<string | null>(null);
   const [adjustedPreview, setAdjustedPreview] = useState<ExecutePreviewResponse | null>(null);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
 
   const quoteMutation = useQuote();
   const executeMutation = useExecute();
@@ -99,6 +108,17 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
     if (!effectiveCollateralPreview) return [];
     return effectiveCollateralPreview.requirements.filter((req) => req.shortfall > 0);
   }, [effectiveCollateralPreview]);
+  const bridgeRequired = effectiveCollateralPreview?.bridgeRequired ?? 0;
+  const bridgeAmount = useMemo(
+    () => bridgeRequired.toFixed(2),
+    [bridgeRequired],
+  );
+  const suggestedBridgeBalance = useMemo(
+    () => pickSuggestedBridgeBalance(bridgeBalances.data, bridgeAmount, activeChainId),
+    [activeChainId, bridgeAmount, bridgeBalances.data],
+  );
+  const bridgeFlowRequired = network === "mainnet" && bridgeRequired > 0.009;
+  const bridgeNeedsSetup = bridgeFlowRequired && !agentConfigured;
 
   // Reset leg overrides and adjusted preview when a new quote arrives
   useEffect(() => {
@@ -282,26 +302,30 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
     };
   }, [amount, side, leverage, amountMode, address, network, asset]);
 
-  async function handleExecute() {
-    if (!activeQuote || !address) return;
+  async function executeSafeTrade(quoteOverride?: QuoteResponse): Promise<TradeExecutionOutcome> {
+    const quoteToExecute = quoteOverride ?? activeQuote;
+    if (!quoteToExecute || !address) {
+      return { success: false, error: "Trade quote is no longer available." };
+    }
     setPreTradeError(null);
 
     if (!agentConfigured) {
       navigate("/setup");
-      return;
+      return { success: false, error: "Agent setup is required before trading." };
     }
 
     const executeBody: ExecuteRequest = {
-      quoteId: activeQuote.quoteId,
+      quoteId: quoteToExecute.quoteId,
       masterAddress: address,
     };
-    let executionRouteSummary = activeQuote.routeSummary;
-    let executionCollateralPreview = activeQuote.collateralPreview;
+    let executionRouteSummary = quoteToExecute.routeSummary;
+    let executionCollateralPreview = quoteToExecute.collateralPreview;
+    const usingFreshQuoteOverride = Boolean(quoteOverride && quoteOverride.quoteId !== activeQuote?.quoteId);
 
     try {
-      if (hasManualLegAdjustments && legAdjustments.length > 0) {
+      if (!usingFreshQuoteOverride && hasManualLegAdjustments && legAdjustments.length > 0) {
         const preview = await tradeExecutePreview({
-          quoteId: activeQuote.quoteId,
+          quoteId: quoteToExecute.quoteId,
           masterAddress: address,
           legAdjustments,
         });
@@ -332,7 +356,7 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       const msg = error instanceof Error ? error.message : String(error);
       setPreTradeError(msg);
       toast.error(msg);
-      return;
+      return { success: false, error: msg };
     }
 
     try {
@@ -341,47 +365,54 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
         toast.success(`Filled ${result.totalFilledSize} ${asset} @ $${result.aggregateAvgPrice.toFixed(2)}`);
         setActiveQuote(null);
         setAmount("");
+        return { success: true };
       } else {
         toast("Order did not fill — try smaller size or wider slippage", { icon: "\u26A0\uFE0F" });
+        return { success: false, error: "Order did not fill. Try a smaller size or retry the trade." };
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
         toast.error("Agent not approved — redirecting to Setup");
         navigate("/setup");
-        return;
+        return { success: false, error: "Agent not approved. Complete setup and retry the trade." };
       }
-      toast.error(error instanceof Error ? error.message : "Trade failed");
+      const message = error instanceof Error ? error.message : "Trade failed";
+      toast.error(message);
+      return { success: false, error: message };
     }
   }
 
-  async function handleQuickTrade() {
-    if (!address || !amount) return;
+  async function runQuickTrade(quoteOverride?: QuoteResponse): Promise<TradeExecutionOutcome> {
+    if (!address || !amount) {
+      return { success: false, error: "Trade details are incomplete." };
+    }
     setPreTradeError(null);
 
-    if (agentConfigured && activeQuote) {
+    const quoteForPreTrade = quoteOverride ?? activeQuote;
+    if (agentConfigured && quoteForPreTrade) {
       const builderAlreadyApproved = isBuilderFeeAlreadyApproved({
         address,
         network,
-        routeSummary: activeQuote.routeSummary,
+        routeSummary: quoteForPreTrade.routeSummary,
       });
       const needsMasterActions = Boolean(
-        activeQuote.collateralPreview?.swapsNeeded ||
-        (!builderAlreadyApproved && activeQuote.routeSummary.builderApproval && activeQuote.routeSummary.builderFeeBps > 0),
+        quoteForPreTrade.collateralPreview?.swapsNeeded ||
+        (!builderAlreadyApproved && quoteForPreTrade.routeSummary.builderApproval && quoteForPreTrade.routeSummary.builderFeeBps > 0),
       );
       if (needsMasterActions) {
         try {
           await runMasterPreTradeActions({
             address,
             network,
-            routeSummary: activeQuote.routeSummary,
-            collateralPreview: activeQuote.collateralPreview,
+            routeSummary: quoteForPreTrade.routeSummary,
+            collateralPreview: quoteForPreTrade.collateralPreview,
             progress: createSwapProgressToasts(),
           });
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           setPreTradeError(msg);
           toast.error(msg);
-          return;
+          return { success: false, error: msg };
         }
       }
     }
@@ -400,16 +431,57 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
       if (result.totalFilledSize > 0) {
         toast.success(`Filled ${result.totalFilledSize} ${asset} @ $${result.aggregateAvgPrice.toFixed(2)}`);
         setAmount("");
+        return { success: true };
       } else {
         toast("Order did not fill — try smaller size or wider slippage", { icon: "\u26A0\uFE0F" });
+        return { success: false, error: "Order did not fill. Try a smaller size or retry the trade." };
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === "AGENT_NOT_APPROVED") {
         toast.error("Agent not approved — redirecting to Setup");
         navigate("/setup");
-        return;
+        return { success: false, error: "Agent not approved. Complete setup and retry the trade." };
       }
-      toast.error(error instanceof Error ? error.message : "Trade failed");
+      const message = error instanceof Error ? error.message : "Trade failed";
+      toast.error(message);
+      return { success: false, error: message };
+    }
+  }
+
+  async function handleExecute() {
+    await executeSafeTrade();
+  }
+
+  async function handleQuickTrade() {
+    await runQuickTrade();
+  }
+
+  async function handleBridgeSuccess() {
+    if (!address || !amount) {
+      throw new Error("Trade details are incomplete. Re-enter the trade and try again.");
+    }
+
+    const refreshedQuote = await quoteMutation.mutateAsync({
+      network,
+      masterAddress: address,
+      side,
+      asset,
+      amountMode,
+      amount: parseFloat(amount),
+      leverage: leverageNum,
+      isCross: true,
+    });
+
+    setActiveQuote(refreshedQuote);
+    setAdjustedPreview(null);
+    setQuoteError(null);
+    setQuoteOpen(true);
+
+    const tradeOutcome = mode === "safe"
+      ? await executeSafeTrade(refreshedQuote)
+      : await runQuickTrade(refreshedQuote);
+    if (!tradeOutcome.success) {
+      throw new Error(tradeOutcome.error ?? "Trade failed after bridge completion.");
     }
   }
 
@@ -839,38 +911,82 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
 
       {/* Action button */}
       {mode === "safe" ? (
-        <button
-          onClick={handleExecute}
-          disabled={isLoading || !activeQuote || !address}
-          className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
-            isBuy
-              ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
-              : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"
-          }`}
-        >
-          {executeMutation.isPending
-            ? "Executing..."
-            : !agentConfigured
-              ? "Set up agent to trade"
-            : activeQuote
-              ? `${isBuy ? "Long" : "Short"} ${asset}`
-              : amount
-                ? "Waiting for quote..."
-                : "Enter amount"
-          }
-        </button>
+        bridgeFlowRequired ? (
+          bridgeNeedsSetup ? (
+            <button
+              onClick={() => navigate("/setup")}
+              disabled={isLoading}
+              className="app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 bg-accent text-surface-0"
+            >
+              Set up agent to bridge & trade
+            </button>
+          ) : (
+            <button
+              onClick={() => setBridgeOpen(true)}
+              disabled={isLoading || !activeQuote || !address}
+              className="app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 bg-accent text-surface-0"
+            >
+              {suggestedBridgeBalance
+                ? `Bridge $${bridgeAmount} from ${suggestedBridgeBalance.displayName}`
+                : `Bridge $${bridgeAmount} USDC`}
+            </button>
+          )
+        ) : (
+          <button
+            onClick={handleExecute}
+            disabled={isLoading || !activeQuote || !address}
+            className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
+              isBuy
+                ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
+                : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"
+            }`}
+          >
+            {executeMutation.isPending
+              ? "Executing..."
+              : !agentConfigured
+                ? "Set up agent to trade"
+              : activeQuote
+                ? `${isBuy ? "Long" : "Short"} ${asset}`
+                : amount
+                  ? "Waiting for quote..."
+                  : "Enter amount"
+            }
+          </button>
+        )
       ) : (
-        <button
-          onClick={handleQuickTrade}
-          disabled={isLoading || !amount || !address || !agentConfigured}
-          className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
-            isBuy
-              ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
-              : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"
-          }`}
-        >
-          {quickMutation.isPending ? "Executing..." : `Quick ${isBuy ? "Long" : "Short"} ${asset}`}
-        </button>
+        bridgeFlowRequired ? (
+          <button
+            onClick={() => setBridgeOpen(true)}
+            disabled={isLoading || !amount || !address || !agentConfigured}
+            className="app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 bg-accent text-surface-0"
+          >
+            {suggestedBridgeBalance
+              ? `Bridge $${bridgeAmount} from ${suggestedBridgeBalance.displayName}`
+              : `Bridge $${bridgeAmount} USDC`}
+          </button>
+        ) : (
+          <button
+            onClick={handleQuickTrade}
+            disabled={isLoading || !amount || !address || !agentConfigured}
+            className={`app-button-lg w-full font-semibold text-sm rounded-sm transition-all disabled:opacity-30 ${
+              isBuy
+                ? "bg-long text-surface-0 shadow-[0_0_20px_rgba(34,197,94,0.12)]"
+                : "bg-short text-white shadow-[0_0_20px_rgba(239,68,68,0.12)]"
+            }`}
+          >
+            {quickMutation.isPending ? "Executing..." : `Quick ${isBuy ? "Long" : "Short"} ${asset}`}
+          </button>
+        )
+      )}
+
+      {bridgeFlowRequired && (
+        <div className="bg-accent/10 border border-accent/20 rounded-sm p-2.5 text-xs text-text-secondary">
+          {bridgeNeedsSetup
+            ? "This trade needs bridged USDC on Hyperliquid first, and agent setup has to be completed before the app can finish the bridge-then-trade flow."
+            : suggestedBridgeBalance
+            ? `Detected ${parseFloat(suggestedBridgeBalance.balance).toFixed(2)} USDC on ${suggestedBridgeBalance.displayName}. Bridge is required before this trade can execute on Hyperliquid.`
+            : `This trade needs ${bridgeAmount} USDC on Hyperliquid first. Open the bridge flow to move funds in and continue automatically.`}
+        </div>
       )}
 
       {/* Trade result feedback */}
@@ -937,6 +1053,15 @@ export function TradeForm({ asset, currentPrice, maxLeverage }: TradeFormProps) 
           {preTradeError}
         </div>
       )}
+
+      <BridgeModal
+        isOpen={bridgeOpen}
+        amount={bridgeAmount}
+        network={network}
+        hyperliquidBalance={bootstrap.data?.balance ?? null}
+        onClose={() => setBridgeOpen(false)}
+        onSuccess={handleBridgeSuccess}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useAuthSession } from "../hooks/use-auth-session";
 import { useNetwork } from "../lib/network-context";
 import { usePortfolio } from "../hooks/use-portfolio";
 import { useTradeHistory } from "../hooks/use-trade-history";
+import { useBridgeHistory } from "../hooks/use-bridge";
 import { useClosePosition } from "../hooks/use-trade";
 import { ApiError } from "../lib/api";
 import { DepositModal } from "../components/DepositModal";
@@ -21,6 +22,7 @@ import {
 } from "../lib/display";
 import type {
   PortfolioBalanceRow,
+  BridgeHistoryItem,
   PortfolioFundingRow,
   PortfolioOpenOrderRow,
   PortfolioOrderHistoryRow,
@@ -55,6 +57,13 @@ function formatCompact(value: number): string {
 
 function formatPct(value: number): string {
   return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatUsdString(value?: string): string {
+  if (!value) return "--";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  return formatUsd(parsed);
 }
 
 function toNum(value: unknown, fallback = 0): number {
@@ -126,6 +135,7 @@ type SectionKey =
   | "positions"
   | "openOrders"
   | "tradeHistory"
+  | "bridgeHistory"
   | "fundingHistory"
   | "orderHistory"
   | "tradeIntents";
@@ -135,6 +145,7 @@ const PAGE_SIZE: Record<SectionKey, number> = {
   positions: 10,
   openOrders: 10,
   tradeHistory: 10,
+  bridgeHistory: 10,
   fundingHistory: 10,
   orderHistory: 10,
   tradeIntents: 10,
@@ -145,6 +156,7 @@ const INITIAL_PAGES: Record<SectionKey, number> = {
   positions: 1,
   openOrders: 1,
   tradeHistory: 1,
+  bridgeHistory: 1,
   fundingHistory: 1,
   orderHistory: 1,
   tradeIntents: 1,
@@ -577,6 +589,64 @@ function TradeIntentHistoryTable({ rows }: { rows: TradeHistoryItem[] }) {
   );
 }
 
+function BridgeHistoryTable({ rows }: { rows: BridgeHistoryItem[] }) {
+  if (rows.length === 0) return <EmptyState text="No bridge history yet" />;
+
+  return (
+    <div className="overflow-x-auto border border-border bg-surface-1">
+      <table className="w-full text-sm min-w-[980px] table-fixed">
+        <thead className="text-xs text-text-muted border-b border-border bg-surface-2">
+          <tr>
+            <th className="text-left px-3 py-2 font-medium">Updated</th>
+            <th className="text-left px-3 py-2 font-medium">Origin</th>
+            <th className="text-right px-3 py-2 font-medium">Amount</th>
+            <th className="text-right px-3 py-2 font-medium">Arrival</th>
+            <th className="text-left px-3 py-2 font-medium">Bridge</th>
+            <th className="text-left px-3 py-2 font-medium">Trade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const bridgeStatusClass = row.status === "success"
+              ? "text-long"
+              : row.status === "failure" || row.status === "refund"
+                ? "text-short"
+                : "text-text-primary";
+            const tradeStatusClass = row.tradeStatus === "success"
+              ? "text-long"
+              : row.tradeStatus === "failure"
+                ? "text-short"
+                : "text-text-secondary";
+            return (
+              <tr key={row.requestId} className="border-b border-border/60 last:border-b-0 align-top">
+                <td className="px-3 py-2 text-text-secondary whitespace-nowrap">{formatTs(row.updatedAt)}</td>
+                <td className="px-3 py-2 text-text-primary whitespace-nowrap">{row.originChainName}</td>
+                <td className="px-3 py-2 text-right text-text-primary whitespace-nowrap">{formatUsdString(row.amount)}</td>
+                <td className="px-3 py-2 text-right text-text-secondary whitespace-nowrap">
+                  {formatUsdString(row.outputAmount)}
+                </td>
+                <td className="px-3 py-2">
+                  <div className={`${bridgeStatusClass} whitespace-nowrap`}>{row.status}</div>
+                  <div className="text-[11px] text-text-dim whitespace-nowrap">
+                    {row.txHashes.length > 0 ? `${row.txHashes.length} tx submitted` : "No tx hashes recorded"}
+                  </div>
+                  {row.error && <div className="text-[11px] text-short max-w-[220px] truncate">{row.error}</div>}
+                </td>
+                <td className="px-3 py-2">
+                  <div className={`${tradeStatusClass} whitespace-nowrap`}>{row.tradeStatus}</div>
+                  {row.tradeError && (
+                    <div className="text-[11px] text-short max-w-[220px] truncate">{row.tradeError}</div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PortfolioPage() {
   const navigate = useNavigate();
   const { address, isConnected, connect, isConnecting, error } = useWallet();
@@ -584,6 +654,7 @@ export function PortfolioPage() {
   const { network } = useNetwork();
   const { data, isLoading, error: portfolioError } = usePortfolio(address, network);
   const { data: tradeHistoryData, isLoading: tradeHistoryLoading } = useTradeHistory(address, network, 75);
+  const { data: bridgeHistoryData, isLoading: bridgeHistoryLoading } = useBridgeHistory(address, network, 75);
   const queryClient = useQueryClient();
   const closeMutation = useClosePosition();
   const [viewMode, setViewMode] = useState<PortfolioViewMode>("aggregate");
@@ -635,6 +706,7 @@ export function PortfolioPage() {
   }, [viewMode, address, network]);
 
   const tradeIntentItems = tradeHistoryData?.items ?? [];
+  const bridgeHistoryItems = bridgeHistoryData?.items ?? [];
 
   const pagedData = useMemo(() => {
     if (!viewData) return null;
@@ -644,11 +716,12 @@ export function PortfolioPage() {
       positions: paginateRows(viewData.positions, pages.positions, PAGE_SIZE.positions),
       openOrders: paginateRows(viewData.openOrders, pages.openOrders, PAGE_SIZE.openOrders),
       tradeHistory: paginateRows(viewData.tradeHistory, pages.tradeHistory, PAGE_SIZE.tradeHistory),
+      bridgeHistory: paginateRows(bridgeHistoryItems, pages.bridgeHistory, PAGE_SIZE.bridgeHistory),
       fundingHistory: paginateRows(viewData.fundingHistory, pages.fundingHistory, PAGE_SIZE.fundingHistory),
       orderHistory: paginateRows(viewData.orderHistory, pages.orderHistory, PAGE_SIZE.orderHistory),
       tradeIntents: paginateRows(tradeIntentItems, pages.tradeIntents, PAGE_SIZE.tradeIntents),
     };
-  }, [viewData, pages, tradeIntentItems]);
+  }, [bridgeHistoryItems, viewData, pages, tradeIntentItems]);
 
   if (!isConnected) {
     return (
@@ -882,6 +955,17 @@ export function PortfolioPage() {
         <PaginationControls
           pageInfo={pagedData.orderHistory}
           onPageChange={(next) => setPages((prev) => ({ ...prev, orderHistory: next }))}
+        />
+      </div>
+
+      <div>
+        <SectionTitle title="Bridge History" count={bridgeHistoryItems.length} />
+        {bridgeHistoryLoading
+          ? <div className="h-32 bg-surface-1 border border-border animate-pulse" />
+          : <BridgeHistoryTable rows={pagedData.bridgeHistory.rows} />}
+        <PaginationControls
+          pageInfo={pagedData.bridgeHistory}
+          onPageChange={(next) => setPages((prev) => ({ ...prev, bridgeHistory: next }))}
         />
       </div>
 

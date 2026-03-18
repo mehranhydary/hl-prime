@@ -208,6 +208,7 @@ export class Router {
       requirements: [],
       totalSwapCostBps: 0,
       swapsNeeded: false,
+      bridgeRequired: 0,
       abstractionEnabled: false,
     };
     warnings.push(

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Network } from "../../shared/types.js";
+import { isAddress } from "viem";
 
 export interface ServerConfig {
   port: number;
@@ -36,6 +37,14 @@ export interface ServerConfig {
   signerBackend: "local" | "privy";
   /** Emergency fallback to local encrypted signer store while primary backend is privy. */
   signerLocalFallback: boolean;
+  relay: {
+    baseUrl: string;
+    apiKey: string | null;
+    appFeeRecipient: `0x${string}` | null;
+    appFeeBps: number;
+    chainsTtlMs: number;
+    quoteTtlMs: number;
+  };
   privy: {
     appId: string | null;
     appSecret: string | null;
@@ -93,6 +102,26 @@ function resolveRuntimeStateSqlitePath(rawValue: string | undefined, dataDir: st
   }
 
   return resolved;
+}
+
+function parseIntegerEnv(
+  value: string | undefined,
+  fallback: number,
+  fieldName: string,
+  options?: { min?: number; max?: number },
+): number {
+  if (!value || value.trim().length === 0) return fallback;
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} must be an integer.`);
+  }
+  if (options?.min !== undefined && parsed < options.min) {
+    throw new Error(`${fieldName} must be >= ${options.min}.`);
+  }
+  if (options?.max !== undefined && parsed > options.max) {
+    throw new Error(`${fieldName} must be <= ${options.max}.`);
+  }
+  return parsed;
 }
 
 const MIN_APP_PASSWORD_LENGTH = 16;
@@ -251,6 +280,27 @@ export function loadConfig(): ServerConfig {
   const privyAppSecret = process.env.TRADER_PRIVY_APP_SECRET ?? null;
   const privyAuthorizationKey = process.env.TRADER_PRIVY_AUTHORIZATION_KEY ?? null;
   const privyJwtVerificationKey = process.env.TRADER_PRIVY_JWT_VERIFICATION_KEY ?? null;
+  const relayBaseUrl = (process.env.TRADER_RELAY_BASE_URL ?? "https://api.relay.link").trim();
+  const relayApiKey = process.env.TRADER_RELAY_API_KEY?.trim() || null;
+  const relayAppFeeRecipient = process.env.TRADER_RELAY_APP_FEE_RECIPIENT?.trim() || null;
+  const relayAppFeeBps = parseIntegerEnv(
+    process.env.TRADER_RELAY_APP_FEE_BPS,
+    0,
+    "TRADER_RELAY_APP_FEE_BPS",
+    { min: 0, max: 10000 },
+  );
+  const relayChainsTtlMs = parseIntegerEnv(
+    process.env.TRADER_RELAY_CHAINS_TTL_SEC,
+    300,
+    "TRADER_RELAY_CHAINS_TTL_SEC",
+    { min: 1, max: 86400 },
+  ) * 1000;
+  const relayQuoteTtlMs = parseIntegerEnv(
+    process.env.TRADER_RELAY_QUOTE_TTL_SEC,
+    30,
+    "TRADER_RELAY_QUOTE_TTL_SEC",
+    { min: 1, max: 3600 },
+  ) * 1000;
 
   if (authEnabled && (!privyAppId || !privyJwtVerificationKey)) {
     throw new Error(
@@ -266,6 +316,17 @@ export function loadConfig(): ServerConfig {
     throw new Error(
       "TRADER_SIGNER_BACKEND=privy requires TRADER_PRIVY_AUTHORIZATION_KEY.",
     );
+  }
+  if (!relayBaseUrl.startsWith("http://") && !relayBaseUrl.startsWith("https://")) {
+    throw new Error("TRADER_RELAY_BASE_URL must start with http:// or https://.");
+  }
+  if (relayAppFeeBps > 0 && !relayAppFeeRecipient) {
+    throw new Error(
+      "TRADER_RELAY_APP_FEE_RECIPIENT must be set when TRADER_RELAY_APP_FEE_BPS is greater than zero.",
+    );
+  }
+  if (relayAppFeeRecipient && !isAddress(relayAppFeeRecipient)) {
+    throw new Error("TRADER_RELAY_APP_FEE_RECIPIENT must be a valid 0x-prefixed EVM address.");
   }
 
   return {
@@ -293,6 +354,14 @@ export function loadConfig(): ServerConfig {
     runtimeStateSqlitePath,
     signerBackend,
     signerLocalFallback,
+    relay: {
+      baseUrl: relayBaseUrl,
+      apiKey: relayApiKey,
+      appFeeRecipient: relayAppFeeRecipient as `0x${string}` | null,
+      appFeeBps: relayAppFeeBps,
+      chainsTtlMs: relayChainsTtlMs,
+      quoteTtlMs: relayQuoteTtlMs,
+    },
     privy: {
       appId: privyAppId,
       appSecret: privyAppSecret,

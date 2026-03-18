@@ -650,6 +650,17 @@ export type { Quote, ExecutionPlan, MarketScore, SimulationResult, SplitQuote, S
 export { isSplitQuote } from "./router/types.js";
 export type { ExecutionReceipt, SplitExecutionReceipt, LegReceipt } from "./execution/types.js";
 export type { CollateralPlan, CollateralRequirement, CollateralReceipt } from "./collateral/types.js";
+export type {
+  BridgeFeeBreakdown,
+  BridgeQuote,
+  BridgeQuoteRequest,
+  BridgeStatus,
+  BridgeStatusResult,
+  BridgeStep,
+  RelayAppFee,
+  RelayBridgeConfig,
+  SupportedChain,
+} from "./bridge/types.js";
 export type { ReferralResponse, ReferralUserState, AbstractionMode, BorrowLendUserState, BorrowLendTokenState, BorrowLendReserveState } from "./provider/types.js";
 export type { LogicalPosition, ManagedPositionState, RiskProfile } from "./position/types.js";
 export type { TradeExecutionOptions } from "./router/types.js";
@@ -661,6 +672,7 @@ export { FillSimulator } from "./router/simulator.js";
 export { MarketScorer } from "./router/scorer.js";
 export { SplitOptimizer } from "./router/splitter.js";
 export { CollateralManager } from "./collateral/manager.js";
+export { RelayBridge, RelayBridgeError } from "./bridge/relay.js";
 export { Executor } from "./execution/executor.js";
 export { PositionManager } from "./position/manager.js";
 export { NktkasProvider } from "./provider/nktkas.js";

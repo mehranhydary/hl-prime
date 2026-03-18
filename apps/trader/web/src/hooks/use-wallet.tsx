@@ -8,17 +8,20 @@ import {
 } from "@privy-io/react-auth";
 import { configureAuth, signOut } from "../lib/auth.js";
 import { setActiveWalletSnapshot } from "../lib/active-wallet.js";
+import type { WalletAddChainParameter } from "../lib/bridge-chain-config.js";
 
 const STORAGE_KEY = "hl-prime:active-wallet-address:v1";
 const SUPPRESSED_STORAGE_KEY = "hl-prime:wallets-suppressed:v1";
 
 interface WalletState {
   address: `0x${string}` | null;
+  activeChainId: number | null;
   isConnected: boolean;
   isConnecting: boolean;
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  switchChain: (chainId: number, addChain?: WalletAddChainParameter | null) => Promise<void>;
   wallets: ConnectedWallet[];
   activeWallet: ConnectedWallet | null;
   setActiveWalletAddress: (address: `0x${string}`) => void;
@@ -26,11 +29,13 @@ interface WalletState {
 
 const WalletContext = createContext<WalletState>({
   address: null,
+  activeChainId: null,
   isConnected: false,
   isConnecting: false,
   error: null,
   connect: async () => {},
   disconnect: async () => {},
+  switchChain: async () => {},
   wallets: [],
   activeWallet: null,
   setActiveWalletAddress: () => {},
@@ -38,6 +43,18 @@ const WalletContext = createContext<WalletState>({
 
 function normalizeAddress(address: string): `0x${string}` {
   return address.toLowerCase() as `0x${string}`;
+}
+
+async function readWalletChainId(wallet: ConnectedWallet): Promise<number | null> {
+  try {
+    const provider = await wallet.getEthereumProvider();
+    const chainIdHex = await provider.request({ method: "eth_chainId" });
+    if (typeof chainIdHex !== "string") return null;
+    const parsed = parseInt(chainIdHex, 16);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function isEthereumWallet(wallet: ConnectedWallet): boolean {
@@ -50,6 +67,20 @@ function isEmbeddedWallet(wallet: ConnectedWallet): boolean {
 
 function isExternalEthereumWallet(wallet: ConnectedWallet): boolean {
   return isEthereumWallet(wallet) && !isEmbeddedWallet(wallet);
+}
+
+function shouldAttemptAddChain(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  if (code === 4902) return true;
+
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("unrecognized chain")
+    || message.includes("unknown chain")
+    || message.includes("chain not added")
+    || message.includes("does not exist")
+    || message.includes("4902");
 }
 
 function readStoredWalletAddress(): `0x${string}` | null {
@@ -106,6 +137,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { ready, authenticated } = usePrivy();
   const { wallets: rawWallets, ready: walletsReady } = useWallets();
   const [selectedAddress, setSelectedAddress] = useState<`0x${string}` | null>(() => readStoredWalletAddress());
+  const [activeChainId, setActiveChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletsSuppressed, setWalletsSuppressed] = useState(() => readSuppressedState());
@@ -176,6 +208,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     persistSuppressedState(walletsSuppressed);
   }, [walletsSuppressed]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncActiveChainId() {
+      if (!activeWallet) {
+        if (!cancelled) setActiveChainId(null);
+        return;
+      }
+      const chainId = await readWalletChainId(activeWallet);
+      if (!cancelled) {
+        setActiveChainId(chainId);
+      }
+    }
+
+    void syncActiveChainId();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWallet]);
+
   async function connect(): Promise<void> {
     const reconnectAfterLogout = walletsSuppressed;
     setIsConnecting(true);
@@ -220,6 +272,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await signOut();
   }
 
+  async function switchChain(chainId: number, addChain?: WalletAddChainParameter | null): Promise<void> {
+    if (!activeWallet) {
+      throw new Error("No wallet selected.");
+    }
+    try {
+      await activeWallet.switchChain(chainId);
+    } catch (error) {
+      if (!shouldAttemptAddChain(error) || !addChain) {
+        throw error;
+      }
+
+      const provider = await activeWallet.getEthereumProvider();
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [addChain],
+      });
+      await activeWallet.switchChain(chainId);
+    }
+    setActiveChainId(chainId);
+  }
+
   function setActiveWalletAddress(nextAddress: `0x${string}`): void {
     setSelectedAddress(normalizeAddress(nextAddress));
   }
@@ -228,11 +301,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <WalletContext.Provider
       value={{
         address,
+        activeChainId,
         isConnected: address !== null,
         isConnecting,
         error,
         connect,
         disconnect,
+        switchChain,
         wallets,
         activeWallet,
         setActiveWalletAddress,

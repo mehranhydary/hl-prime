@@ -635,35 +635,9 @@ export function accountRoutes(config: ServerConfig): Router {
 
       const service = getClientService(config);
       const publicHp = await service.getPublicClient(network);
-      const [allMidsResult, spotMetaResult] = await Promise.allSettled([
-        publicHp.api.allMids(),
-        publicHp.api.spotMeta(),
-      ]);
-      const allMids = allMidsResult.status === "fulfilled" ? allMidsResult.value : {};
-      const spotMeta = spotMetaResult.status === "fulfilled" ? spotMetaResult.value : null;
-      if (allMidsResult.status === "rejected") {
-        console.warn("[account/bootstrap] allMids unavailable:", allMidsResult.reason);
-      }
-      if (spotMetaResult.status === "rejected") {
-        console.warn("[account/bootstrap] spotMeta unavailable:", spotMetaResult.reason);
-      }
-      const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
-
-      let agentConfigured = false;
-      try {
-        agentConfigured = await service.hasClient(masterAddress, network);
-      } catch (err) {
-        console.warn("[account/bootstrap] agent status check failed:", err);
-      }
       const infoClient = (publicHp.api as any).info as any;
 
-      let masterClearinghouseState: any = null;
-      try {
-        masterClearinghouseState = await publicHp.api.clearinghouseState(masterAddress);
-      } catch (err) {
-        console.warn("Failed to fetch bootstrap master clearinghouse state:", err);
-      }
-
+      // getAllGroups is synchronous — market data is cached from background discovery.
       const NATIVE_ALLOW = new Set(["BTC", "ETH", "SOL", "HYPE", "TAO"]);
       let allGroups: any[] = [];
       try {
@@ -673,16 +647,50 @@ export function accountRoutes(config: ServerConfig): Router {
         console.warn("[account/bootstrap] market groups unavailable:", err);
       }
       const coinLookup = buildCoinLookup(allGroups);
+      const hip3DexNames = getHip3DexNames(allGroups);
 
-      let subAccountCandidates: AccountCandidate[] = [];
-      if (infoClient && typeof infoClient.subAccounts === "function") {
-        try {
-          const subAccountsRaw = await infoClient.subAccounts({ user: masterAddress });
-          subAccountCandidates = parseSubAccountCandidates(subAccountsRaw);
-        } catch {
-          // Ignore sub-account lookup failures; default to master account.
-        }
+      // Single parallel batch: all independent API calls in one round-trip.
+      // Pre-fetching spotClearinghouseState here populates the 30s provider cache so
+      // getUnifiedBalance below resolves instantly without a second network call.
+      const [
+        allMidsResult,
+        spotMetaResult,
+        agentResult,
+        clearingResult,
+        _spotResult,
+        subAccountsResult,
+        abstractionResult,
+      ] = await Promise.allSettled([
+        publicHp.api.allMids(),
+        publicHp.api.spotMeta(),
+        service.hasClient(masterAddress, network),
+        publicHp.api.clearinghouseState(masterAddress),
+        publicHp.api.spotClearinghouseState(masterAddress),
+        infoClient && typeof infoClient.subAccounts === "function"
+          ? infoClient.subAccounts({ user: masterAddress })
+          : Promise.resolve(null),
+        publicHp.getAbstractionMode(masterAddress),
+      ]);
+
+      if (allMidsResult.status === "rejected") {
+        console.warn("[account/bootstrap] allMids unavailable:", allMidsResult.reason);
       }
+      if (spotMetaResult.status === "rejected") {
+        console.warn("[account/bootstrap] spotMeta unavailable:", spotMetaResult.reason);
+      }
+      if (clearingResult.status === "rejected") {
+        console.warn("Failed to fetch bootstrap master clearinghouse state:", clearingResult.reason);
+      }
+
+      const allMids = allMidsResult.status === "fulfilled" ? allMidsResult.value : {};
+      const spotMeta = spotMetaResult.status === "fulfilled" ? spotMetaResult.value : null;
+      const agentConfigured = agentResult.status === "fulfilled" ? Boolean(agentResult.value) : false;
+      const masterClearinghouseState = clearingResult.status === "fulfilled" ? clearingResult.value : null;
+      const subAccountCandidates = parseSubAccountCandidates(
+        subAccountsResult.status === "fulfilled" ? subAccountsResult.value : null,
+      );
+      const abstractionMode = abstractionResult.status === "fulfilled" ? abstractionResult.value : undefined;
+      const spotPriceMap = buildSpotPriceMap(allMids, spotMeta);
 
       const primaryUserAddress = resolvePrimaryUserAddress({
         masterAddress,
@@ -704,18 +712,20 @@ export function accountRoutes(config: ServerConfig): Router {
         }
       }
 
+      // getUnifiedBalance hits the provider's 30s cache for both clearinghouseState and
+      // spotClearinghouseState — both were pre-fetched in the parallel batch above.
       let balance: BootstrapResponse["balance"] = null;
       try {
-        balance = await getUnifiedBalance(publicHp, primaryUserAddress, config.stableTokens, spotPriceMap);
+        balance = await getUnifiedBalance(publicHp, masterAddress, config.stableTokens, spotPriceMap);
       } catch (err) {
         console.warn("Failed to fetch bootstrap balance state:", err);
       }
 
-      // Fetch native + HIP-3 deployer positions in parallel
-      const hip3DexNames = getHip3DexNames(allGroups);
+      // Native perp: use primaryUserAddress (may be a sub-account with active positions).
+      // HIP-3: always use masterAddress — HIP-3 perp positions live on the master wallet.
       const [nativePositions, hip3Positions] = await Promise.all([
         Promise.resolve(parsePositions(clearinghouseState, allMids, coinLookup)),
-        fetchHip3Positions(infoClient, primaryUserAddress, hip3DexNames, allMids, coinLookup),
+        fetchHip3Positions(infoClient, masterAddress, hip3DexNames, allMids, coinLookup),
       ]);
       const parsedPositions = [...nativePositions, ...hip3Positions];
       const positionAssets = new Set(parsedPositions.map((p) => p.baseAsset.toUpperCase()));
@@ -784,14 +794,6 @@ export function accountRoutes(config: ServerConfig): Router {
         liquidationPrice: p.liquidationPrice,
         marketCount: marketCountByBase.get(p.baseAsset.toUpperCase()) ?? 1,
       }));
-
-      // Fetch abstraction mode (non-blocking)
-      let abstractionMode: BootstrapResponse["abstractionMode"] = undefined;
-      try {
-        abstractionMode = await publicHp.getAbstractionMode(masterAddress);
-      } catch {
-        // Non-critical — leave undefined if unavailable.
-      }
 
       const response: BootstrapResponse = { balance, assets, positions, agentConfigured, abstractionMode };
       res.json(response);
@@ -886,9 +888,9 @@ export function accountRoutes(config: ServerConfig): Router {
         selectedClearingState
           ? Promise.resolve(selectedClearingState)
           : publicHp.api.clearinghouseState(effectiveUserAddress),
-        selectedSubAccount?.spotState
-          ? Promise.resolve(selectedSubAccount.spotState)
-          : publicHp.api.spotClearinghouseState(effectiveUserAddress),
+        // Always use masterAddress for spot state: spot assets (USDC, HYPE, etc.) live on
+        // the master wallet regardless of which sub-account is selected for perp positions.
+        publicHp.api.spotClearinghouseState(masterAddress),
         infoClient.frontendOpenOrders({ user: effectiveUserAddress }),
         infoClient.historicalOrders({ user: effectiveUserAddress }),
         infoClient.userFillsByTime({
@@ -930,10 +932,11 @@ export function accountRoutes(config: ServerConfig): Router {
 
       const spotTotalUsd = spotAllRows.reduce((sum: number, b: any) => sum + b.usdValue, 0);
 
-      // Fetch native + HIP-3 deployer positions
+      // Fetch native + HIP-3 deployer positions.
+      // HIP-3: always use masterAddress — HIP-3 perp positions live on the master wallet.
       const hip3DexNames = getHip3DexNames(allGroups);
       const hip3Positions = await fetchHip3Positions(
-        infoClient, effectiveUserAddress, hip3DexNames, allMids, coinLookup,
+        infoClient, masterAddress, hip3DexNames, allMids, coinLookup,
       );
       const nativePositions = parsePositions(clearinghouseState, allMids, coinLookup);
       const allParsedPositions = [...nativePositions, ...hip3Positions];

@@ -19,6 +19,14 @@ import type {
   SwapQuoteResponse,
   SwapExecuteRequest,
   SwapResult,
+  BridgeBalancesResponse,
+  BridgeChainsResponse,
+  BridgeHistoryItem,
+  BridgeHistoryResponse,
+  BridgeHistoryUpsertRequest,
+  BridgeQuoteRequest,
+  BridgeQuote,
+  BridgeStatusResponse,
   HealthResponse,
   CandleData,
   CandleInterval,
@@ -201,6 +209,39 @@ export const swapQuote = (body: SwapQuoteRequest) =>
 
 export const swapExecute = (body: SwapExecuteRequest) =>
   fetchJson<SwapResult>("/swap/execute", {
+    method: "POST",
+    body: JSON.stringify(body),
+    retryAuth: true,
+  });
+
+// Bridge
+export const bridgeChains = () =>
+  fetchJson<BridgeChainsResponse>("/bridge/chains");
+
+export const bridgeBalances = (userAddress: string) =>
+  fetchJson<BridgeBalancesResponse>(
+    `/bridge/balances?userAddress=${encodeURIComponent(userAddress)}`,
+  );
+
+export const bridgeQuote = (body: BridgeQuoteRequest) =>
+  fetchJson<BridgeQuote>("/bridge/quote", {
+    method: "POST",
+    body: JSON.stringify(body),
+    retryAuth: true,
+  });
+
+export const bridgeStatus = (requestId: string) =>
+  fetchJson<BridgeStatusResponse>(
+    `/bridge/status/${encodeURIComponent(requestId)}`,
+  );
+
+export const bridgeHistory = (masterAddress: string, network: string, limit = 50) =>
+  fetchJson<BridgeHistoryResponse>(
+    `/bridge/history?masterAddress=${encodeURIComponent(masterAddress)}&network=${network}&limit=${limit}`,
+  );
+
+export const bridgeHistoryUpdate = (body: BridgeHistoryUpsertRequest) =>
+  fetchJson<{ success: boolean; item: BridgeHistoryItem }>("/bridge/history", {
     method: "POST",
     body: JSON.stringify(body),
     retryAuth: true,

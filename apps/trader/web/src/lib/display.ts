@@ -3,6 +3,16 @@ const COIN_DISPLAY: Record<string, string> = {
   USDT0: "USDT",
 };
 
+/** Human-readable names for base assets. */
+const ASSET_DISPLAY: Record<string, string> = {
+  SP500: "S&P500",
+};
+
+/** Returns a human-readable display name for a base asset symbol (e.g. "SP500" → "S&P500"). */
+export function displayAsset(baseAsset: string): string {
+  return ASSET_DISPLAY[baseAsset.toUpperCase()] ?? baseAsset;
+}
+
 /** Known HIP-3 deployer DEXes with local icons in /public/coins/ */
 const KNOWN_DEPLOYERS = new Set(["cash", "xyz", "flx", "km", "hyna", "vntls"]);
 

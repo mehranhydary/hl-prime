@@ -43,6 +43,12 @@ describe("loadConfig", () => {
     expect(config.runtimeStateSqlitePath).toBe(path.resolve(process.cwd(), ".data/runtime-state.db"));
     expect(config.signerBackend).toBe("local");
     expect(config.signerLocalFallback).toBe(false);
+    expect(config.relay.baseUrl).toBe("https://api.relay.link");
+    expect(config.relay.apiKey).toBeNull();
+    expect(config.relay.appFeeRecipient).toBeNull();
+    expect(config.relay.appFeeBps).toBe(0);
+    expect(config.relay.chainsTtlMs).toBe(300_000);
+    expect(config.relay.quoteTtlMs).toBe(30_000);
   });
 
   it("throws when passphrase is missing", () => {
@@ -167,6 +173,34 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.runtimeStateBackend).toBe("memory");
     expect(config.runtimeStateSqlitePath).toBe("/tmp/hl-prime-runtime.db");
+  });
+
+  it("reads Relay bridge config", () => {
+    process.env.TRADER_RELAY_BASE_URL = "https://relay.example.com";
+    process.env.TRADER_RELAY_API_KEY = "relay-api-key";
+    process.env.TRADER_RELAY_APP_FEE_BPS = "25";
+    process.env.TRADER_RELAY_APP_FEE_RECIPIENT = "0x1111111111111111111111111111111111111111";
+    process.env.TRADER_RELAY_CHAINS_TTL_SEC = "120";
+    process.env.TRADER_RELAY_QUOTE_TTL_SEC = "45";
+
+    const config = loadConfig();
+    expect(config.relay.baseUrl).toBe("https://relay.example.com");
+    expect(config.relay.apiKey).toBe("relay-api-key");
+    expect(config.relay.appFeeBps).toBe(25);
+    expect(config.relay.appFeeRecipient).toBe("0x1111111111111111111111111111111111111111");
+    expect(config.relay.chainsTtlMs).toBe(120_000);
+    expect(config.relay.quoteTtlMs).toBe(45_000);
+  });
+
+  it("requires a Relay fee recipient when bridge fee bps are enabled", () => {
+    process.env.TRADER_RELAY_APP_FEE_BPS = "10";
+    expect(() => loadConfig()).toThrow("TRADER_RELAY_APP_FEE_RECIPIENT");
+  });
+
+  it("rejects invalid Relay fee recipient addresses", () => {
+    process.env.TRADER_RELAY_APP_FEE_BPS = "10";
+    process.env.TRADER_RELAY_APP_FEE_RECIPIENT = "not-an-address";
+    expect(() => loadConfig()).toThrow("TRADER_RELAY_APP_FEE_RECIPIENT");
   });
 
   it("reads TRADER_DATA_DIR and derives sqlite path", () => {

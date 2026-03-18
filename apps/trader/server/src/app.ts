@@ -11,6 +11,7 @@ import { agentRoutes } from "./routes/agent.js";
 import { accountRoutes } from "./routes/account.js";
 import { tradeRoutes } from "./routes/trade.js";
 import { swapRoutes } from "./routes/swap.js";
+import { bridgeRoutes } from "./routes/bridge.js";
 import { healthRoutes } from "./routes/health.js";
 import { marketRoutes } from "./routes/market.js";
 import { referralRoutes } from "./routes/referral.js";
@@ -79,6 +80,12 @@ export function createApp(config: ServerConfig) {
     max: 30,
     backoff: true,
   }));
+  app.use("/api/bridge", memoryRateLimit({
+    keyPrefix: "bridge",
+    windowMs: 60_000,
+    max: 60,
+    backoff: true,
+  }));
   app.use("/api/earn", memoryRateLimit({
     keyPrefix: "earn",
     windowMs: 60_000,
@@ -102,6 +109,7 @@ export function createApp(config: ServerConfig) {
   app.use("/api/account", accountRoutes(config));
   app.use("/api/trade", tradeRoutes(config));
   app.use("/api/swap", swapRoutes(config));
+  app.use("/api/bridge", bridgeRoutes(config));
   app.use("/api/market", marketRoutes(config));
   app.use("/api/referral", referralRoutes(config));
   app.use("/api/earn", earnRoutes(config));

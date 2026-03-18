@@ -190,12 +190,9 @@ export class MarketRegistry {
   }
 
   private extractBaseAsset(hip3Name: string): string {
-    // HIP-3 format: "dexName:ASSET" or "dexName:ASSET123"
-    // Most names have no trailing digits (e.g., xyz:TSLA, xyz:EUR)
-    // Some have trailing digits (e.g., xyz:XYZ100)
-    const afterColon = hip3Name.split(":")[1];
-    // Strip trailing digits only — validated against real testnet data
-    return afterColon.replace(/\d+$/, "") || afterColon;
+    // HIP-3 format: "dexName:ASSET" — use the part after the colon as-is
+    // Digits are part of the asset name (e.g., xyz:SP500, xyz:XYZ100)
+    return hip3Name.split(":")[1] ?? hip3Name;
   }
 
   private resolveCollateralToken(

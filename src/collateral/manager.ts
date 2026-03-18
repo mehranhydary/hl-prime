@@ -418,6 +418,7 @@ export class CollateralManager {
     const sourceBalances = buildStableSourceBalances(balanceMap, perpUsdcBalance);
     const requirements: CollateralRequirement[] = [];
     let swapsNeeded = false;
+    let bridgeRequired = 0;
     const swapCostJobs: Array<{
       index: number;
       fromToken: string;
@@ -441,6 +442,11 @@ export class CollateralManager {
       if (shortfall > 0) {
         swapsNeeded = true;
         const sourceAmountNeeded = shortfall * 1.01;
+        const totalStableSourceAvailable = [...sourceBalances.values()].reduce(
+          (sum, available) => sum + (Number.isFinite(available) ? Math.max(0, available) : 0),
+          0,
+        );
+        bridgeRequired += Math.max(0, sourceAmountNeeded - totalStableSourceAvailable);
         swapFrom = chooseSwapSourceToken({
           sourceBalances,
           targetToken: token,
@@ -485,6 +491,7 @@ export class CollateralManager {
       requirements,
       totalSwapCostBps,
       swapsNeeded,
+      bridgeRequired,
       // In trader app flow, unified abstraction is configured during setup.
       // Avoid write-side abstraction changes during execution.
       abstractionEnabled: true,

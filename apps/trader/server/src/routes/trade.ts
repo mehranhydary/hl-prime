@@ -755,6 +755,7 @@ function toCollateralPreview(plan: any): CollateralPreview {
       : [],
     totalSwapCostBps: toFiniteNumber(String(plan?.totalSwapCostBps ?? "0")),
     swapsNeeded: Boolean(plan?.swapsNeeded),
+    bridgeRequired: toFiniteNumber(String(plan?.bridgeRequired ?? "0")),
     abstractionEnabled: Boolean(plan?.abstractionEnabled),
   };
 }

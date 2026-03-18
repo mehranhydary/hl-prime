@@ -11,6 +11,7 @@ export interface CollateralPlan {
   requirements: CollateralRequirement[];
   totalSwapCostBps: number;   // weighted average swap cost across all requirements
   swapsNeeded: boolean;       // true if any requirement has shortfall > 0
+  bridgeRequired: number;     // USDC amount missing on Hyperliquid that must be bridged in
   abstractionEnabled: boolean; // whether DEX abstraction is already enabled
 }
 

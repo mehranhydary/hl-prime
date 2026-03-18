@@ -157,7 +157,7 @@ export function Dashboard() {
               return (
                 <Link
                   key={`${pos.baseAsset}-${pos.side}`}
-                  to={`/trade/${pos.baseAsset}`}
+                  to={`/trade/${pos.baseAsset.toLowerCase()}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-surface-3/50 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">

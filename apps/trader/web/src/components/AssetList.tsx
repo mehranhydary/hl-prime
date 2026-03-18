@@ -73,7 +73,8 @@ const ASSET_NAMES: Record<string, string> = {
   MSTR: "MicroStrategy",
   GME: "GameStop",
   AMC: "AMC",
-  SPY: "S&P 500",
+  SP500: "S&P500",
+  SPY: "S&P 500 ETF",
   QQQ: "Nasdaq 100",
   GLD: "Gold",
   SLV: "Silver",
@@ -178,7 +179,7 @@ export function AssetList({ assets }: AssetListProps) {
                 </div>
               )}
               <button
-                onClick={() => navigate(`/trade/${asset.baseAsset}`)}
+                onClick={() => navigate(`/trade/${asset.baseAsset.toLowerCase()}`)}
                 className="w-full cursor-pointer grid grid-cols-[minmax(0,1fr)_4.75rem_3.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_5rem_5rem] gap-2 sm:gap-4 px-3 items-center text-left group hover:bg-surface-1 transition-colors border border-transparent hover:border-border"
                 style={{ height: ROW_HEIGHT }}
               >

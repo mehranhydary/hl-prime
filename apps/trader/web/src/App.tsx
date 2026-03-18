@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactElement } from "react";
+import { Component, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -23,6 +23,7 @@ import { WalletProvider, useWallet } from "./hooks/use-wallet";
 import { ThemeProvider } from "./lib/theme-context";
 import { AgentApprovalProvider } from "./lib/agent-approval-context";
 import { useAuthSession } from "./hooks/use-auth-session";
+import { useBridgeBalances } from "./hooks/use-bridge";
 import { setAuthNetwork, syncPrivyAuth } from "./lib/auth";
 
 function RequireAccess({ children }: { children: ReactElement }) {
@@ -47,6 +48,15 @@ function RealtimeUpdates() {
   return null;
 }
 
+function BridgeWarmup() {
+  const { address } = useWallet();
+  const { network } = useNetwork();
+  const auth = useAuthSession();
+
+  useBridgeBalances(address, network === "mainnet" && auth.isAuthenticated);
+  return null;
+}
+
 function AuthSync() {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
 
@@ -63,10 +73,38 @@ function AuthSync() {
   return null;
 }
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    console.error("[trader] Unhandled UI error:", error, info.componentStack ?? "");
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-surface-0 px-6 text-center gap-4">
+          <p className="text-text-muted text-sm">Something went wrong. Please refresh and try again.</p>
+          <p className="text-text-dim text-[11px] max-w-md break-words">
+            {this.state.error.message}
+          </p>
+          <button
+            onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            className="app-button-md bg-accent text-surface-0 px-4 text-sm font-semibold"
+          >
+            Refresh
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const AUTHENTICATED_QUERY_KEYS = new Set([
   "agent-status",
   "bootstrap",
   "portfolio",
+  "bridge-history",
   "referral",
   "earn",
   "trade-history",
@@ -98,6 +136,7 @@ function AppShell() {
   return (
     <>
       <RealtimeUpdates />
+      <BridgeWarmup />
       <Header />
       <main
         className="max-w-lg mx-auto min-h-screen bg-surface-0 text-text-primary"
@@ -151,7 +190,9 @@ export function App() {
         <AuthCacheSync />
         <NetworkProvider>
           <AgentApprovalProvider>
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
             <Toaster
               position="bottom-center"
               containerStyle={{ bottom: 72 }}
